@@ -1,0 +1,1833 @@
+<title>Paced Tasks</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500;600&family=Figtree:wght@400;500;600;700&family=Schibsted+Grotesk:wght@600;700;800&display=swap">
+<style>
+/* Layout: one centered 600px column for the task list; sheets rise from the bottom on phones and float centered on wide screens; the working screen takes the whole screen */
+:root {
+  --bg: #F2F3EF;
+  --surface: #FFFFFF;
+  --surface-2: #E8EAE5;
+  --ink: #191C1F;
+  --muted: #5D645F;
+  --line: #D9DDD6;
+  --accent: #2E43C2;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #E3E7FA;
+  --zone: #1D7650;
+  --zone-soft: #D8EFE3;
+  --warn: #935700;
+  --warn-soft: #FAEDD5;
+  --stop: #B53A27;
+  --stop-soft: #F8E1DB;
+  --scrim: rgba(20, 24, 28, .4);
+  --shadow: 0 1px 2px rgba(20, 24, 28, .06), 0 6px 20px rgba(20, 24, 28, .07);
+  --font-display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Azeret Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --r: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111315; --surface: #1A1D20; --surface-2: #25292D; --ink: #E8EBE9; --muted: #9BA29D; --line: #30353A;
+    --accent: #8E9DFF; --accent-ink: #0E1333; --accent-soft: #222949;
+    --zone: #5DCB98; --zone-soft: #163126; --warn: #E9AC4F; --warn-soft: #382A13; --stop: #F18A75; --stop-soft: #3B1E19;
+    --scrim: rgba(0, 0, 0, .55); --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111315; --surface: #1A1D20; --surface-2: #25292D; --ink: #E8EBE9; --muted: #9BA29D; --line: #30353A;
+  --accent: #8E9DFF; --accent-ink: #0E1333; --accent-soft: #222949;
+  --zone: #5DCB98; --zone-soft: #163126; --warn: #E9AC4F; --warn-soft: #382A13; --stop: #F18A75; --stop-soft: #3B1E19;
+  --scrim: rgba(0, 0, 0, .55); --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .25);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 400 16px/1.45 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+body.locked { overflow: hidden; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: .45; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.muted { color: var(--muted); }
+
+.app { max-width: 600px; margin: 0 auto; padding-block: 22px 150px; }
+.brand-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; }
+.brand { display: flex; align-items: center; gap: 7px; font: 700 13px/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { font: 800 clamp(32px, 8vw, 42px)/1.05 var(--font-display); letter-spacing: -.02em; margin: 18px 0 6px; text-wrap: balance; }
+.sub { margin: 0 0 22px; color: var(--muted); font-size: 15px; font-variant-numeric: tabular-nums; }
+.saved { text-align: center; color: var(--muted); font-size: 12px; margin-top: 28px; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid transparent; border-radius: 999px; padding: 10px 18px; font-weight: 600; font-size: 15px; background: var(--surface-2); color: var(--ink); white-space: nowrap; }
+.btn:hover:not(:disabled) { box-shadow: inset 0 0 0 999px rgba(127, 127, 127, .1); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); }
+.btn.soft { background: var(--accent-soft); color: var(--accent); }
+.btn.ghost { background: transparent; border-color: var(--line); }
+.btn.danger { background: transparent; border-color: var(--line); color: var(--stop); }
+.btn.big { padding: 15px 26px; font-size: 17px; }
+.btn.small { padding: 8px 14px; font-size: 14px; }
+.count { font: 600 12px/1 var(--font-mono); background: var(--surface-2); border-radius: 999px; padding: 4px 7px; }
+.icon-btn { width: 40px; height: 40px; flex: none; border-radius: 50%; display: grid; place-items: center; border: none; background: transparent; color: var(--muted); padding: 0; }
+.icon-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+.link { background: none; border: none; color: var(--accent); font-weight: 600; padding: 4px 0; text-align: left; }
+.link.small { font-size: 14px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.row-actions { display: flex; align-items: center; gap: 2px; }
+.due { font-weight: 600; }
+.due.soon { color: var(--warn); }
+.due.late { color: var(--stop); }
+
+/* Task list */
+.tasks { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.task { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px; background: var(--surface); border-radius: var(--r); padding: 6px 12px 6px 6px; box-shadow: var(--shadow); }
+.check { width: 42px; height: 42px; flex: none; border: none; background: transparent; padding: 0; display: grid; place-items: center; color: transparent; }
+.check > span { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; transition: border-color .15s, background .15s; }
+button.check:hover > span { border-color: var(--zone); color: var(--zone); }
+.check.on { color: var(--surface); }
+.check.on > span { background: var(--zone); border-color: var(--zone); }
+.check.sm { width: 38px; height: 38px; }
+.check.sm > span { width: 22px; height: 22px; }
+.task-body { min-width: 0; text-align: left; background: none; border: none; padding: 12px 6px; display: grid; gap: 4px; }
+.task-title { font-weight: 600; font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
+.task-meta { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.badge { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--accent); }
+.badge .dot, .mini-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; animation: pulse 1.6s ease-in-out infinite; }
+.bar { display: block; height: 4px; background: var(--surface-2); border-radius: 2px; overflow: hidden; margin-top: 4px; }
+.bar i { display: block; height: 100%; background: var(--zone); border-radius: 2px; transition: width .3s; }
+.bar i.over { background: var(--warn); }
+.start { padding-left: 12px; }
+.empty { background: var(--surface); border-radius: var(--r); padding: 26px 24px; box-shadow: var(--shadow); display: grid; gap: 12px; justify-items: start; }
+.empty h2 { font: 700 22px/1.2 var(--font-display); margin: 0; }
+.empty p { margin: 0; color: var(--muted); max-width: 52ch; }
+.how-list { margin: 0 0 6px; padding-left: 22px; display: grid; gap: 6px; max-width: 52ch; }
+.how-list li::marker { font-weight: 700; color: var(--accent); }
+.loading { display: flex; align-items: center; gap: 10px; color: var(--muted); padding: 48px 0; }
+.pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s ease-in-out infinite; flex: none; }
+@keyframes pulse { 50% { opacity: .3; transform: scale(.7); } }
+
+.fab {
+  position: fixed; z-index: 20;
+  right: max(calc(16px + env(safe-area-inset-right, 0px)), calc(50vw - 300px));
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  height: 56px; padding: 0 24px 0 18px; border-radius: 999px; border: none;
+  background: var(--accent); color: var(--accent-ink);
+  font-weight: 700; font-size: 16px;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 35%, transparent);
+  display: flex; align-items: center; gap: 8px; transition: transform .15s;
+}
+.fab:hover { transform: scale(1.04); }
+body.has-mini .fab { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+
+/* Bar at the bottom while you're working or on a break */
+.mini { position: fixed; left: 0; right: 0; bottom: 0; z-index: 19; padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.mini-in { max-width: 600px; margin: 0 auto; display: flex; align-items: center; gap: 12px; background: var(--ink); color: var(--bg); border-radius: 18px; padding: 10px 10px 10px 16px; box-shadow: 0 8px 28px rgba(0, 0, 0, .25); }
+.mini-dot { color: var(--zone); }
+.mini-dot.still { animation: none; color: var(--warn); }
+.mini-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; font-size: 14px; }
+.mini-time { font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; }
+.mini .btn { background: var(--bg); color: var(--ink); }
+
+/* Sheets */
+.layer { position: fixed; inset: 0; z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
+.scrim { position: absolute; inset: 0; background: var(--scrim); border: 0; padding: 0; cursor: default; }
+.sheet {
+  position: relative; width: 100%; max-width: 600px; max-height: 92%; overflow-y: auto;
+  background: var(--surface); border-radius: 22px 22px 0 0;
+  padding: 20px max(18px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));
+}
+.sheet.enter { animation: rise .22s ease-out; }
+@keyframes rise { from { transform: translateY(28px); opacity: 0; } }
+@media (min-width: 700px) {
+  .layer { align-items: center; padding: 24px; }
+  .sheet { border-radius: 22px; max-height: 88vh; padding: 24px 26px; }
+}
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sheet h2 { font: 700 24px/1.2 var(--font-display); margin: 0; text-wrap: balance; }
+.sheet .sub { margin: 6px 0 0; }
+.label { display: block; font: 700 15px/1.3 var(--font-body); color: var(--ink); margin: 22px 0 6px; }
+.help { margin: 0 0 10px; color: var(--muted); font-size: 14px; max-width: 56ch; }
+.text-input { width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 11px 12px; font-size: 15px; min-width: 0; }
+.text-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.text-input.big { font-size: 18px; font-weight: 600; padding: 13px 14px; }
+.text-input.date { width: auto; }
+.title-wrap { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; color: var(--muted); cursor: text; }
+.title-edit { flex: 1; min-width: 0; font: 700 24px/1.2 var(--font-display); letter-spacing: -.01em; border: 1px solid transparent; background: transparent; border-radius: 10px; padding: 4px 8px; margin-left: -8px; }
+.title-edit:hover { border-color: var(--line); }
+.title-edit:focus { outline: none; border-color: var(--accent); background: var(--bg); }
+.pencil { flex: none; width: 28px; height: 28px; display: grid; place-items: center; }
+.err { color: var(--stop); font-size: 14px; margin: 8px 0 0; }
+.sheet-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
+.tip { margin: 14px 0; padding: 12px 14px; border-radius: 12px; background: var(--accent-soft); font-size: 14px; }
+.total { margin: 10px 0 0; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.due-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+.steps { list-style: none; margin: 4px 0 0; padding: 0; }
+.step { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.step-main { min-width: 0; display: grid; }
+.step-title { display: block; width: 100%; min-width: 0; border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 8px; font: inherit; font-size: 15px; line-height: 1.35; resize: none; overflow: hidden; }
+.step-title:hover { border-color: var(--line); }
+.step-title:focus { outline: none; border-color: var(--accent); background: var(--bg); }
+.step.done .step-title { color: var(--muted); text-decoration: line-through; }
+.step.live { background: var(--accent-soft); border-radius: 10px; }
+.took { font-size: 13px; color: var(--muted); padding: 0 9px 4px; font-variant-numeric: tabular-nums; }
+.took.live { color: var(--accent); font-weight: 600; }
+.num { font: 500 13px var(--font-mono); color: var(--muted); width: 26px; text-align: center; }
+.min-field { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line); border-radius: 8px; padding: 0 9px 0 0; background: var(--surface); color: var(--muted); font-size: 14px; cursor: text; }
+.min-field input { width: 3.2em; border: none; background: transparent; padding: 8px 2px 8px 6px; text-align: right; font: 500 15px var(--font-mono); color: var(--ink); -moz-appearance: textfield; appearance: textfield; }
+.min-field input::-webkit-outer-spin-button, .min-field input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.min-field input:focus { outline: none; }
+.min-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.step-add { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+.step-add > .text-input { flex: 1 1 130px; width: auto; }
+
+/* Working screen */
+.focus { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow-y: auto; padding: env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(16px, env(safe-area-inset-left, 0px)); animation: fade .2s ease-out; }
+@keyframes fade { from { opacity: 0; } }
+.focus-in { max-width: 560px; margin: 0 auto; padding-block: 14px 56px; display: grid; gap: 18px; }
+.fbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 40px; }
+.fbar-title { text-align: center; font-weight: 600; color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.step-name { font: 700 clamp(24px, 6.5vw, 32px)/1.15 var(--font-display); letter-spacing: -.01em; margin: 0; text-wrap: balance; overflow-wrap: anywhere; }
+.hero { display: grid; justify-items: center; text-align: center; gap: 6px; padding-block: 14px 4px; }
+.timer { font: 500 clamp(64px, 19vw, 100px)/1 var(--font-mono); letter-spacing: -.04em; font-variant-numeric: tabular-nums; margin-top: 14px; }
+.timer .colon { display: inline-block; margin: 0 -.16em; transform: translateY(-.05em); }
+.timer.paused { color: var(--muted); }
+.est-line { color: var(--muted); font-size: 15px; }
+.hero .bar { width: 100%; max-width: 360px; height: 6px; margin-top: 10px; }
+.actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+.hero-more { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; margin-top: 4px; }
+.hero-more .link { display: inline-flex; align-items: center; gap: 6px; }
+.panel { background: var(--surface); border-radius: var(--r); padding: 20px; box-shadow: var(--shadow); display: grid; gap: 10px; }
+.status { gap: 8px; }
+.status-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.status h3 { margin: 0; font: 700 21px/1.2 var(--font-display); display: flex; align-items: center; gap: 10px; }
+.status .dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; flex: none; }
+.pct { display: grid; justify-items: end; font: 600 28px/1 var(--font-mono); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.pct small { font: 700 11px/1.6 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.status.go h3, .status.go .pct { color: var(--zone); }
+.status.soon h3, .status.soon .pct { color: var(--warn); }
+.status.now h3, .status.now .pct { color: var(--stop); }
+.status.switch h3, .status.switch .pct { color: var(--accent); }
+.status.learning h3 { color: var(--accent); }
+.status.now { background: var(--stop-soft); box-shadow: none; }
+.status.switch { background: var(--accent-soft); box-shadow: none; }
+.why { margin: 0; font-size: 16px; }
+.worked { margin: 4px 0 0; font-size: 14px; color: var(--muted); }
+.worked b { color: var(--ink); font-weight: 600; }
+.how summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 14px; width: fit-content; }
+.how p { margin: 8px 0 0; font-size: 14px; color: var(--muted); max-width: 60ch; }
+.ask-card { background: var(--accent-soft); border-radius: var(--r); padding: 20px; display: grid; gap: 10px; }
+.ask-card.warn { background: var(--warn-soft); }
+.ask-card h2 { font: 700 21px/1.25 var(--font-display); margin: 0; text-wrap: balance; overflow-wrap: anywhere; }
+.ask-card p { margin: 0; color: var(--muted); }
+.ask-card .label { margin: 4px 0 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 10px 16px; font-weight: 600; font-size: 15px; }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.est-custom { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+.result { display: flex; gap: 10px; align-items: center; }
+.result > div { display: grid; min-width: 0; }
+.result b { overflow-wrap: anywhere; }
+.result .muted { font-size: 14px; }
+.pick-q { margin: 4px 0 0; font: 700 16px/1.3 var(--font-body); }
+.picklist { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.pick { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; border: 1px solid var(--line); background: var(--bg); border-radius: 12px; padding: 12px 16px; }
+.pick:hover { border-color: var(--accent); }
+.pick > span:first-child { display: grid; min-width: 0; }
+.pick .muted { font-size: 13px; }
+.pick-go { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--accent); flex: none; }
+.breakscreen { display: grid; justify-items: center; text-align: center; gap: 14px; padding-top: 10vh; }
+.breakscreen p { max-width: 36ch; margin: 0; }
+
+/* Steps on the working screen */
+.steps-panel { gap: 6px; }
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.panel-head h3 { margin: 0; font: 700 18px/1.2 var(--font-display); }
+.panel-head .link { display: inline-flex; align-items: center; gap: 6px; }
+.fsteps { list-style: none; margin: 0; padding: 0; display: grid; }
+.fstep { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.fstep:last-child { border-bottom: none; }
+.fstep-main { display: grid; gap: 2px; min-width: 0; }
+.fstep-main b { font-weight: 600; overflow-wrap: anywhere; }
+.fstep-main .muted { font-size: 13px; font-variant-numeric: tabular-nums; }
+.fstep.done .fstep-main b { color: var(--muted); text-decoration: line-through; }
+.fstep.now { background: var(--accent-soft); border-radius: 10px; padding-inline: 6px; border-bottom-color: transparent; }
+.now-tag { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--accent); }
+.fstep.editing { grid-template-columns: 26px minmax(0, 1fr); align-items: start; }
+.fstep-edit { display: grid; gap: 6px; min-width: 0; }
+.fstep-edit .step-title { border-color: var(--line); background: var(--bg); }
+.fstep-tools { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.fstep-tools .row-actions .icon-btn { width: 36px; height: 36px; }
+.split-form { display: grid; gap: 8px; }
+
+/* Work methods and the look-and-feel sheet */
+.methods { display: grid; gap: 8px; }
+.method-opt { text-align: left; border: 1.5px solid var(--line); background: var(--surface); border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; }
+.method-opt span { font-size: 13px; color: var(--muted); }
+.method-opt.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.method-card { margin-top: 24px; }
+.method-card h2 { font: 700 20px/1.2 var(--font-display); margin: 0; }
+.method-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.method-rows li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 14px; flex-wrap: wrap; }
+.method-rows li b { font-weight: 600; }
+.method-rows .best { color: var(--zone); font-weight: 700; }
+.seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.seg-btn { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px; background: var(--surface); font-weight: 600; }
+.seg-btn.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.swatches { display: flex; flex-wrap: wrap; gap: 14px; }
+.swatch { width: 56px; display: grid; justify-items: center; gap: 6px; background: none; border: none; padding: 0; font-size: 12px; color: var(--muted); }
+.swatch i { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .1); }
+.swatch.on { color: var(--ink); font-weight: 700; }
+.swatch.on i { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 60;
+  bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+  width: max-content; max-width: min(520px, calc(100vw - 32px));
+  display: flex; align-items: center; gap: 12px;
+  background: var(--ink); color: var(--bg); border-radius: 12px;
+  padding: 10px 10px 10px 16px; font-size: 14px; box-shadow: 0 8px 28px rgba(0, 0, 0, .25);
+  animation: rise .2s ease-out;
+}
+body.has-mini .toast { bottom: calc(172px + env(safe-area-inset-bottom, 0px)); }
+.toast-act { background: transparent; border: none; color: var(--bg); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; padding: 6px 8px; }
+
+@media (max-width: 420px) {
+  .btn.big { padding: 14px 22px; }
+  .fbar .btn.small { padding: 8px 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="app"><main id="main"></main></div>
+<button class="fab" id="fab" data-act="open-add" hidden></button>
+<div class="mini" id="mini" hidden></div>
+<div class="focus" id="focus" hidden></div>
+<div class="layer" id="layer" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<script>
+'use strict';
+
+const ICON = {
+  mark: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="8" width="3.4" height="7" rx="1" fill="currentColor"/><rect x="6.3" y="4" width="3.4" height="11" rx="1" fill="currentColor"/><rect x="11.6" y="1" width="3.4" height="14" rx="1" fill="currentColor" opacity=".4"/></svg>',
+  plus: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>',
+  play: '<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8v14.4L19 12z" fill="currentColor"/></svg>',
+  pause: '<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>',
+  skip: '<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5v13l9-6.5zM17 5.5v13" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" fill="none"/></svg>',
+  split: '<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16M12 10v4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>',
+  check: '<svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+  x: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>',
+  back: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+  up: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+  down: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+  archive: '<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 4.5h17v4h-17zM5 8.5V18a2 2 0 002 2h10a2 2 0 002-2V8.5M10 12.5h4" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" fill="none"/></svg>',
+  trash: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15M10 7V4.5h4V7M6.5 7l1 13h9l1-13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+  edit: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 00-3-3L5 17v3zM14.5 7.5l2 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+  cup: '<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 9.5h12v4a5 5 0 01-5 5h-2a5 5 0 01-5-5v-4zM16.5 11h1.25a2.25 2.25 0 010 4.5H16M8 3.5v2.5M12 3.5v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+  swap: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h12l-3-3M17 17H5l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+  gear: '<svg width="19" height="19" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'
+};
+
+/* ---------- helpers ---------- */
+const KEY = 'paced:v1';
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const clone = o => JSON.parse(JSON.stringify(o));
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const newId = p => p + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const parseMin = v => { const n = Math.round(parseFloat(v)); return n > 0 ? Math.min(n, 600) : null; };
+function fmtMin(m) {
+  m = Math.round(m || 0);
+  if (m < 1) return 'under a minute';
+  if (m < 60) return m + ' min';
+  const h = Math.floor(m / 60), r = m % 60;
+  return h + ' hr' + (r ? ' ' + r + ' min' : '');
+}
+const fmtDur = sec => fmtMin(sec / 60);
+function fmtClock(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0');
+}
+const clockHTML = sec => fmtClock(sec).split(':').join('<span class="colon">:</span>');
+function median(a) {
+  const s = [...a].sort((x, y) => x - y), n = s.length;
+  return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+}
+
+/* Dates are local "YYYY-MM-DD" keys. */
+const pad = n => String(n).padStart(2, '0');
+const dateKey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const keyDate = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
+const addDays = (k, n) => { const d = keyDate(k); d.setDate(d.getDate() + n); return dateKey(d); };
+const isKey = k => typeof k === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(k);
+const fmtMonthDay = k => keyDate(k).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+function fmtDayShort(k) {
+  const today = dateKey();
+  if (k === today) return 'Today';
+  if (k === addDays(today, 1)) return 'Tomorrow';
+  if (k === addDays(today, -1)) return 'Yesterday';
+  return keyDate(k).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+/* ---------- state ---------- */
+const defaultMeta = () => ({ fresh: [], session: null, brk: null, lastBreakEnd: null, lastStop: null });
+function normMeta(d) {
+  const m = Object.assign(defaultMeta(), d ? clone(d) : {});
+  if (!Array.isArray(m.fresh)) m.fresh = [];
+  if (m.session && !Array.isArray(m.session.log)) m.session.log = [];
+  return m;
+}
+// Other saved fields (like old calendar times) are kept as they are, just not shown.
+function normTask(id, d) {
+  const t = clone(d || {});
+  t.id = id;
+  t.title = String(t.title || 'Untitled task');
+  t.steps = Array.isArray(t.steps) ? t.steps.filter(s => s && s.id) : [];
+  if (!isKey(t.due)) t.due = null;
+  t.createdAt = t.createdAt || Date.now();
+  t.archived = !!t.archived;
+  return t;
+}
+
+const state = {
+  ready: false, tasks: new Map(), meta: defaultMeta(),
+  // Calendar events from the earlier version stay saved but are no longer used.
+  events: new Map(),
+  view: 'home', layer: null, draft: null,
+  focusOpen: false, ask: null, howOpen: false, fEdit: false
+};
+
+const byDue = (a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.createdAt - b.createdAt;
+const activeTasks = () => [...state.tasks.values()].filter(t => !t.archived).sort(byDue);
+const archivedTasks = () => [...state.tasks.values()].filter(t => t.archived).sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
+const stepsLeft = t => t.steps.filter(s => !s.done);
+const minLeft = t => stepsLeft(t).reduce((a, s) => a + (s.est || 0), 0);
+const findStep = (tid, sid) => state.tasks.get(tid)?.steps.find(s => s.id === sid);
+const elapsedSec = (a, now = Date.now()) => (a.carry || 0) + ((a.pausedAt || now) - a.startedAt - (a.pausedMs || 0)) / 1000;
+
+function dueInfo(t) {
+  if (!t.due) return null;
+  const today = dateKey();
+  if (!t.archived && t.due < today) return { text: `Overdue (was due ${fmtDayShort(t.due)})`, cls: 'late' };
+  if (t.due === today) return { text: 'Due today', cls: 'soon' };
+  if (t.due === addDays(today, 1)) return { text: 'Due tomorrow', cls: 'soon' };
+  return { text: `Due ${fmtDayShort(t.due)}`, cls: '' };
+}
+const dueHTML = t => { const d = dueInfo(t); return d ? `<span class="due ${d.cls}">${esc(d.text)}</span>` : ''; };
+const dueWords = t => t.due < dateKey() ? 'is overdue' : t.due === dateKey() ? 'is due today' : 'is due tomorrow';
+
+/* Your real speed: how much longer your timed steps usually take than your guesses (1.2 = 20% longer).
+   Needs at least 5 timed steps from the last 60 days; small differences are ignored. */
+let speedCache = null;
+function timeFactor() {
+  if (speedCache !== null) return speedCache;
+  const since = Date.now() - 60 * 864e5, samples = [];
+  for (const t of state.tasks.values())
+    for (const s of t.steps)
+      if (s.done && s.est && s.actual && (s.doneAt || 0) >= since) samples.push([s.doneAt, clamp(s.actual / 60 / s.est, 0.5, 3)]);
+  samples.sort((a, b) => a[0] - b[0]);
+  const recent = samples.slice(-30).map(x => x[1]);
+  const f = recent.length >= 5 ? Math.round(median(recent) * 20) / 20 : 1;
+  return (speedCache = f >= 1.1 ? Math.min(f, 2) : 1);
+}
+const extraPct = () => Math.round((timeFactor() - 1) * 100);
+
+// The step to do next: the first one left, passing over any you skipped this session.
+function nextStep(t, s, exceptId) {
+  const left = t ? t.steps.filter(x => !x.done && x.id !== exceptId) : [];
+  const skipped = new Set((s && s.skipped) || []);
+  return left.find(x => !skipped.has(x.id)) || left[0] || null;
+}
+// A deadline is close when something due today or tomorrow (or overdue) still has steps left.
+const tightTask = () => activeTasks().find(t => t.due && t.due <= addDays(dateKey(), 1) && stepsLeft(t).length) || null;
+// Another task to switch to instead of taking a full break.
+const switchTarget = currentId => activeTasks().find(t => t.id !== currentId && stepsLeft(t).length) || null;
+
+/* Ways of working you can try. "work" is minutes of work before a break (or, for task rotation, a switch). */
+const METHODS = [
+  { id: 'paced', name: 'Paced breaks', short: 'Breaks when your speed drops', work: null, brk: null },
+  { id: 'pomodoro', name: 'Pomodoro', short: '25 min of work, then a 5-minute break (15 after every fourth)', work: 25, brk: 5 },
+  { id: 'long', name: 'Long focus', short: '50 min of work, then a 10-minute break', work: 50, brk: 10 },
+  { id: 'rotate', name: 'Task rotation', short: 'Switch to another task every 25 min instead of taking a break', work: 25, brk: 5 }
+];
+const methodById = id => METHODS.find(x => x.id === id) || METHODS[0];
+const methodOf = s => methodById(s && s.method);
+// Minutes worked since the current stretch began (session start, method change, or last task switch).
+const sinceMark = (as, s) => Math.max(0, as.workMin - ((s && s.markAt) || 0));
+function pomodoroBreakMin() {
+  const p = state.meta.pomo, n = p && p.date === dateKey() ? p.n : 0;
+  return n % 4 === 3 ? 15 : 5;
+}
+
+// When a work session ends, keep a short record of it so methods can be compared later.
+function recordSession(s, now = Date.now()) {
+  const steps = s.log.filter(l => l.est && l.actual >= 60);
+  if (!steps.length) return;
+  const m = state.meta;
+  m.methodLog = [...(m.methodLog || []), {
+    method: s.method || 'paced', at: now,
+    workMin: Math.round(assess(m, now).workMin - (s.priorMin || 0)),
+    paces: steps.map(l => Math.round(l.est * 60 / l.actual * 100) / 100)
+  }].slice(-80);
+}
+// Per method: how many sessions, and your average speed against your own guesses (100% = exactly as guessed).
+function methodStats() {
+  const log = state.meta.methodLog || [];
+  return METHODS.map(x => {
+    const rs = log.filter(r => r.method === x.id), paces = rs.flatMap(r => r.paces);
+    return { ...x, sessions: rs.length, steps: paces.length, speed: paces.length ? Math.round(paces.reduce((a, b) => a + b, 0) / paces.length * 100) : null };
+  });
+}
+
+/* Look and feel: accent color and light/dark, saved with your account. [light accent, text on it, soft tint] / same for dark. */
+const COLORS = {
+  blue: { name: 'Blue', light: ['#2E43C2', '#FFFFFF', '#E3E7FA'], dark: ['#8E9DFF', '#0E1333', '#222949'] },
+  teal: { name: 'Teal', light: ['#0D7373', '#FFFFFF', '#D8EFEE'], dark: ['#5FD0CC', '#052625', '#133433'] },
+  purple: { name: 'Purple', light: ['#6B3FC4', '#FFFFFF', '#ECE4FA'], dark: ['#B79CFF', '#1E1035', '#2B2147'] },
+  pink: { name: 'Pink', light: ['#B5356F', '#FFFFFF', '#F8E1EC'], dark: ['#F28DB9', '#33101F', '#3A1C2B'] },
+  orange: { name: 'Orange', light: ['#AD4E0C', '#FFFFFF', '#FBE7D6'], dark: ['#F4A261', '#2E1606', '#3A2514'] },
+  graphite: { name: 'Graphite', light: ['#3D4A5C', '#FFFFFF', '#E3E7EC'], dark: ['#AFBCCD', '#121820', '#252C36'] }
+};
+let themeSetByApp = false;
+function applyLook() {
+  const look = state.meta.look || {}, c = COLORS[look.color] || COLORS.blue;
+  let el = document.getElementById('look-vars');
+  if (!el) { el = document.createElement('style'); el.id = 'look-vars'; document.body.appendChild(el); } // after the page's own styles, so it wins
+  const v = ([a, ink, soft]) => `--accent:${a};--accent-ink:${ink};--accent-soft:${soft};`;
+  el.textContent = `:root{${v(c.light)}}@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${v(c.dark)}}}:root[data-theme="dark"]{${v(c.dark)}}`;
+  const root = document.documentElement;
+  if (look.theme === 'light' || look.theme === 'dark') { root.dataset.theme = look.theme; themeSetByApp = true; }
+  else if (themeSetByApp) { delete root.dataset.theme; themeSetByApp = false; }
+}
+
+/* ---------- storage: your account when available, this browser otherwise ---------- */
+const Store = {
+  mode: 'loading', col: null, unsub: null, queue: new Map(), localTimer: null,
+
+  async init() {
+    let db = null, user = null, uid = null;
+    if (window.claude && typeof window.claude.use === 'function') {
+      try { [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); } catch (e) {}
+      if (user) { try { uid = await user.id(); } catch (e) {} }
+    }
+    if (db && uid) {
+      try {
+        this.col = db.collection('data/users/' + uid);
+        this.mode = 'cloud';
+        await new Promise(resolve => {
+          let first = true;
+          const done = () => { if (first) { first = false; resolve(); } };
+          const timer = setTimeout(() => { if (first) { this.toLocal('Your account storage didn’t answer, so tasks are saved in this browser for now.', true); done(); } }, 15000);
+          this.unsub = this.col.onSnapshot(snap => {
+            if (this.mode !== 'cloud') return;
+            this.applyDocs(snap.docs.filter(d => d.exists).map(d => [d.id, d.data()]));
+            clearTimeout(timer);
+            if (first) done(); else { clearStale(); render(); }
+          }, () => { clearTimeout(timer); this.toLocal('Lost the connection to your account, so changes are saved in this browser for now.', first); done(); });
+        });
+        return;
+      } catch (e) { this.toLocal(null, true); return; }
+    }
+    this.mode = 'local';
+    this.loadLocal();
+  },
+
+  applyDocs(docs) {
+    const tasks = new Map(), events = new Map(); let meta = null;
+    for (const [id, d] of docs) {
+      if (id === 'meta') meta = d;
+      else if (id.startsWith('t_')) tasks.set(id, normTask(id, d));
+      else if (id.startsWith('e_')) events.set(id, clone(d));
+    }
+    // Docs with a write still on its way keep their local version.
+    for (const id of this.queue.keys()) {
+      if (id === 'meta') { meta = state.meta; continue; }
+      const loc = state.tasks.get(id);
+      if (loc) tasks.set(id, loc); else tasks.delete(id);
+    }
+    state.tasks = tasks;
+    state.events = events;
+    state.meta = normMeta(meta);
+    speedCache = null;
+  },
+
+  write(id, data) {
+    if (this.mode !== 'cloud') { clearTimeout(this.localTimer); this.localTimer = setTimeout(() => this.saveLocal(), 60); return; }
+    let q = this.queue.get(id);
+    if (!q) { q = { busy: false, next: null }; this.queue.set(id, q); }
+    q.next = data === null ? { del: true } : { data: clone(data) };
+    if (!q.busy) this.flush(id, q);
+  },
+
+  async flush(id, q) {
+    q.busy = true;
+    while (q.next && this.mode === 'cloud') {
+      const job = q.next; q.next = null;
+      try {
+        const ref = this.col.doc(id);
+        if (job.del) await ref.delete(); else await ref.set(job.data);
+      } catch (e) {
+        const code = e && e.code;
+        if (code === 'unavailable' && !job.retried) { job.retried = true; await sleep(400 + Math.random() * 600); if (!q.next) q.next = job; continue; }
+        if (code === 'quota_exceeded') toast('Your storage is full. Empty some tasks from the Trash to make room.');
+        else if (['invalid_argument', 'not_granted', 'revoked', 'capability_disabled', 'capability_removed', 'transform_error'].includes(code)) { this.toLocal('Couldn’t save to your account, so changes are saved in this browser for now.'); break; }
+        else toast('Couldn’t save that change. Check your connection and try again.');
+      }
+    }
+    q.busy = false;
+    if (this.queue.get(id) === q && !q.next) this.queue.delete(id);
+  },
+
+  toLocal(msg, quiet) {
+    if (this.mode === 'local') return;
+    this.mode = 'local';
+    try { this.unsub && this.unsub(); } catch (e) {}
+    this.queue.clear();
+    if (state.ready) this.saveLocal(); else this.loadLocal();
+    if (msg) setTimeout(() => toast(msg), quiet ? 400 : 0);
+    if (state.ready) render();
+  },
+
+  loadLocal() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      state.tasks = new Map((d.tasks || []).filter(t => t && t.id).map(t => [t.id, normTask(t.id, t)]));
+      state.events = new Map((d.events || []).filter(e => e && e.id).map(e => [e.id, e]));
+      state.meta = normMeta(d.meta);
+      speedCache = null;
+    } catch (e) {}
+  },
+
+  saveLocal() {
+    try { localStorage.setItem(KEY, JSON.stringify({ tasks: [...state.tasks.values()], events: [...state.events.values()], meta: state.meta })); } catch (e) {}
+  }
+};
+window.addEventListener('pagehide', () => { if (Store.mode === 'local') Store.saveLocal(); });
+
+function saveTask(t) { state.tasks.set(t.id, t); speedCache = null; Store.write(t.id, t); }
+function removeTask(id) { state.tasks.delete(id); speedCache = null; Store.write(id, null); }
+function saveMeta() { Store.write('meta', state.meta); }
+
+function clearStale() {
+  const s = state.meta.session;
+  if (s && s.active && !findStep(s.active.taskId, s.active.stepId)) s.active = null;
+  expireIdleSession();
+}
+// A session with no step running and nothing done for 30 minutes counts as stopped, so yesterday's
+// hours don't carry into today. Left alone while you're looking at the working screen, unless forced.
+function expireIdleSession(force) {
+  const m = state.meta, s = m.session;
+  if (!s || s.active || m.brk || (state.focusOpen && !force)) return false;
+  const last = s.lastAt || s.startedAt || 0;
+  if (Date.now() - last < 30 * 60e3) return false;
+  m.lastStop = { at: last, workMin: Math.round(assess(m, last).workMin) };
+  recordSession(s, last);
+  m.session = null;
+  if (state.ask && state.ask.type !== 'history') state.ask = null;
+  saveMeta();
+  return true;
+}
+function clearActiveIf(pred) {
+  const s = state.meta.session;
+  if (s && s.active && pred(s.active)) { s.active = null; state.ask = null; saveMeta(); }
+}
+
+/* ---------- speed model ----------
+   pace = planned minutes / real minutes for a step (1.0 = exactly as planned).
+   Starting speed = average pace of the first two steps after a break,
+   or the median of past fresh starts when you began already tired.
+   Efficiency = average pace of your last two steps / starting speed. Under 90% means it's break time. */
+function assess(meta, now = Date.now()) {
+  const s = meta.session || { log: [], priorMin: 0 };
+  const counted = s.log.filter(l => l.pace != null && !l.excluded);
+  const fresh = meta.fresh || [];
+  let base = null;
+  if (counted.length >= 2 && !(s.priorMin >= 30 && fresh.length >= 2)) base = (counted[0].pace + counted[1].pace) / 2;
+  else if (fresh.length >= 2) base = median(fresh);
+  let eff = null, from = null;
+  if (base && counted.length) {
+    const recent = counted.slice(-2);
+    eff = recent.reduce((x, l) => x + l.pace, 0) / recent.length / base * 100;
+    from = 'pace';
+  }
+  const paceReady = from === 'pace';
+  const last = s.log[s.log.length - 1];
+  const hard = !!(last && last.feel === 'struggling');
+  if (hard) { eff = eff == null ? 82 : Math.min(eff, 85); from = from || 'feel'; }
+  else if (eff == null && last && last.feel) { eff = last.feel === 'focused' ? 100 : 94; from = 'feel'; }
+  if (eff != null) eff = Math.round(clamp(eff, 40, 130));
+
+  const workSec = (s.priorMin || 0) * 60 + (s.partialSec || 0)
+    + s.log.reduce((x, l) => x + (l.worked ?? l.actual ?? 0), 0)
+    + (s.active ? elapsedSec(s.active, now) - (s.active.carry || 0) : 0);
+  const workMin = workSec / 60;
+  const slipping = counted.length >= 3 && counted[counted.length - 1].pace < counted[counted.length - 2].pace;
+  const breakMin = clamp(Math.round(workMin * 0.2 / 5) * 5, 5, 20);
+
+  let kind, why;
+  if (s.forceBreak) [kind, why] = ['now', 'You said you’re getting tired.'];
+  else if (eff != null && eff < 90 && (counted.length >= 2 || hard))
+    [kind, why] = ['now', from === 'pace' ? `You’ve slowed down to ${eff}% of your starting speed.` : 'You said that step was hard.'];
+  else if (workMin >= 90) [kind, why] = ['now', `You’ve been working for ${fmtMin(workMin)} without a break.`];
+  else if (eff != null && eff < 95 && slipping) [kind, why] = ['soon', `You’re starting to slow down (${eff}% of your starting speed).`];
+  else if (workMin >= 60) [kind, why] = ['soon', `You’ve been working for ${fmtMin(workMin)}.`];
+  else if (eff == null) [kind, why] = ['learning', counted.length ? 'Finish one more step and Paced will start tracking how fast you’re going.' : 'Finish two steps and Paced will start tracking how fast you’re going.'];
+  else if (from === 'feel') [kind, why] = ['go', 'Based on how you said that step went.'];
+  else if (eff > 100) [kind, why] = ['go', `You’re working faster than when you started (${eff}%).`];
+  else [kind, why] = ['go', `You’re working at ${eff}% of your starting speed. That’s right where you want to be.`];
+  const title = { now: 'Time for a break', soon: 'Take a break soon', learning: 'Getting to know your speed', go: 'Keep going' }[kind];
+
+  return { eff, from, paceReady, counted, workMin, breakMin, kind, title, why, steps: s.log.length };
+}
+
+/* ---------- main screen ---------- */
+function render() {
+  applyLook();
+  renderMain();
+  renderMini();
+  renderFocus();
+  const fab = $('#fab');
+  fab.hidden = !state.ready || state.view !== 'home' || !activeTasks().length;
+  fab.innerHTML = ICON.plus + 'New task';
+}
+
+function renderMain() {
+  const main = $('#main');
+  if (!state.ready) { main.innerHTML = '<div class="loading"><span class="pulse"></span>Loading your tasks…</div>'; return; }
+  main.innerHTML = state.view === 'archive' ? archiveHTML() : homeHTML();
+}
+
+const savedLine = () => `<p class="saved">${Store.mode === 'cloud' ? 'Saved to your account' : 'Saved in this browser'}</p>`;
+
+function homeHTML() {
+  const list = activeTasks();
+  const archived = archivedTasks().length;
+  const left = list.reduce((a, t) => a + minLeft(t), 0);
+  return `<div class="brand-row"><div class="brand">${ICON.mark}Paced</div>
+    <div class="row-actions"><button class="icon-btn" data-act="open-look" title="Settings" aria-label="Settings">${ICON.gear}</button>
+    <button class="btn ghost small" data-act="show-archive">${ICON.trash}Trash${archived ? `<span class="count">${archived}</span>` : ''}</button></div></div>
+  <h1>My tasks</h1>
+  ${list.length ? `<p class="sub">${list.length} ${list.length === 1 ? 'task' : 'tasks'}${left ? ` · about ${fmtMin(left)} of work` : ''}</p>
+  <ul class="tasks">${list.map(taskHTML).join('')}</ul>
+  ${methodCardHTML()}` : `
+  <p class="sub">Nothing to do yet</p>
+  <section class="empty">
+    <h2>Here’s how Paced works</h2>
+    <ol class="how-list">
+      <li>Add a task and split it into small steps.</li>
+      <li>Guess how many minutes each step will take.</li>
+      <li>Press <b>Start</b>. Paced times each step and tells you when it’s time for a break.</li>
+    </ol>
+    <button class="btn primary" data-act="open-add">${ICON.plus}Add your first task</button>
+  </section>`}
+  ${savedLine()}`;
+}
+
+function taskHTML(t) {
+  const total = t.steps.length, done = total - stepsLeft(t).length, left = minLeft(t);
+  let meta;
+  if (!total) meta = 'No steps yet';
+  else if (!done) meta = `${total} ${total === 1 ? 'step' : 'steps'}${left ? ` · about ${fmtMin(left)}` : ''}`;
+  else meta = `${done} of ${total} steps done${left ? ` · about ${fmtMin(left)} left` : ''}`;
+  const live = state.meta.session?.active?.taskId === t.id;
+  const action = !total
+    ? `<button class="btn ghost small" data-act="add-steps" data-id="${t.id}">Add steps</button>`
+    : `<button class="btn soft small start" data-act="focus-task" data-id="${t.id}" aria-label="${live ? 'Show the timer for' : 'Start working on'} “${esc(t.title)}”">${live ? 'Show' : ICON.play + 'Start'}</button>`;
+  return `<li class="task">
+    <button class="check" data-act="complete-task" data-id="${t.id}" title="Mark the whole task as done" aria-label="Mark “${esc(t.title)}” as done"><span>${ICON.check}</span></button>
+    <button class="task-body" data-act="open-task" data-id="${t.id}">
+      <span class="task-title">${esc(t.title)}</span>
+      <span class="task-meta">${meta}${t.due ? ' · ' + dueHTML(t) : ''}</span>
+      ${live ? '<span class="badge"><span class="dot"></span>Working on this now</span>' : ''}
+      ${total ? `<span class="bar" aria-hidden="true"><i style="width:${Math.round(done / total * 100)}%"></i></span>` : ''}
+    </button>
+    ${action}
+  </li>`;
+}
+
+// "What works for you": compares your speed with each way of working once there's enough to go on.
+function methodCardHTML() {
+  const stats = methodStats(), ready = stats.filter(x => x.sessions >= 3 && x.steps >= 3);
+  const best = ready.length >= 2 ? ready.reduce((a, b) => (b.speed > a.speed ? b : a)) : null;
+  const current = methodById(state.meta.method);
+  const intro = best
+    ? `<p class="why"><b>You work fastest with ${esc(best.name)}.</b> You get through steps at ${best.speed}% of the speed you planned, compared with ${ready.filter(x => x !== best).map(x => `${x.speed}% with ${esc(x.name)}`).join(' and ')}.</p>`
+    : '<p class="help" style="margin:0">Try a few ways of working and Paced will compare how fast you go with each. Change the method from the working screen. After 3 sessions with at least two methods, you’ll see which suits you.</p>';
+  const rows = stats.map(x => `<li><span><b>${esc(x.name)}</b>${x.id === current.id ? ' <span class="muted">(using now)</span>' : ''}</span>
+    <span class="${best && x.id === best.id ? 'best' : 'muted'}">${x.sessions >= 3 && x.speed != null ? `${x.speed}% speed · ${x.sessions} sessions` : `${Math.min(x.sessions, 3)} of 3 sessions`}</span></li>`).join('');
+  return `<section class="panel method-card"><div class="eyebrow">What works for you</div>${intro}<ul class="method-rows">${rows}</ul>
+    <p class="help" style="margin:0">100% means steps take exactly as long as you guessed. Higher is faster.</p></section>`;
+}
+
+function archiveHTML() {
+  const list = archivedTasks();
+  return `<div class="brand-row"><button class="btn ghost small" data-act="show-home">${ICON.back}My tasks</button></div>
+  <h1>Trash</h1>
+  <p class="sub">${list.length ? 'Tasks you’ve finished' : 'Nothing here yet'}</p>
+  ${list.length ? `<ul class="tasks">${list.map(t => {
+    const took = t.steps.reduce((a, s) => a + (s.actual || 0), 0);
+    const meta = [t.completedAt ? `Finished ${fmtMonthDay(dateKey(new Date(t.completedAt)))}` : 'Finished'];
+    if (t.steps.length) meta.push(`${t.steps.length} ${t.steps.length === 1 ? 'step' : 'steps'}`);
+    if (took >= 60) meta.push(`${fmtDur(took)} of work`);
+    return `<li class="task">
+      <span class="check on" aria-hidden="true"><span>${ICON.check}</span></span>
+      <div class="task-body"><span class="task-title">${esc(t.title)}</span><span class="task-meta">${meta.join(' · ')}</span></div>
+      <div class="row-actions">
+        <button class="btn ghost small" data-act="restore" data-id="${t.id}" title="Put this task back on your list">Restore</button>
+        <button class="icon-btn" data-act="purge" data-id="${t.id}" title="Delete" aria-label="Delete “${esc(t.title)}” for good">${ICON.trash}</button>
+      </div>
+    </li>`;
+  }).join('')}</ul>` : '<section class="empty"><p>When you finish every step of a task, it moves here automatically. You can restore it, or delete it for good.</p></section>'}`;
+}
+
+function renderMini() {
+  const el = $('#mini'), m = state.meta, s = m.session;
+  const show = state.ready && !state.focusOpen && (m.brk || s);
+  document.body.classList.toggle('has-mini', !!show);
+  if (!show) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  let dot = '<span class="mini-dot"></span>', title, time = '';
+  if (m.brk) {
+    dot = '<span class="mini-dot still"></span>'; title = 'On a break';
+    time = `<span class="mini-time" data-tick="mini">${fmtClock((m.brk.until - Date.now()) / 1000)}</span>`;
+  } else if (s.active) {
+    const st = findStep(s.active.taskId, s.active.stepId);
+    if (s.active.pausedAt) dot = '<span class="mini-dot still"></span>';
+    title = esc(st ? st.title : 'Working') + (s.active.pausedAt ? ' (paused)' : '');
+    time = `<span class="mini-time" data-tick="mini">${fmtClock(elapsedSec(s.active))}</span>`;
+  } else title = 'Ready for your next step';
+  el.innerHTML = `<div class="mini-in">${dot}<span class="mini-title">${title}</span>${time}<button class="btn small" data-act="focus-open">Show</button></div>`;
+}
+
+/* ---------- sheets ---------- */
+function renderLayer(enter) {
+  const el = $('#layer'), L = state.layer;
+  const t = L && L.type === 'detail' ? state.tasks.get(L.id) : null;
+  if (!L || (L.type === 'detail' && !t)) {
+    state.layer = null; el.hidden = true; el.innerHTML = '';
+    document.body.classList.toggle('locked', state.focusOpen);
+    return;
+  }
+  el.hidden = false;
+  document.body.classList.add('locked');
+  el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : detailHTML(t, enter));
+  autosizeAll(el);
+}
+const sheetOpen = (enter, label) => `<section class="sheet${enter ? ' enter' : ''}" role="dialog" aria-modal="true" aria-label="${esc(label)}">`;
+const sheetHead = title => `<div class="sheet-head"><h2>${esc(title)}</h2><button class="icon-btn" data-act="close-layer" aria-label="Close">${ICON.x}</button></div>`;
+
+// Step names wrap onto more lines instead of getting cut off.
+function autosize(el) { el.style.height = 'auto'; el.style.height = (el.scrollHeight + 2) + 'px'; }
+function autosizeAll(root) { root.querySelectorAll('textarea.step-title').forEach(autosize); }
+window.addEventListener('resize', () => { autosizeAll($('#layer')); autosizeAll($('#focus')); });
+
+/* ----- look and feel ----- */
+function lookHTML(enter) {
+  const look = state.meta.look || {}, theme = look.theme || 'auto', color = COLORS[look.color] ? look.color : 'blue';
+  const themeBtn = (v, label) => `<button class="seg-btn${theme === v ? ' on' : ''}" data-act="look-theme" data-v="${v}" aria-pressed="${theme === v}">${label}</button>`;
+  return `${sheetOpen(enter, 'Settings')}${sheetHead('Settings')}
+    <h3 class="label">Theme</h3>
+    <div class="seg">${themeBtn('auto', 'Auto')}${themeBtn('light', 'Light')}${themeBtn('dark', 'Dark')}</div>
+    <p class="help" style="margin-top:8px">Auto matches your device.</p>
+    <h3 class="label">Color</h3>
+    <div class="swatches">${Object.entries(COLORS).map(([id, c]) => `<button class="swatch${color === id ? ' on' : ''}" data-act="look-color" data-v="${id}" aria-pressed="${color === id}"><i style="background:${c.light[0]}">${color === id ? ICON.check : ''}</i>${c.name}</button>`).join('')}</div>
+    <div class="sheet-foot"><span></span><button class="btn primary" data-act="close-layer">Done</button></div>
+  </section>`;
+}
+
+/* ----- new task ----- */
+function draftStepsHTML() {
+  const steps = state.draft.steps;
+  if (!steps.length) return '';
+  return `<ol class="steps">${steps.map((s, i) => `<li class="step">
+    <span class="num">${i + 1}</span>
+    <textarea class="step-title" rows="1" id="draft-t-${i}" data-draft="title" data-i="${i}" aria-label="Step ${i + 1} name">${esc(s.title)}</textarea>
+    <label class="min-field"><input type="number" id="draft-m-${i}" min="1" max="600" inputmode="numeric" data-draft="est" data-i="${i}" value="${s.est ?? ''}" aria-label="Minutes for step ${i + 1}"><span>min</span></label>
+    <button class="icon-btn" data-act="draft-remove" data-i="${i}" title="Remove step" aria-label="Remove step ${i + 1}">${ICON.trash}</button>
+  </li>`).join('')}</ol>`;
+}
+function draftTotal() {
+  const steps = state.draft.steps, n = steps.length;
+  if (!n) return '';
+  const min = steps.reduce((a, s) => a + (s.est || 0), 0), miss = steps.filter(s => !s.est).length;
+  let txt = `${n} ${n === 1 ? 'step' : 'steps'}`;
+  if (min) txt += ` · about ${fmtMin(min)} in total`;
+  if (miss) txt += ` · ${miss === 1 ? '1 step has' : miss + ' steps have'} no minutes yet. That’s okay, you can add them later.`;
+  return txt;
+}
+function renderDraftSteps() {
+  $('#draft-steps').innerHTML = draftStepsHTML();
+  $('#draft-total').textContent = draftTotal();
+  autosizeAll($('#draft-steps'));
+}
+
+function addHTML(enter) {
+  return `${sheetOpen(enter, 'New task')}${sheetHead('New task')}
+    <label class="label" for="new-title">What do you need to do?</label>
+    <input id="new-title" class="text-input big" placeholder="Task name" autocomplete="off" value="${esc(state.draft.title)}">
+    <p class="err" id="new-err" hidden>Type a name for the task first.</p>
+    <label class="label" for="new-due">Due date <span class="muted">(optional)</span></label>
+    <input id="new-due" type="date" class="text-input date" value="${state.draft.due || ''}">
+    <h3 class="label">Steps</h3>
+    <p class="help">Split the task into small pieces. For each one, guess how many minutes it will take.</p>
+    <div id="draft-steps">${draftStepsHTML()}</div>
+    <form class="step-add" id="draft-add">
+      <input id="draft-step" class="text-input" placeholder="Step name" autocomplete="off" aria-label="Step name">
+      <label class="min-field"><input id="draft-min" type="number" min="1" max="600" inputmode="numeric" aria-label="Minutes for this step"><span>min</span></label>
+      <button type="submit" class="btn small">${ICON.plus}Add</button>
+    </form>
+    <p class="total" id="draft-total">${draftTotal()}</p>
+    <div class="sheet-foot">
+      <button class="btn ghost" data-act="close-layer">Cancel</button>
+      <button class="btn primary" data-act="save-new">Save task</button>
+    </div>
+  </section>`;
+}
+
+/* ----- task details ----- */
+function detailSummary(t) {
+  const total = t.steps.length, left = stepsLeft(t).length, min = minLeft(t);
+  if (!total) return 'No steps yet';
+  if (!left) return `All ${total} steps done`;
+  return `${total - left} of ${total} steps done${min ? ` · about ${fmtMin(min)} left` : ''}`;
+}
+const missingMinutes = t => t.steps.some(s => !s.done && !s.est);
+
+function detailHTML(t, enter) {
+  const live = state.meta.session?.active;
+  const rows = t.steps.map(s => {
+    const isLive = live && live.stepId === s.id;
+    let sub = '';
+    if (s.done && s.actual) sub = `<span class="took">Took ${fmtDur(s.actual)}${s.est ? ` (planned ${fmtMin(s.est)})` : ''}</span>`;
+    else if (isLive) sub = '<span class="took live">Timing now</span>';
+    else if (s.spent) sub = `<span class="took">${fmtDur(s.spent)} done so far</span>`;
+    const label = s.done ? 'Mark as not done' : 'Mark as done';
+    return `<li class="step${s.done ? ' done' : ''}${isLive ? ' live' : ''}">
+      <button class="check sm${s.done ? ' on' : ''}" data-act="toggle-step" data-id="${t.id}" data-step="${s.id}" aria-pressed="${s.done}" title="${label}" aria-label="${label}: ${esc(s.title)}"><span>${ICON.check}</span></button>
+      <div class="step-main">
+        <textarea class="step-title" rows="1" id="st-${s.id}" data-field="title" data-step="${s.id}" aria-label="Step name">${esc(s.title)}</textarea>
+        ${sub}
+      </div>
+      <label class="min-field"><input type="number" id="sm-${s.id}" min="1" max="600" inputmode="numeric" data-field="est" data-step="${s.id}" value="${s.est ?? ''}" aria-label="Minutes for ${esc(s.title)}"><span>min</span></label>
+      <button class="icon-btn" data-act="delete-step" data-id="${t.id}" data-step="${s.id}" title="Delete step" aria-label="Delete step: ${esc(s.title)}">${ICON.trash}</button>
+    </li>`;
+  }).join('');
+  let primary = '';
+  if (state.focusOpen) primary = '<button class="btn primary" data-act="close-layer">Done</button>';
+  else if (stepsLeft(t).length) primary = `<button class="btn primary" data-act="focus-task" data-id="${t.id}">${ICON.play}Start working</button>`;
+  return `${sheetOpen(enter, 'Task')}
+    <div class="sheet-head">
+      <label class="title-wrap" title="Rename task"><input id="detail-title" class="title-edit" value="${esc(t.title)}" aria-label="Task name"><span class="pencil">${ICON.edit}</span></label>
+      <button class="icon-btn" data-act="close-layer" aria-label="Close">${ICON.x}</button>
+    </div>
+    <p class="sub" id="detail-sum">${detailSummary(t)}</p>
+    <label class="label" for="detail-due">Due date</label>
+    <div class="due-row"><input type="date" id="detail-due" class="text-input date" value="${t.due || ''}">${t.due ? `${dueHTML(t)}<button class="btn ghost small" data-act="clear-due" data-id="${t.id}">Remove due date</button>` : '<span class="muted">Optional</span>'}</div>
+    <h3 class="label">Steps</h3>
+    <p class="help">${t.steps.length ? 'Tap a step’s name or minutes to change them. Check a step off when it’s finished.' : 'No steps yet. Add the first one below.'}</p>
+    ${t.steps.length ? `<ol class="steps">${rows}</ol>` : ''}
+    <form class="step-add" id="detail-add">
+      <input id="detail-step" class="text-input" placeholder="New step name" autocomplete="off" aria-label="New step name">
+      <label class="min-field"><input id="detail-min" type="number" min="1" max="600" inputmode="numeric" aria-label="Minutes for the new step"><span>min</span></label>
+      <button type="submit" class="btn small">${ICON.plus}Add</button>
+    </form>
+    <p class="tip" id="detail-tip"${missingMinutes(t) ? '' : ' hidden'}>Tip: give every step a number of minutes. Paced uses them to tell when you’re slowing down.</p>
+    <div class="sheet-foot">
+      <button class="btn danger" data-act="delete-task" data-id="${t.id}">${ICON.trash}Delete task</button>
+      ${primary}
+    </div>
+  </section>`;
+}
+
+/* ---------- working screen ---------- */
+function renderFocus() {
+  const el = $('#focus');
+  if (!state.focusOpen || !state.ready) {
+    el.hidden = true; el.innerHTML = '';
+    document.body.classList.toggle('locked', !!state.layer);
+    return;
+  }
+  const ae = document.activeElement;
+  if (!el.hidden && ae && el.contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+  el.hidden = false;
+  document.body.classList.add('locked');
+  el.innerHTML = `<div class="focus-in">${focusBody()}</div>`;
+  autosizeAll(el);
+}
+
+const focusTaskId = () => { const s = state.meta.session; return s ? (s.active ? s.active.taskId : s.taskId) : null; };
+
+function fbar(title, withStop) {
+  return `<div class="fbar">
+    <button class="btn ghost small" data-act="focus-min">${ICON.back}Back</button>
+    <span class="fbar-title">${esc(title || '')}</span>
+    ${withStop ? '<button class="btn ghost small" data-act="end-session">Stop working</button>' : '<span></span>'}
+  </div>`;
+}
+
+function focusBody() {
+  const m = state.meta, s = m.session;
+  if (m.brk) return fbar('', false) + breakHTML();
+  if (state.ask?.type === 'history') return fbar(state.tasks.get(state.ask.taskId)?.title, false) + historyHTML();
+  if (!s) return fbar('', false) + pickHTML(null, true);
+  const title = state.tasks.get(focusTaskId())?.title;
+  if (state.ask?.type === 'estimate') return fbar(title, true) + estimateHTML();
+  const pick = state.ask?.type === 'method' ? methodPickHTML(s) : '';
+  if (s.active) return fbar(title, true) + pick + runningHTML();
+  return fbar(title, true) + pick + betweenHTML();
+}
+
+function methodPickHTML(s) {
+  const cur = methodOf(s).id;
+  return `<section class="ask-card">
+    <div class="eyebrow">How do you want to work?</div>
+    <h2>Pick a method</h2>
+    <p>Try each one for a few sessions. Paced compares how fast you work with each, so you can see what suits you.</p>
+    <div class="methods">${METHODS.map(x => `<button class="method-opt${x.id === cur ? ' on' : ''}" data-act="method-pick" data-v="${x.id}" aria-pressed="${x.id === cur}"><b>${esc(x.name)}</b><span>${esc(x.short)}</span></button>`).join('')}</div>
+    <div class="row"><button class="btn ghost" data-act="method-cancel">Keep ${esc(methodOf(s).name)}</button></div>
+  </section>`;
+}
+
+function historyHTML() {
+  return `<section class="ask-card">
+    <div class="eyebrow">Before you start</div>
+    <h2>Have you already been working for a while?</h2>
+    <p>This helps Paced know how fresh you are.</p>
+    <div class="chips">
+      <button class="chip" data-act="history" data-min="0">No, I’m just starting</button>
+      <button class="chip" data-act="history" data-min="30">Yes, about 30 minutes</button>
+      <button class="chip" data-act="history" data-min="60">Yes, an hour or more</button>
+    </div>
+  </section>`;
+}
+
+function estimateHTML() {
+  const t = state.tasks.get(state.ask.taskId), st = findStep(state.ask.taskId, state.ask.stepId);
+  if (!t || !st) { state.ask = null; return betweenHTML(); }
+  return `<section class="ask-card">
+    <div class="eyebrow">Step ${t.steps.indexOf(st) + 1} of ${t.steps.length}</div>
+    <h2>How many minutes do you think “${esc(st.title)}” will take?</h2>
+    <p>A guess is fine. Paced compares it with the real time to see if you’re slowing down.${extraPct() ? ` Heads up: your steps usually take about ${extraPct()}% longer than you guess.` : ''}</p>
+    <div class="chips">${[5, 10, 15, 20, 30, 45, 60].map(n => `<button class="chip" data-act="est-pick" data-min="${n}">${fmtMin(n)}</button>`).join('')}</div>
+    <form class="est-custom" id="est-form">
+      <span class="muted">Or type a number:</span>
+      <label class="min-field"><input id="est-input" type="number" min="1" max="600" inputmode="numeric" aria-label="Minutes"><span>min</span></label>
+      <button class="btn small" type="submit">${ICON.play}Start</button>
+    </form>
+  </section>`;
+}
+
+function planLine(sec, est) {
+  if (!est) return 'No time planned for this step';
+  const m = sec / 60;
+  return m <= est ? `Planned: ${fmtMin(est)}` : `${fmtMin(Math.ceil(m - est))} over the ${fmtMin(est)} you planned`;
+}
+
+// What to suggest once a break is due. With Paced breaks: a normal break, or, when a deadline is close,
+// switching tasks (or a short break if there's nothing to switch to). With a timed method: its break or switch.
+function breakPlan(as, s) {
+  if (s.snooze === s.log.length) return null;
+  const method = methodOf(s);
+  if (method.work) {
+    if (!s.forceBreak && sinceMark(as, s) < method.work) return null;
+    if (method.id === 'rotate') {
+      const other = switchTarget(focusTaskId());
+      return other && !s.forceBreak && as.workMin < 90 ? { type: 'switch', other, rotate: true } : { type: 'break', min: 5 };
+    }
+    return { type: 'break', min: method.id === 'pomodoro' ? pomodoroBreakMin() : method.brk, timed: !s.forceBreak };
+  }
+  if (as.kind !== 'now') return null;
+  const tight = tightTask();
+  if (!tight) return { type: 'break' };
+  const other = switchTarget(focusTaskId());
+  return other ? { type: 'switch', tight, other } : { type: 'short', tight };
+}
+
+function statusHTML(as, s) {
+  const method = methodOf(s), bp = breakPlan(as, s);
+  let kind = as.kind, title = as.title, why = as.why, buttons = '';
+  if (method.work && !bp) {
+    const left = Math.max(1, Math.ceil(method.work - sinceMark(as, s)));
+    kind = as.kind === 'learning' ? 'learning' : 'go'; title = 'Keep going';
+    why = `${method.name}: ${method.id === 'rotate' ? 'switch tasks' : 'break'} in ${fmtMin(left)}.${as.from === 'pace' ? ` You’re at ${as.eff}% of your starting speed.` : ''}`;
+  } else if (as.kind === 'now' && !bp) { kind = 'soon'; title = 'Take a break soon'; }
+  if (bp && bp.type === 'switch') {
+    kind = 'switch'; title = 'Switch tasks for a bit';
+    if (bp.rotate) why = `You’ve done ${fmtMin(method.work)} on this. Task rotation says switch to “${bp.other.title}” now, then come back.`;
+    else why += bp.other.id === bp.tight.id
+      ? ` ${bp.tight.title} ${dueWords(bp.tight)}, so instead of a full break, switch over to it for a change of pace.`
+      : ` ${bp.tight.title} ${dueWords(bp.tight)}, so instead of a full break, switch to “${bp.other.title}” for a change of pace, then come back.`;
+    buttons = `<button class="btn primary" data-act="switch-task" data-id="${bp.other.id}">${ICON.swap}Switch to ${esc(bp.other.title)}</button>
+      <button class="btn ghost" data-act="take-break" data-min="5" data-force="1">5-minute break instead</button>`;
+  } else if (bp && bp.type === 'short') {
+    why += ` ${bp.tight.title} ${dueWords(bp.tight)}, so keep the break short.`;
+    buttons = `<button class="btn primary" data-act="take-break" data-min="5" data-force="1">${ICON.cup}Start a 5-minute break</button>`;
+  } else if (bp) {
+    const min = bp.min || as.breakMin;
+    kind = 'now';
+    if (bp.timed) { title = 'Break time'; why = `You’ve done ${fmtMin(method.work)} of focused work. ${method.name} says take a ${min}-minute break now.`; }
+    else if (method.work) { title = 'Time for a break'; why = 'You said you’re getting tired.'; }
+    else why += ' A short rest will help you get back up to speed.';
+    buttons = `<button class="btn primary" data-act="take-break" data-min="${min}" data-force="1">${ICON.cup}Start a ${min}-minute break</button>`;
+  }
+  if (bp) buttons += '<button class="btn ghost" data-act="keep-going">Not now</button>';
+  return `<section class="panel status ${kind}">
+    <div class="eyebrow">How you’re doing</div>
+    <div class="status-head">
+      <h3><span class="dot" aria-hidden="true"></span>${title}</h3>
+      ${as.from === 'pace' ? `<span class="pct">${as.eff}%<small>efficiency</small></span>` : ''}
+    </div>
+    <p class="why">${esc(why)}</p>
+    ${buttons ? `<div class="row">${buttons}</div>` : ''}
+    <p class="worked">Worked since your last break: <b>${fmtMin(as.workMin)}</b></p>
+    <p class="worked">Method: <b>${esc(method.name)}</b> · <button class="link small" data-act="method-open">Change</button></p>
+    <details class="how"${state.howOpen ? ' open' : ''}>
+      <summary>How does Paced decide?</summary>
+      <p>Paced compares how long each step really takes with the minutes you planned. Your first two steps after a break set your starting speed. With Paced breaks, if you slow down below 90% of that speed, or work for 90 minutes straight, Paced suggests a break of about a fifth of the time you’ve worked (5 to 20 minutes). When something is due today or tomorrow, it suggests switching tasks instead, since a change of task can refresh you without losing time. The other methods use fixed times instead.</p>
+    </details>
+  </section>`;
+}
+
+// The "Take a break" button, or the push-back when you ask for a break you don't need yet.
+function breakArea(as, s) {
+  if (state.ask?.type === 'breakcheck') {
+    const tight = tightTask();
+    const facts = [`You’ve worked ${fmtMin(as.workMin)}`];
+    if (as.from === 'pace') facts.push(`you’re at ${as.eff}% of your starting speed`);
+    return `<section class="ask-card warn">
+      <div class="eyebrow">Are you sure?</div>
+      <h2>You don’t need a break yet</h2>
+      <p>${esc(facts.join(' and '))}. Stopping now usually costs more focus than it gives back${tight ? `, and ${esc(tight.title)} ${dueWords(tight)}` : ''}. ${methodOf(s).work ? `Your ${esc(methodOf(s).name)} break comes in ${fmtMin(Math.max(1, Math.ceil(methodOf(s).work - sinceMark(as, s))))}.` : s.active ? 'Try finishing this step first.' : 'Try one more step first.'}</p>
+      <div class="row"><button class="btn primary big" data-act="break-no">Keep going</button></div>
+      <button class="link small" data-act="break-yes" data-min="${state.ask.min}">Take the break anyway</button>
+    </section>`;
+  }
+  if (breakPlan(as, s)) return '';
+  return `<div class="row"><button class="btn ghost" data-act="take-break" data-min="${as.breakMin}">${ICON.cup}Take a break</button></div>`;
+}
+
+// Every step of the task: switch to any of them, or edit them right here.
+function stepsPanelHTML(t, s) {
+  const a = s.active, editing = state.fEdit, skipped = new Set(s.skipped || []);
+  const rows = t.steps.map((st, i) => {
+    const isNow = !!a && a.stepId === st.id;
+    if (editing) return `<li class="fstep editing${isNow ? ' now' : ''}">
+      <span class="num">${i + 1}</span>
+      <div class="fstep-edit">
+        <textarea class="step-title" rows="1" data-fedit="title" data-step="${st.id}" aria-label="Step ${i + 1} name">${esc(st.title)}</textarea>
+        <div class="fstep-tools">
+          <label class="min-field"><input type="number" min="1" max="600" inputmode="numeric" data-fedit="est" data-step="${st.id}" value="${st.est ?? ''}" aria-label="Minutes for step ${i + 1}"><span>min</span></label>
+          <span class="row-actions">
+            <button class="icon-btn" data-act="fstep-move" data-step="${st.id}" data-v="-1" aria-label="Move step ${i + 1} up"${i === 0 ? ' disabled' : ''}>${ICON.up}</button>
+            <button class="icon-btn" data-act="fstep-move" data-step="${st.id}" data-v="1" aria-label="Move step ${i + 1} down"${i === t.steps.length - 1 ? ' disabled' : ''}>${ICON.down}</button>
+            <button class="icon-btn" data-act="fstep-del" data-step="${st.id}" aria-label="Delete step ${i + 1}">${ICON.trash}</button>
+          </span>
+        </div>
+      </div>
+    </li>`;
+    let sub;
+    if (st.done) sub = st.actual ? `Took ${fmtDur(st.actual)}` : 'Done';
+    else if (isNow) sub = '<span class="now-tag">Working on this now</span>';
+    else sub = esc([st.est ? fmtMin(st.est) : 'No time set', st.spent ? `${fmtDur(st.spent)} done so far` : '', skipped.has(st.id) ? 'Skipped for now' : ''].filter(Boolean).join(' · '));
+    const action = !st.done && !isNow ? `<button class="btn ghost small" data-act="switch-step" data-step="${st.id}">${a ? 'Switch to this' : 'Start'}</button>` : '';
+    return `<li class="fstep${st.done ? ' done' : ''}${isNow ? ' now' : ''}"><span class="num">${st.done ? ICON.check : i + 1}</span>
+      <div class="fstep-main"><b>${esc(st.title)}</b><span class="muted">${sub}</span></div>${action}</li>`;
+  }).join('');
+  return `<section class="panel steps-panel">
+    <div class="panel-head"><h3>Steps</h3><button class="link small" data-act="fedit-toggle">${editing ? 'Done editing' : ICON.edit + 'Edit steps'}</button></div>
+    <ol class="fsteps">${rows}</ol>
+    ${editing ? `<form class="step-add" id="fstep-add">
+      <input id="fstep-name" class="text-input" placeholder="New step name" autocomplete="off" aria-label="New step name">
+      <label class="min-field"><input id="fstep-min" type="number" min="1" max="600" inputmode="numeric" aria-label="Minutes for the new step"><span>min</span></label>
+      <button type="submit" class="btn small">${ICON.plus}Add</button>
+    </form>` : ''}
+  </section>`;
+}
+
+function splitHTML(st, el) {
+  const ask = state.ask;
+  const name = ask.name ?? `${st.title} (rest)`;
+  const min = ask.min ?? (st.est ? Math.max(5, st.est - Math.round(el / 60)) : 15);
+  return `<section class="ask-card">
+    <div class="eyebrow">Split this step</div>
+    <h2>Save what’s left as a new step</h2>
+    <p>What you’ve done so far (${fmtMin(el / 60)}) counts as finished, and the rest becomes the next step.</p>
+    <form class="split-form" id="split-form">
+      <label class="label" for="split-name">What’s left to do?</label>
+      <input id="split-name" class="text-input" value="${esc(name)}" autocomplete="off">
+      <div class="row">
+        <label class="min-field"><input id="split-min" type="number" min="1" max="600" inputmode="numeric" value="${min}" aria-label="Minutes for what’s left"><span>min</span></label>
+        <button type="submit" class="btn primary">Split it</button>
+        <button type="button" class="btn ghost" data-act="split-cancel">Cancel</button>
+      </div>
+    </form>
+  </section>`;
+}
+
+function runningHTML() {
+  const m = state.meta, s = m.session, a = s.active;
+  const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
+  if (!t || !st) return betweenHTML();
+  const idx = t.steps.indexOf(st) + 1, el = elapsedSec(a), paused = !!a.pausedAt;
+  const as = assess(m);
+  const pct = st.est ? Math.min(100, el / (st.est * 60) * 100) : 0;
+  const over = st.est && el > st.est * 60;
+  const canSkip = !!nextStep(t, s, st.id);
+  const ask = state.ask?.type === 'long' ? `<section class="ask-card warn">
+      <div class="eyebrow">Quick question</div>
+      <h2>This step is taking longer than you planned</h2>
+      <p>You’ve spent ${fmtMin(el / 60)} on it, and planned ${fmtMin(st.est)}. What’s going on?</p>
+      <div class="chips">
+        <button class="chip" data-act="long" data-v="estimate">It’s just bigger than I thought</button>
+        <button class="chip" data-act="long" data-v="tired">I’m getting tired</button>
+      </div>
+    </section>` : '';
+  return `<div class="hero">
+    <div class="eyebrow">Step ${idx} of ${t.steps.length}${paused ? ' · Paused' : ''}</div>
+    <h2 class="step-name">${esc(st.title)}</h2>
+    <div class="timer${paused ? ' paused' : ''}" data-tick="timer" role="timer" aria-label="Time spent on this step">${clockHTML(el)}</div>
+    <div class="est-line" data-tick="estline">${planLine(el, st.est)}</div>
+    ${st.est ? `<span class="bar" aria-hidden="true"><i data-tick="prog" class="${over ? 'over' : ''}" style="width:${pct.toFixed(1)}%"></i></span>` : ''}
+    <div class="actions">
+      <button class="btn primary big" data-act="step-done">${ICON.check}Done with this step</button>
+      <button class="btn ghost big" data-act="step-pause">${paused ? ICON.play + 'Resume' : ICON.pause + 'Pause'}</button>
+    </div>
+    ${state.ask?.type === 'split' ? '' : `<div class="hero-more">
+      ${canSkip ? `<button class="link" data-act="skip-step">${ICON.skip}Skip for now</button>` : ''}
+      <button class="link" data-act="split-open">${ICON.split}Split this step</button>
+    </div>`}
+  </div>
+  ${state.ask?.type === 'split' ? splitHTML(st, el) : ''}
+  ${ask}
+  ${statusHTML(as, s)}
+  ${stepsPanelHTML(t, s)}
+  ${breakArea(as, s)}`;
+}
+
+function betweenHTML() {
+  const m = state.meta, s = m.session, t = state.tasks.get(s.taskId);
+  const last = s.log[s.log.length - 1];
+  const as = assess(m);
+  const bp = breakPlan(as, s);
+  let html = '';
+  if (last) html += `<div class="result"><span class="check on" aria-hidden="true"><span>${ICON.check}</span></span><div><b>You finished “${esc(last.title)}”</b><span class="muted">Took ${fmtDur(last.actual)}${last.est ? ` (planned ${fmtMin(last.est)})` : ''}</span></div></div>`;
+  if (state.ask?.type === 'feel') html += `<section class="ask-card">
+      <div class="eyebrow">Quick question</div>
+      <h2>How did that step go?</h2>
+      <p>Your answer helps Paced until it has timed a couple of steps.</p>
+      <div class="chips">
+        <button class="chip" data-act="feel" data-v="focused">Easy</button>
+        <button class="chip" data-act="feel" data-v="okay">Okay</button>
+        <button class="chip" data-act="feel" data-v="struggling">Hard</button>
+      </div>
+    </section>`;
+  if (bp) html += statusHTML(as, s);
+  const next = t && !t.archived ? nextStep(t, s) : null;
+  if (next) {
+    html += `<section class="panel">
+      <div class="eyebrow">Next step · ${t.steps.indexOf(next) + 1} of ${t.steps.length}</div>
+      <h2 class="step-name">${esc(next.title)}</h2>
+      <p class="muted" style="margin:0">${next.est ? `Planned: ${fmtMin(next.est)}` : 'No time planned yet. You’ll pick one when you start.'}</p>
+      ${next.spent ? `<p class="muted" style="margin:0">You already spent ${fmtDur(next.spent)} on this earlier.</p>` : ''}
+      <div class="row" style="margin-top:6px"><button class="btn ${bp ? 'ghost' : 'primary'} big" data-act="start-step" data-id="${t.id}" data-step="${next.id}">${ICON.play}${last ? 'Start next step' : 'Start'}</button></div>
+    </section>`;
+  } else html += pickHTML(t, false);
+  if (!bp) html += statusHTML(as, s);
+  if (t && !t.archived) html += stepsPanelHTML(t, s);
+  html += breakArea(as, s);
+  return html;
+}
+
+function pickHTML(t, noSession) {
+  const others = activeTasks().filter(x => x.steps.some(s => !s.done));
+  const head = t && t.archived
+    ? `<div class="eyebrow">Task complete</div><h2 class="step-name">You finished “${esc(t.title)}”!</h2><p class="muted" style="margin:0">It’s been moved to the Trash.</p>`
+    : '';
+  const body = others.length
+    ? `<h3 class="pick-q">What do you want to work on next?</h3><ul class="picklist">${others.map(x => {
+        const n = x.steps.find(s => !s.done);
+        return `<li><button class="pick" data-act="pick-task" data-id="${x.id}"><span><b>${esc(x.title)}</b><span class="muted">Next step: ${esc(n.title)}${n.est ? ` · ${fmtMin(n.est)}` : ''}${x.due ? ` · ${esc(dueInfo(x).text)}` : ''}</span></span><span class="pick-go">${ICON.play}Start</span></button></li>`;
+      }).join('')}</ul>`
+    : `<p class="muted" style="margin:0">That was everything on your list. Nice work!</p><div class="row"><button class="btn primary" data-act="${noSession ? 'focus-min' : 'end-session'}">${ICON.back}Back to my tasks</button></div>`;
+  return `<section class="panel">${head}${body}</section>`;
+}
+
+function breakHTML() {
+  const b = state.meta.brk, left = (b.until - Date.now()) / 1000, over = left <= 0;
+  return `<div class="breakscreen">
+    <div class="eyebrow">${over ? 'Break’s over' : 'Break time'}</div>
+    <div class="timer" data-tick="break" role="timer" aria-label="Break time left">${clockHTML(left)}</div>
+    <p class="muted">${over ? 'Ready when you are. Paced will measure your speed fresh from here.' : 'Stand up, stretch, and get some water. Your progress is saved.'}</p>
+    <button class="btn ${over ? 'primary' : 'ghost'} big" data-act="end-break">${over ? ICON.play + 'Back to work' : 'I’m ready, end the break'}</button>
+  </div>`;
+}
+
+/* ---------- toast ---------- */
+let toastTimer = null, toastAction = null;
+function toast(msg, actLabel, fn) {
+  const el = $('#toast');
+  el.innerHTML = `<span>${esc(msg)}</span>${actLabel ? `<button class="toast-act">${esc(actLabel)}</button>` : ''}`;
+  el.hidden = false;
+  toastAction = fn || null;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, fn ? 7000 : 3800);
+}
+function hideToast() { $('#toast').hidden = true; toastAction = null; }
+
+/* ---------- actions: tasks ---------- */
+function openAdd() {
+  state.draft = { title: '', due: null, steps: [] };
+  state.layer = { type: 'add' };
+  renderLayer(true);
+  $('#new-title').focus();
+}
+function openDetail(id, focusAdd) {
+  state.layer = { type: 'detail', id };
+  renderLayer(true);
+  if (focusAdd) $('#detail-step').focus();
+}
+function closeLayer() { state.layer = null; renderLayer(); render(); }
+
+function addDraftStep() {
+  const ti = $('#draft-step'), mi = $('#draft-min');
+  const title = ti.value.trim();
+  if (!title) { ti.focus(); return false; }
+  state.draft.steps.push({ title, est: parseMin(mi.value) });
+  ti.value = ''; mi.value = '';
+  renderDraftSteps();
+  ti.focus();
+  return true;
+}
+
+function saveNew() {
+  if ($('#draft-step').value.trim()) addDraftStep();
+  const title = state.draft.title.trim();
+  if (!title) { $('#new-err').hidden = false; $('#new-title').focus(); return; }
+  const t = {
+    id: newId('t'), title, due: isKey(state.draft.due) ? state.draft.due : null, createdAt: Date.now(), archived: false, completedAt: null,
+    steps: state.draft.steps.filter(s => s.title.trim()).map(s => ({ id: newId('s'), title: s.title.trim(), est: s.est || null, done: false, actual: null, doneAt: null }))
+  };
+  saveTask(t);
+  state.layer = null; renderLayer();
+  render();
+  toast(`Saved “${t.title}”`);
+}
+
+function archiveToast(t, before) {
+  toast(`Nice! “${t.title}” is done and moved to the Trash.`, 'Undo', () => { saveTask(before); render(); if (state.layer) renderLayer(); });
+}
+function maybeArchive(t, before) {
+  if (t.archived || !t.steps.length || !t.steps.every(s => s.done)) return false;
+  t.archived = true; t.completedAt = Date.now();
+  archiveToast(t, before);
+  return true;
+}
+
+function toggleStep(id, sid) {
+  const t = state.tasks.get(id), st = t && t.steps.find(s => s.id === sid);
+  if (!st) return;
+  const before = clone(t);
+  st.done = !st.done;
+  st.doneAt = st.done ? Date.now() : null;
+  if (!st.done) st.actual = null;
+  clearActiveIf(a => a.stepId === sid);
+  if (maybeArchive(t, before)) state.layer = null;
+  saveTask(t);
+  renderLayer(); render();
+}
+
+function deleteStep(id, sid) {
+  const t = state.tasks.get(id); if (!t) return;
+  const before = clone(t);
+  t.steps = t.steps.filter(s => s.id !== sid);
+  clearActiveIf(a => a.stepId === sid);
+  saveTask(t);
+  renderLayer(); render();
+  toast('Step deleted', 'Undo', () => { saveTask(before); renderLayer(); render(); });
+}
+
+function deleteTask(id) {
+  const t = state.tasks.get(id); if (!t) return;
+  const before = clone(t);
+  clearActiveIf(a => a.taskId === id);
+  removeTask(id);
+  state.layer = null; renderLayer(); render();
+  toast('Task deleted', 'Undo', () => { saveTask(before); render(); });
+}
+
+function completeTask(id) {
+  const t = state.tasks.get(id); if (!t) return;
+  const before = clone(t);
+  t.steps.forEach(s => { if (!s.done) { s.done = true; s.doneAt = Date.now(); } });
+  clearActiveIf(a => a.taskId === id);
+  t.archived = true; t.completedAt = Date.now();
+  archiveToast(t, before);
+  saveTask(t); render();
+}
+
+/* ---------- actions: working ---------- */
+function beginSession(taskId, priorMin) {
+  state.meta.session = { id: newId('ss'), startedAt: Date.now(), lastAt: Date.now(), priorMin, taskId, log: [], active: null, forceBreak: false, snooze: -1, skipped: [], partialSec: 0, method: methodById(state.meta.method).id, markAt: 0 };
+  saveMeta();
+}
+
+function startFocus(taskId) {
+  const t = state.tasks.get(taskId); if (!t) return;
+  expireIdleSession(true);
+  const m = state.meta, s = m.session;
+  if (s && s.active) {
+    state.layer = null; renderLayer();
+    state.focusOpen = true; render();
+    if (s.active.taskId !== taskId) toast('Finish or skip the step you’re on first.');
+    return;
+  }
+  const next = nextStep(t, s);
+  if (!next) { openDetail(taskId, true); toast(t.steps.length ? 'All steps are done. Add another step, or mark the task as done.' : 'Add a step first.'); return; }
+  state.layer = null; renderLayer();
+  state.focusOpen = true;
+  if (m.brk) { render(); return; }
+  if (!s) {
+    // Ask "been working a while?" only at your first session of the day. After that Paced can tell:
+    // you either only just stopped (carry on where you left off) or you've had a rest (start fresh).
+    const now = Date.now(), today = dateKey();
+    const sameDay = ts => !!ts && dateKey(new Date(ts)) === today;
+    const stop = m.lastStop && sameDay(m.lastStop.at) ? m.lastStop : null;
+    const brokeAt = sameDay(m.lastBreakEnd) ? m.lastBreakEnd : 0;
+    if (stop && now - stop.at < 15 * 60e3 && brokeAt < stop.at) { beginSession(taskId, stop.workMin || 0); startStep(taskId, next.id); }
+    else if (stop || brokeAt) { beginSession(taskId, 0); startStep(taskId, next.id); }
+    else { state.ask = { type: 'history', taskId, stepId: next.id }; render(); }
+    return;
+  }
+  startStep(taskId, next.id);
+}
+
+function startStep(taskId, stepId) {
+  const s = state.meta.session, st = findStep(taskId, stepId);
+  if (!s || !st) return;
+  s.taskId = taskId;
+  s.skipped = (s.skipped || []).filter(x => x !== stepId);
+  if (!st.est) { state.ask = { type: 'estimate', taskId, stepId }; saveMeta(); render(); return; }
+  state.ask = null;
+  s.active = { taskId, stepId, startedAt: Date.now(), pausedMs: 0, pausedAt: null, carry: st.spent || 0, longAsked: false, estLow: false };
+  s.lastAt = Date.now();
+  saveMeta(); render();
+}
+
+function togglePause() {
+  const a = state.meta.session?.active; if (!a) return;
+  if (a.pausedAt) { a.pausedMs += Date.now() - a.pausedAt; a.pausedAt = null; }
+  else a.pausedAt = Date.now();
+  saveMeta(); render();
+}
+
+function finishStep() {
+  const m = state.meta, s = m.session, a = s && s.active;
+  if (!a) return;
+  const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
+  if (!st) { s.active = null; saveMeta(); render(); return; }
+  const before = clone(t);
+  const sec = Math.max(1, Math.round(elapsedSec(a)));
+  const worked = Math.max(0, sec - (a.carry || 0));
+  st.done = true; st.actual = sec; st.doneAt = Date.now(); delete st.spent;
+  const counts = !!st.est && !a.estLow && !a.carry;
+  const pace = st.est ? clamp(st.est * 60 / Math.max(sec, 20), 0.25, 3) : null;
+  s.log.push({ taskId: t.id, stepId: st.id, title: st.title, est: st.est, actual: sec, worked, pace, excluded: !counts, feel: null });
+  s.active = null; s.taskId = t.id; s.lastAt = Date.now();
+  const countedN = s.log.filter(l => l.pace != null && !l.excluded).length;
+  if (counts && (s.priorMin || 0) < 30 && countedN <= 2) m.fresh = [...(m.fresh || []), pace].slice(-12);
+  state.ask = assess(m).paceReady ? null : { type: 'feel' };
+  maybeArchive(t, before);
+  saveTask(t); saveMeta(); render();
+}
+
+// Put the running step aside, keeping the time spent on it, so you can come back to it later.
+function setAside(s) {
+  const a = s.active; if (!a) return;
+  const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
+  const el = elapsedSec(a);
+  if (st) { st.spent = Math.round(el); saveTask(t); }
+  s.partialSec = (s.partialSec || 0) + Math.max(0, el - (a.carry || 0));
+  s.active = null; s.lastAt = Date.now();
+}
+
+function switchStep(stepId) {
+  const s = state.meta.session, tid = focusTaskId();
+  if (!s || !tid) return;
+  if (s.active && s.active.stepId === stepId) return;
+  if (s.active) setAside(s);
+  startStep(tid, stepId);
+}
+
+function skipStep() {
+  const s = state.meta.session, a = s && s.active; if (!a) return;
+  const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
+  const next = nextStep(t, { skipped: [...(s.skipped || []), a.stepId] }, a.stepId);
+  if (!next) { toast('That’s the last step left in this task.'); return; }
+  setAside(s);
+  s.skipped = [...new Set([...(s.skipped || []), st.id])];
+  startStep(t.id, next.id);
+  toast(`Skipped “${st.title}” for now. It’s still in your steps.`);
+}
+
+// Count what's done so far as finished, and save the rest of the step as a new step right after it.
+function splitStep(name, min) {
+  const s = state.meta.session, a = s && s.active; if (!a) return;
+  const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
+  if (!st) return;
+  const rest = { id: newId('s'), title: name || `${st.title} (rest)`, est: min || null, done: false, actual: null, doneAt: null };
+  t.steps.splice(t.steps.indexOf(st) + 1, 0, rest);
+  a.estLow = true; // the plan changed mid-step, so this one doesn't count toward your speed
+  state.ask = null;
+  if (document.activeElement) document.activeElement.blur();
+  finishStep();
+  toast(`Split it. “${rest.title}” is up next.`);
+}
+
+// Instead of a full break when a deadline is close: set this step aside and work on another task.
+function switchTask(taskId) {
+  const s = state.meta.session, t = state.tasks.get(taskId); if (!s || !t) return;
+  const n = nextStep(t, s); if (!n) return;
+  if (s.active) setAside(s);
+  s.snooze = s.log.length; s.forceBreak = false; s.markAt = assess(state.meta).workMin;
+  startStep(taskId, n.id);
+  toast(`Switched to “${t.title}”. Switch back after a step or two.`);
+}
+
+function stashActive(s) {
+  const a = s.active; if (!a) return;
+  const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
+  if (st) { st.spent = Math.round(elapsedSec(a)); saveTask(t); }
+  s.active = null;
+}
+
+// Breaks you don't need yet get pushed back on, so they can't be spammed.
+function requestBreak(min, force) {
+  const m = state.meta, s = m.session;
+  if (!s || force) return takeBreak(min);
+  const as = assess(m), bp = breakPlan(as, s);
+  if (bp || (!methodOf(s).work && as.kind === 'soon')) return takeBreak(bp && bp.min ? bp.min : min);
+  state.ask = { type: 'breakcheck', min };
+  renderFocus();
+}
+
+function takeBreak(min) {
+  const m = state.meta, s = m.session;
+  if (s && s.method === 'pomodoro') { const p = m.pomo && m.pomo.date === dateKey() ? m.pomo : { date: dateKey(), n: 0 }; m.pomo = { date: p.date, n: p.n + 1 }; }
+  if (s) recordSession(s);
+  if (s) stashActive(s);
+  m.brk = { startedAt: Date.now(), until: Date.now() + min * 60e3, min, taskId: s ? s.taskId : null };
+  m.session = null; state.ask = null; state.focusOpen = true;
+  saveMeta(); render();
+}
+
+function endBreak() {
+  const m = state.meta, b = m.brk; if (!b) return;
+  m.brk = null; m.lastBreakEnd = Date.now();
+  const t = b.taskId && state.tasks.get(b.taskId);
+  beginSession(t && !t.archived ? t.id : null, 0);
+  state.focusOpen = true; render();
+}
+
+function endSession() {
+  const m = state.meta, s = m.session;
+  const worked = s ? assess(m).workMin - (s.priorMin || 0) : 0;
+  if (s) m.lastStop = { at: Date.now(), workMin: Math.round(assess(m).workMin) };
+  if (s) recordSession(s);
+  if (s) stashActive(s);
+  m.session = null; state.ask = null; state.focusOpen = false; state.fEdit = false;
+  saveMeta(); render();
+  if (worked >= 1) toast(`Nice work! You worked for ${fmtMin(worked)}.`);
+}
+
+function minimizeFocus() {
+  const m = state.meta, a = m.session && m.session.active;
+  if (!m.session) state.ask = null;
+  state.focusOpen = false;
+  render();
+  if (a && !a.pausedAt) toast('Your timer is still running. Tap Show at the bottom to get back to it.');
+  else if (m.brk) toast('Your break is still going. Tap Show at the bottom to see the timer.');
+}
+
+function setEstimateAndStart(n) {
+  if (!state.ask || state.ask.type !== 'estimate' || !n) return;
+  const { taskId, stepId } = state.ask;
+  const t = state.tasks.get(taskId), st = findStep(taskId, stepId);
+  if (!st) return;
+  st.est = clamp(n, 1, 600); saveTask(t);
+  state.ask = null;
+  if (document.activeElement) document.activeElement.blur();
+  startStep(taskId, stepId);
+}
+
+/* ----- editing steps on the working screen ----- */
+function moveStep(sid, dir) {
+  const t = state.tasks.get(focusTaskId()); if (!t) return;
+  const i = t.steps.findIndex(s => s.id === sid), j = i + dir;
+  if (i < 0 || j < 0 || j >= t.steps.length) return;
+  [t.steps[i], t.steps[j]] = [t.steps[j], t.steps[i]];
+  saveTask(t); renderFocus();
+}
+
+function deleteFocusStep(sid) {
+  const t = state.tasks.get(focusTaskId()); if (!t) return;
+  const before = clone(t), st = t.steps.find(s => s.id === sid);
+  t.steps = t.steps.filter(s => s.id !== sid);
+  clearActiveIf(a => a.stepId === sid);
+  saveTask(t); render();
+  toast(`Deleted “${st ? st.title : 'step'}”`, 'Undo', () => { saveTask(before); render(); });
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click', e => {
+  if (e.target.closest('.toast-act')) { const f = toastAction; hideToast(); if (f) f(); return; }
+  const b = e.target.closest('[data-act]');
+  if (!b || b.disabled) return;
+  // Finish any edit in progress first (this saves it), so the screen can redraw after the action.
+  const ae = document.activeElement;
+  if (ae && ae !== b && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) ae.blur();
+  const { act, id, step, v } = b.dataset;
+  const min = parseInt(b.dataset.min, 10);
+  const s = state.meta.session;
+  switch (act) {
+    case 'open-add': openAdd(); break;
+    case 'close-layer': closeLayer(); break;
+    case 'save-new': saveNew(); break;
+    case 'draft-remove': state.draft.steps.splice(+b.dataset.i, 1); renderDraftSteps(); break;
+    case 'show-archive': state.view = 'archive'; render(); window.scrollTo(0, 0); break;
+    case 'show-home': state.view = 'home'; render(); window.scrollTo(0, 0); break;
+    case 'open-task': openDetail(id); break;
+    case 'add-steps': openDetail(id, true); break;
+    case 'complete-task': completeTask(id); break;
+    case 'focus-task': startFocus(id); break;
+    case 'toggle-step': toggleStep(id, step); break;
+    case 'delete-step': deleteStep(id, step); break;
+    case 'delete-task': deleteTask(id); break;
+    case 'clear-due': { const t = state.tasks.get(id); if (t) { t.due = null; saveTask(t); renderLayer(); render(); } break; }
+    case 'restore': {
+      const t = state.tasks.get(id); if (!t) break;
+      t.archived = false; t.completedAt = null; saveTask(t); render();
+      toast(`“${t.title}” is back on your list`); break;
+    }
+    case 'purge': {
+      const t = state.tasks.get(id); if (!t) break;
+      const before = clone(t); removeTask(id); render();
+      toast('Deleted for good', 'Undo', () => { saveTask(before); render(); }); break;
+    }
+    case 'focus-min': minimizeFocus(); break;
+    case 'focus-open': state.focusOpen = true; render(); break;
+    case 'end-session': endSession(); break;
+    case 'history': {
+      const ask = state.ask || {};
+      state.ask = null; beginSession(ask.taskId, min);
+      const t = state.tasks.get(ask.taskId);
+      const n = t && ((ask.stepId && t.steps.find(x => x.id === ask.stepId && !x.done)) || t.steps.find(x => !x.done));
+      if (n) startStep(ask.taskId, n.id); else render();
+      break;
+    }
+    case 'est-pick': setEstimateAndStart(min); break;
+    case 'step-done': finishStep(); break;
+    case 'step-pause': togglePause(); break;
+    case 'start-step': startStep(id, step); break;
+    case 'switch-step': switchStep(step); break;
+    case 'skip-step': skipStep(); break;
+    case 'split-open': state.ask = { type: 'split' }; renderFocus(); $('#split-name')?.focus(); break;
+    case 'split-cancel': state.ask = null; renderFocus(); break;
+    case 'switch-task': switchTask(id); break;
+    case 'pick-task': {
+      const t = state.tasks.get(id), n = t && nextStep(t, state.meta.session); if (!n) break;
+      if (!state.meta.session) beginSession(id, 0);
+      startStep(id, n.id); break;
+    }
+    case 'feel': { const last = s && s.log[s.log.length - 1]; if (last) last.feel = v; state.ask = null; saveMeta(); render(); break; }
+    case 'long': {
+      if (s && s.active) {
+        if (v === 'estimate') { s.active.estLow = true; toast('Got it. This step won’t count against your speed.'); }
+        else s.forceBreak = true;
+      }
+      state.ask = null; saveMeta(); render(); break;
+    }
+    case 'take-break': requestBreak(min || 5, b.dataset.force === '1'); break;
+    case 'break-no': state.ask = null; renderFocus(); break;
+    case 'break-yes': takeBreak(min || 5); break;
+    case 'keep-going': if (s) { s.snooze = s.log.length; s.forceBreak = false; saveMeta(); } render(); break;
+    case 'end-break': endBreak(); break;
+    case 'fedit-toggle': state.fEdit = !state.fEdit; renderFocus(); break;
+    case 'fstep-move': moveStep(step, parseInt(v, 10)); break;
+    case 'fstep-del': deleteFocusStep(step); break;
+    case 'method-open': state.ask = { type: 'method' }; renderFocus(); $('#focus').scrollTo(0, 0); break;
+    case 'method-cancel': state.ask = null; renderFocus(); break;
+    case 'method-pick': {
+      const x = methodById(v);
+      state.meta.method = x.id;
+      if (s) { s.method = x.id; s.markAt = assess(state.meta).workMin; s.snooze = -1; }
+      state.ask = null; saveMeta(); renderFocus();
+      toast(`Using ${x.name}. ${x.short}.`);
+      break;
+    }
+    case 'open-look': state.layer = { type: 'look' }; renderLayer(true); break;
+    case 'look-theme': case 'look-color': {
+      const look = { ...(state.meta.look || {}) };
+      look[act === 'look-theme' ? 'theme' : 'color'] = v;
+      state.meta.look = look; saveMeta(); applyLook(); renderLayer();
+      break;
+    }
+  }
+});
+
+document.addEventListener('submit', e => {
+  e.preventDefault();
+  const f = e.target;
+  if (f.id === 'draft-add') addDraftStep();
+  else if (f.id === 'est-form') setEstimateAndStart(parseMin($('#est-input').value));
+  else if (f.id === 'split-form') splitStep($('#split-name').value.trim(), parseMin($('#split-min').value));
+  else if (f.id === 'detail-add' || f.id === 'fstep-add') {
+    const inFocus = f.id === 'fstep-add';
+    const t = state.tasks.get(inFocus ? focusTaskId() : state.layer && state.layer.id); if (!t) return;
+    const nameEl = $(inFocus ? '#fstep-name' : '#detail-step'), minEl = $(inFocus ? '#fstep-min' : '#detail-min');
+    const title = nameEl.value.trim();
+    if (!title) { nameEl.focus(); return; }
+    t.steps.push({ id: newId('s'), title, est: parseMin(minEl.value), done: false, actual: null, doneAt: null });
+    saveTask(t);
+    if (inFocus) { nameEl.blur(); renderFocus(); $('#fstep-name').focus(); }
+    else { renderLayer(); render(); $('#detail-step').focus(); }
+  }
+});
+
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (el.matches('textarea.step-title')) {
+    if (el.value.includes('\n')) el.value = el.value.replace(/\s*\n+\s*/g, ' ');
+    autosize(el);
+  }
+  if (el.id === 'new-title') { state.draft.title = el.value; if (el.value.trim()) $('#new-err').hidden = true; }
+  else if (el.id === 'new-due') state.draft.due = el.value || null;
+  else if (el.id === 'split-name' && state.ask) state.ask.name = el.value;
+  else if (el.id === 'split-min' && state.ask) state.ask.min = parseMin(el.value);
+  else if (el.dataset.draft) {
+    const d = state.draft.steps[+el.dataset.i]; if (!d) return;
+    if (el.dataset.draft === 'title') d.title = el.value; else d.est = parseMin(el.value);
+    $('#draft-total').textContent = draftTotal();
+  }
+});
+
+document.addEventListener('change', e => {
+  const el = e.target;
+  if (el.id === 'new-due' && state.draft) { state.draft.due = el.value || null; return; }
+  // Steps edited on the working screen
+  if (el.dataset.fedit) {
+    const t = state.tasks.get(focusTaskId()), st = t && t.steps.find(s => s.id === el.dataset.step);
+    if (!st) return;
+    if (el.dataset.fedit === 'title') { const v = el.value.trim(); if (v) st.title = v; else el.value = st.title; }
+    else {
+      const n = parseMin(el.value), a = state.meta.session && state.meta.session.active;
+      if (n !== st.est && a && a.stepId === st.id) { a.estLow = true; saveMeta(); } // the plan changed mid-step
+      st.est = n; el.value = n ?? '';
+    }
+    saveTask(t);
+    return;
+  }
+  const t = state.layer && state.layer.type === 'detail' && state.tasks.get(state.layer.id);
+  if (!t) return;
+  if (el.id === 'detail-title') {
+    const v = el.value.trim();
+    if (v) { t.title = v; saveTask(t); render(); } else el.value = t.title;
+    return;
+  }
+  if (el.id === 'detail-due') { t.due = isKey(el.value) ? el.value : null; saveTask(t); renderLayer(); render(); return; }
+  const st = el.dataset.field && t.steps.find(s => s.id === el.dataset.step);
+  if (!st) return;
+  if (el.dataset.field === 'title') {
+    const v = el.value.trim();
+    if (v) st.title = v; else el.value = st.title;
+  } else {
+    st.est = parseMin(el.value);
+    el.value = st.est ?? '';
+  }
+  saveTask(t);
+  $('#detail-sum').innerHTML = detailSummary(t);
+  $('#detail-tip').hidden = !missingMinutes(t);
+  render();
+});
+
+document.addEventListener('toggle', e => {
+  if (e.target.classList && e.target.classList.contains('how')) state.howOpen = e.target.open;
+}, true);
+
+document.addEventListener('keydown', e => {
+  const el = e.target;
+  if (e.key === 'Enter') {
+    if (el.id === 'new-title') { e.preventDefault(); $('#draft-step').focus(); return; }
+    if ((el.id === 'draft-step' || el.id === 'detail-step' || el.id === 'fstep-name') && el.value.trim()) {
+      e.preventDefault();
+      $({ 'draft-step': '#draft-min', 'detail-step': '#detail-min', 'fstep-name': '#fstep-min' }[el.id]).focus();
+      return;
+    }
+    if (el.dataset && el.dataset.draft) { e.preventDefault(); $('#draft-step').focus(); return; }
+    if (el.dataset && (el.dataset.field || el.dataset.fedit)) { e.preventDefault(); el.blur(); return; }
+  }
+  if (e.key === 'Escape') {
+    if (state.layer) closeLayer();
+    else if (state.focusOpen) minimizeFocus();
+  }
+});
+
+/* ---------- clock ---------- */
+let lastMinute = -1, breakWasOver = null;
+function tick() {
+  if (!state.ready) return;
+  const m = state.meta, s = m.session;
+  if (s && s.active) {
+    const a = s.active, el = elapsedSec(a), st = findStep(a.taskId, a.stepId);
+    document.querySelectorAll('[data-tick="timer"]').forEach(n => { n.innerHTML = clockHTML(el); });
+    document.querySelectorAll('[data-tick="mini"]').forEach(n => { n.textContent = fmtClock(el); });
+    const line = $('[data-tick="estline"]');
+    if (line && st) line.textContent = planLine(el, st.est);
+    if (st && st.est) {
+      const bar = $('[data-tick="prog"]');
+      if (bar) { bar.style.width = Math.min(100, el / (st.est * 60) * 100).toFixed(1) + '%'; bar.classList.toggle('over', el > st.est * 60); }
+      if (!a.pausedAt && !a.longAsked && !a.estLow && !state.ask && el > Math.max(st.est * 2, st.est + 5) * 60) {
+        a.longAsked = true; state.ask = { type: 'long' }; saveMeta(); renderFocus();
+      }
+    }
+  }
+  if (m.brk) {
+    const left = (m.brk.until - Date.now()) / 1000;
+    document.querySelectorAll('[data-tick="break"]').forEach(n => { n.innerHTML = clockHTML(left); });
+    document.querySelectorAll('[data-tick="mini"]').forEach(n => { n.textContent = fmtClock(left); });
+    const over = left <= 0;
+    if (breakWasOver === false && over) { renderFocus(); renderMini(); }
+    breakWasOver = over;
+  } else breakWasOver = null;
+  // Once a minute: idle sessions close, and the working screen's numbers catch up.
+  const minute = Math.floor(Date.now() / 60000);
+  if (minute !== lastMinute) {
+    lastMinute = minute;
+    if (expireIdleSession()) { render(); return; }
+    if (state.focusOpen && (s || m.brk)) renderFocus();
+  }
+}
+setInterval(tick, 1000);
+
+/* ---------- boot ---------- */
+render();
+Store.init().then(() => {
+  clearStale();
+  state.ready = true;
+  render();
+});
+</script>
