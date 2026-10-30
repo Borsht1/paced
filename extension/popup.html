@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Paced</title>
+<style>
+:root { --bg: #F2F3EF; --surface: #FFFFFF; --ink: #191C1F; --muted: #5D645F; --line: #D9DDD6; --accent: #2E43C2; --accent-ink: #FFFFFF; --stop: #B53A27; --zone: #1D7650; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111315; --surface: #1A1D20; --ink: #E8EBE9; --muted: #9BA29D; --line: #30353A; --accent: #8E9DFF; --accent-ink: #0E1333; --stop: #F18A75; --zone: #5DCB98; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; width: 280px; padding: 16px; background: var(--bg); color: var(--ink); font: 400 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+[hidden] { display: none !important; }
+.eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+#label { font-size: 17px; font-weight: 700; margin: 2px 0 0; overflow-wrap: anywhere; }
+#time { font: 500 44px/1.1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: -.03em; margin-top: 8px; font-variant-numeric: tabular-nums; }
+#time.over { color: var(--stop); }
+#time.break { color: var(--zone); }
+#note { color: var(--muted); margin: 4px 0 0; }
+.row { display: flex; gap: 8px; margin-top: 12px; }
+button { flex: 1; font: inherit; font-weight: 600; border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; background: var(--surface); color: var(--ink); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="eyebrow" id="kind">Paced</div>
+<div id="label">Nothing running</div>
+<div id="time" hidden></div>
+<p id="note" hidden></p>
+<div class="row" id="actions" hidden>
+  <button class="primary" id="done">Done</button>
+  <button id="pause">Pause</button>
+</div>
+<div class="row" id="break-actions" hidden><button class="primary" id="back">Back to work</button></div>
+<div class="row"><button id="open">Open Paced</button></div>
+<script src="shared.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

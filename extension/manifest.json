@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Paced Timer",
+  "version": "1.0.0",
+  "description": "Keeps your Paced timer on the toolbar, and alerts you even after the Paced tab is closed.",
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "action": {
+    "default_title": "Paced",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png" }
+  },
+  "background": { "service_worker": "background.js", "scripts": ["shared.js", "background.js"] },
+  "permissions": ["alarms", "idle", "notifications", "storage"],
+  "host_permissions": ["https://borsht1.github.io/paced/*", "http://localhost/*", "http://127.0.0.1/*"],
+  "content_scripts": [{
+    "matches": ["https://borsht1.github.io/paced/*", "http://localhost/*", "http://127.0.0.1/*"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }],
+  "browser_specific_settings": { "gecko": { "id": "paced-timer@borsht1.github.io", "strict_min_version": "121.0" } }
+}
