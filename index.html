@@ -47,6 +47,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   background: var(--bg); color: var(--ink);
   font: 400 16px/1.45 var(--font-body);
@@ -136,6 +137,8 @@ body.has-mini .fab { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 .mini-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; font-size: 14px; }
 .mini-time { font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; }
 .mini .btn { background: var(--bg); color: var(--ink); }
+.mini.over .mini-in { background: var(--stop); color: var(--surface); }
+.mini.over .mini-dot { color: var(--surface); }
 
 /* Sheets */
 .layer { position: fixed; inset: 0; z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
@@ -181,6 +184,8 @@ body.has-mini .fab { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 .step.live { background: var(--accent-soft); border-radius: 10px; }
 .took { font-size: 13px; color: var(--muted); padding: 0 9px 4px; font-variant-numeric: tabular-nums; }
 .took.live { color: var(--accent); font-weight: 600; }
+.took .min-field { vertical-align: middle; }
+.took .min-field input { width: 3em; padding: 3px 2px 3px 6px; font-size: 13px; }
 .num { font: 500 13px var(--font-mono); color: var(--muted); width: 26px; text-align: center; }
 .min-field { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line); border-radius: 8px; padding: 0 9px 0 0; background: var(--surface); color: var(--muted); font-size: 14px; cursor: text; }
 .min-field input { width: 3.2em; border: none; background: transparent; padding: 8px 2px 8px 6px; text-align: right; font: 500 15px var(--font-mono); color: var(--ink); -moz-appearance: textfield; appearance: textfield; }
@@ -202,6 +207,7 @@ body.has-mini .fab { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 .timer { font: 500 clamp(64px, 19vw, 100px)/1 var(--font-mono); letter-spacing: -.04em; font-variant-numeric: tabular-nums; margin-top: 14px; }
 .timer .colon { display: inline-block; margin: 0 -.16em; transform: translateY(-.05em); }
 .timer.paused { color: var(--muted); }
+.timer.over { color: var(--stop); }
 .est-line { color: var(--muted); font-size: 15px; }
 .hero .bar { width: 100%; max-width: 360px; height: 6px; margin-top: 10px; }
 .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
@@ -231,6 +237,13 @@ body.has-mini .fab { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 .ask-card h2 { font: 700 21px/1.25 var(--font-display); margin: 0; text-wrap: balance; overflow-wrap: anywhere; }
 .ask-card p { margin: 0; color: var(--muted); }
 .ask-card .label { margin: 4px 0 0; }
+.ask-links { display: flex; flex-wrap: wrap; gap: 18px; }
+.gap-clock { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--accent-soft); border-radius: var(--r); padding: 14px 18px; }
+.gap-clock > div { display: grid; justify-items: start; min-width: 0; }
+.gap-text { font-weight: 600; }
+.gap-time { font: 600 26px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.gap-clock.over { background: var(--stop-soft); }
+.gap-clock.over .gap-text, .gap-clock.over .gap-time { color: var(--stop); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 10px 16px; font-weight: 600; font-size: 15px; }
 .chip:hover { border-color: var(--accent); color: var(--accent); }
@@ -282,6 +295,7 @@ body.has-mini .fab { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 .method-rows li b { font-weight: 600; }
 .method-rows .best { color: var(--zone); font-weight: 700; }
 .seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.seg.two { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 10px; }
 .seg-btn { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px; background: var(--surface); font-weight: 600; }
 .seg-btn.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .swatches { display: flex; flex-wrap: wrap; gap: 14px; }
@@ -366,12 +380,15 @@ function fmtMin(m) {
   return h + ' hr' + (r ? ' ' + r + ' min' : '');
 }
 const fmtDur = sec => fmtMin(sec / 60);
+// A negative time is time past the end, shown as +1:05.
 function fmtClock(sec) {
-  sec = Math.max(0, Math.floor(sec));
+  const past = sec <= -1;
+  sec = Math.abs(Math.trunc(sec));
   const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
-  return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0');
+  return (past ? '+' : '') + (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0');
 }
 const clockHTML = sec => fmtClock(sec).split(':').join('<span class="colon">:</span>');
+const fmtTime = ms => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 function median(a) {
   const s = [...a].sort((x, y) => x - y), n = s.length;
   return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
@@ -428,6 +445,16 @@ const stepsLeft = t => t.steps.filter(s => !s.done);
 const minLeft = t => stepsLeft(t).reduce((a, s) => a + (s.est || 0), 0);
 const findStep = (tid, sid) => state.tasks.get(tid)?.steps.find(s => s.id === sid);
 const elapsedSec = (a, now = Date.now()) => (a.carry || 0) + ((a.pausedAt || now) - a.startedAt - (a.pausedMs || 0)) / 1000;
+// When the running step is meant to end, in seconds of work. Asking for more time moves it.
+const targetSec = (a, st) => a.target ?? (st && st.est ? st.est * 60 : null);
+
+const GAP_SEC = 60; // the pause between steps before the next one starts by itself
+const OVER_ALERTS = [0, 5, 10, 20]; // minutes past the end of a step, or of the pause between steps
+const BREAK_ALERTS = [0, 2, 5, 10]; // minutes past the end of a break
+const AUTO_STOP_MIN = 30; // a step's timer stops this long past its end if nobody answers
+const AWAY_MIN = 10; // a jump this long in the clock means Paced was closed or the device slept
+const SNOOZE_MIN = 10; // how long "Not now" holds off a break
+const BREAK_GIVE_UP_MIN = 60; // a break this far past its end counts as over
 
 function dueInfo(t) {
   if (!t.due) return null;
@@ -753,11 +780,20 @@ function clearStale() {
 }
 // A session with no step running and nothing done for 30 minutes counts as stopped, so yesterday's
 // hours don't carry into today. Left alone while you're looking at the working screen, unless forced.
+// A break nobody came back from closes the same way.
 function expireIdleSession(force) {
-  const m = state.meta, s = m.session;
+  const m = state.meta, s = m.session, now = Date.now();
+  if (m.brk && now - m.brk.until >= BREAK_GIVE_UP_MIN * 60e3) {
+    logSlip('break', BREAK_GIVE_UP_MIN * 60);
+    m.lastBreakEnd = m.brk.until + BREAK_GIVE_UP_MIN * 60e3;
+    m.brk = null;
+    saveMeta();
+    return true;
+  }
   if (!s || s.active || m.brk || (state.focusOpen && !force)) return false;
   const last = s.lastAt || s.startedAt || 0;
-  if (Date.now() - last < 30 * 60e3) return false;
+  if (now - last < 30 * 60e3) return false;
+  closeGap(s, last + 30 * 60e3);
   m.lastStop = { at: last, workMin: Math.round(assess(m, last).workMin) };
   recordSession(s, last);
   m.session = null;
@@ -767,7 +803,7 @@ function expireIdleSession(force) {
 }
 function clearActiveIf(pred) {
   const s = state.meta.session;
-  if (s && s.active && pred(s.active)) { s.active = null; state.ask = null; saveMeta(); }
+  if (s && s.active && pred(s.active)) { s.active = null; state.ask = null; openGap(s); saveMeta(); }
 }
 
 /* ---------- speed model ----------
@@ -803,8 +839,7 @@ function assess(meta, now = Date.now()) {
   const breakMin = clamp(Math.round(workMin * 0.2 / 5) * 5, 5, 20);
 
   let kind, why;
-  if (s.forceBreak) [kind, why] = ['now', 'You said you’re getting tired.'];
-  else if (eff != null && eff < 90 && (counted.length >= 2 || hard))
+  if (eff != null && eff < 90 && (counted.length >= 2 || hard))
     [kind, why] = ['now', from === 'pace' ? `You’ve slowed down to ${eff}% of your starting speed.` : 'You said that step was hard.'];
   else if (workMin >= 90) [kind, why] = ['now', `You’ve been working for ${fmtMin(workMin)} without a break.`];
   else if (eff != null && eff < 95 && slipping) [kind, why] = ['soon', `You’re starting to slow down (${eff}% of your starting speed).`];
@@ -967,17 +1002,31 @@ function renderMini() {
   document.body.classList.toggle('has-mini', !!show);
   if (!show) { el.hidden = true; el.innerHTML = ''; return; }
   el.hidden = false;
-  let dot = '<span class="mini-dot"></span>', title, time = '';
-  if (m.brk) {
-    dot = '<span class="mini-dot still"></span>'; title = 'On a break';
-    time = `<span class="mini-time" data-tick="mini">${fmtClock((m.brk.until - Date.now()) / 1000)}</span>`;
-  } else if (s.active) {
-    const st = findStep(s.active.taskId, s.active.stepId);
-    if (s.active.pausedAt) dot = '<span class="mini-dot still"></span>';
-    title = esc(st ? st.title : 'Working') + (s.active.pausedAt ? ' (paused)' : '');
-    time = `<span class="mini-time" data-tick="mini">${fmtClock(elapsedSec(s.active))}</span>`;
-  } else title = 'Ready for your next step';
+  const c = liveClock();
+  el.classList.toggle('over', !!(c && c.over));
+  const dot = `<span class="mini-dot${m.brk || (c && c.paused) ? ' still' : ''}"></span>`;
+  const title = c ? esc(c.label) + (c.paused ? ' (paused)' : '') : 'Ready for your next step';
+  const time = c ? `<span class="mini-time" data-tick="mini">${fmtClock(c.left)}</span>` : '';
   el.innerHTML = `<div class="mini-in">${dot}<span class="mini-title">${title}</span>${time}<button class="btn small" data-act="focus-open">Show</button></div>`;
+}
+
+// The one clock that matters right now, for the tab title and the bar at the bottom. A negative "left" is time past the end.
+function liveClock(now = Date.now()) {
+  const m = state.meta, s = m.session;
+  if (m.brk) {
+    const left = (m.brk.until - now) / 1000;
+    return { label: left > 0 ? 'On a break' : 'Break’s over', left, over: left < 0 };
+  }
+  if (!s) return null;
+  if (s.active) {
+    const a = s.active, st = findStep(a.taskId, a.stepId), el = elapsedSec(a, now), target = targetSec(a, st);
+    return { label: st ? st.title : 'Working', left: target == null ? el : target - el, over: target != null && el > target, paused: !!a.pausedAt && !a.autoStopped };
+  }
+  if (!s.gap) return null;
+  const plan = gapPlan(s), left = (s.gap.until - now) / 1000;
+  if (plan.type === 'none') return null;
+  const label = left < 0 ? 'Nothing running' : plan.type === 'step' ? 'Next: ' + plan.next.title : plan.type === 'break' ? 'Break coming up' : 'Pick what’s next';
+  return { label, left, over: left < 0 };
 }
 
 /* ---------- sheets ---------- */
@@ -1003,6 +1052,20 @@ function autosizeAll(root) { root.querySelectorAll('textarea.step-title').forEac
 window.addEventListener('resize', () => { autosizeAll($('#layer')); autosizeAll($('#focus')); });
 
 /* ----- look and feel ----- */
+function alertsHTML() {
+  const sound = state.meta.sound !== false, n = Alert.notifyState();
+  const soundBtn = (on, label) => `<button class="seg-btn${sound === on ? ' on' : ''}" data-act="alert-sound" data-v="${on ? 'on' : 'off'}" aria-pressed="${sound === on}">${label}</button>`;
+  const note = {
+    on: 'Notifications are on.',
+    blocked: 'Notifications are blocked. You can allow them for this site in your browser settings.',
+    none: 'This browser can’t show notifications from a web page, so Paced uses sound and the tab title instead.'
+  }[n];
+  return `<h3 class="label">Alerts</h3>
+    <p class="help">Paced alerts you when a step’s time is up, when a break ends, and when nothing is running.</p>
+    <div class="seg two">${soundBtn(true, 'Sound on')}${soundBtn(false, 'Sound off')}</div>
+    ${n === 'ask' ? '<button class="btn ghost" data-act="alert-notify">Turn on notifications</button>' : `<p class="help">${note}</p>`}`;
+}
+
 function lookHTML(enter) {
   const look = state.meta.look || {}, theme = look.theme || 'auto', color = COLORS[look.color] ? look.color : 'blue';
   const themeBtn = (v, label) => `<button class="seg-btn${theme === v ? ' on' : ''}" data-act="look-theme" data-v="${v}" aria-pressed="${theme === v}">${label}</button>`;
@@ -1012,6 +1075,7 @@ function lookHTML(enter) {
     <p class="help" style="margin-top:8px">Auto matches your device.</p>
     <h3 class="label">Color</h3>
     <div class="swatches">${Object.entries(COLORS).map(([id, c]) => `<button class="swatch${color === id ? ' on' : ''}" data-act="look-color" data-v="${id}" aria-pressed="${color === id}"><i style="background:${c.light[0]}">${color === id ? ICON.check : ''}</i>${c.name}</button>`).join('')}</div>
+    ${alertsHTML()}
     ${Account.fb ? `<h3 class="label">Account</h3>
     ${Account.user
       ? `<p class="help">Signed in as ${esc(Account.user.email)}</p><button class="btn ghost" data-act="auth-signout">Sign out</button>`
@@ -1083,7 +1147,7 @@ function detailHTML(t, enter) {
   const rows = t.steps.map(s => {
     const isLive = live && live.stepId === s.id;
     let sub = '';
-    if (s.done && s.actual) sub = `<span class="took">Took ${fmtDur(s.actual)}${s.est ? ` (planned ${fmtMin(s.est)})` : ''}</span>`;
+    if (s.done && s.actual) sub = `<span class="took">Took <label class="min-field"><input type="number" min="1" max="600" inputmode="numeric" data-field="actual" data-step="${s.id}" value="${Math.max(1, Math.round(s.actual / 60))}" aria-label="Minutes ${esc(s.title)} really took"><span>min</span></label>${s.est ? ` (planned ${fmtMin(s.est)})` : ''}</span>`;
     else if (isLive) sub = '<span class="took live">Timing now</span>';
     else if (s.spent) sub = `<span class="took">${fmtDur(s.spent)} done so far</span>`;
     const label = s.done ? 'Mark as not done' : 'Mark as done';
@@ -1202,46 +1266,46 @@ function estimateHTML() {
   </section>`;
 }
 
-function planLine(sec, est) {
-  if (!est) return 'No time planned for this step';
-  const m = sec / 60;
-  return m <= est ? `Planned: ${fmtMin(est)}` : `${fmtMin(Math.ceil(m - est))} over the ${fmtMin(est)} you planned`;
+function planLine(el, target, paused) {
+  if (target == null) return 'No time planned for this step';
+  if (el > target) return `${fmtMin(Math.max(1, Math.floor((el - target) / 60)))} over the ${fmtMin(target / 60)} you planned`;
+  return `Planned: ${fmtMin(target / 60)}${paused ? '' : ` · done by ${fmtTime(Date.now() + (target - el) * 1000)}`}`;
 }
 
-// What to suggest once a break is due. With Paced breaks: a normal break, or, when a deadline is close,
-// switching tasks (or a short break if there's nothing to switch to). With a timed method: its break or switch.
-function breakPlan(as, s) {
-  if (s.snooze === s.log.length) return null;
+// What to suggest once a break is due. With Paced breaks: a normal break, or, when a deadline is close, switching
+// to the urgent task (or a short break if you're already on it). With a timed method: its break or switch.
+function breakPlan(as, s, ignoreSnooze) {
+  if (!ignoreSnooze && Date.now() < (s.snoozeUntil || 0)) return null;
   const method = methodOf(s);
   if (method.work) {
-    if (!s.forceBreak && sinceMark(as, s) < method.work) return null;
+    if (sinceMark(as, s) < method.work) return null;
     if (method.id === 'rotate') {
       const other = switchTarget(focusTaskId());
-      return other && !s.forceBreak && as.workMin < 90 ? { type: 'switch', other, rotate: true } : { type: 'break', min: 5 };
+      return other && as.workMin < 90 ? { type: 'switch', other, rotate: true } : { type: 'break', min: 5 };
     }
-    return { type: 'break', min: method.id === 'pomodoro' ? pomodoroBreakMin() : method.brk, timed: !s.forceBreak };
+    return { type: 'break', min: method.id === 'pomodoro' ? pomodoroBreakMin() : method.brk };
   }
   if (as.kind !== 'now') return null;
   const tight = tightTask();
   if (!tight) return { type: 'break' };
-  const other = switchTarget(focusTaskId());
-  return other ? { type: 'switch', tight, other } : { type: 'short', tight };
+  return tight.id === focusTaskId() ? { type: 'short', tight } : { type: 'switch', tight, other: tight };
 }
 
 function statusHTML(as, s) {
   const method = methodOf(s), bp = breakPlan(as, s);
   let kind = as.kind, title = as.title, why = as.why, buttons = '';
-  if (method.work && !bp) {
+  if (!bp && breakPlan(as, s, true)) {
+    kind = 'soon'; title = 'Break pushed back';
+    why = `Paced will remind you in ${fmtMin(Math.ceil((s.snoozeUntil - Date.now()) / 60e3))}.`;
+  } else if (method.work && !bp) {
     const left = Math.max(1, Math.ceil(method.work - sinceMark(as, s)));
     kind = as.kind === 'learning' ? 'learning' : 'go'; title = 'Keep going';
     why = `${method.name}: ${method.id === 'rotate' ? 'switch tasks' : 'break'} in ${fmtMin(left)}.${as.from === 'pace' ? ` You’re at ${as.eff}% of your starting speed.` : ''}`;
-  } else if (as.kind === 'now' && !bp) { kind = 'soon'; title = 'Take a break soon'; }
+  }
   if (bp && bp.type === 'switch') {
     kind = 'switch'; title = 'Switch tasks for a bit';
     if (bp.rotate) why = `You’ve done ${fmtMin(method.work)} on this. Task rotation says switch to “${bp.other.title}” now, then come back.`;
-    else why += bp.other.id === bp.tight.id
-      ? ` ${bp.tight.title} ${dueWords(bp.tight)}, so instead of a full break, switch over to it for a change of pace.`
-      : ` ${bp.tight.title} ${dueWords(bp.tight)}, so instead of a full break, switch to “${bp.other.title}” for a change of pace, then come back.`;
+    else why += ` ${bp.tight.title} ${dueWords(bp.tight)}, so instead of a full break, switch over to it for a change of pace.`;
     buttons = `<button class="btn primary" data-act="switch-task" data-id="${bp.other.id}">${ICON.swap}Switch to ${esc(bp.other.title)}</button>
       <button class="btn ghost" data-act="take-break" data-min="5" data-force="1">5-minute break instead</button>`;
   } else if (bp && bp.type === 'short') {
@@ -1250,8 +1314,7 @@ function statusHTML(as, s) {
   } else if (bp) {
     const min = bp.min || as.breakMin;
     kind = 'now';
-    if (bp.timed) { title = 'Break time'; why = `You’ve done ${fmtMin(method.work)} of focused work. ${method.name} says take a ${min}-minute break now.`; }
-    else if (method.work) { title = 'Time for a break'; why = 'You said you’re getting tired.'; }
+    if (method.work) { title = 'Break time'; why = `You’ve done ${fmtMin(method.work)} of focused work. ${method.name} says take a ${min}-minute break now.`; }
     else why += ' A short rest will help you get back up to speed.';
     buttons = `<button class="btn primary" data-act="take-break" data-min="${min}" data-force="1">${ICON.cup}Start a ${min}-minute break</button>`;
   }
@@ -1268,7 +1331,7 @@ function statusHTML(as, s) {
     <p class="worked">Method: <b>${esc(method.name)}</b> · <button class="link small" data-act="method-open">Change</button></p>
     <details class="how"${state.howOpen ? ' open' : ''}>
       <summary>How does Paced decide?</summary>
-      <p>Paced compares how long each step really takes with the minutes you planned. Your first two steps after a break set your starting speed. With Paced breaks, if you slow down below 90% of that speed, or work for 90 minutes straight, Paced suggests a break of about a fifth of the time you’ve worked (5 to 20 minutes). When something is due today or tomorrow, it suggests switching tasks instead, since a change of task can refresh you without losing time. The other methods use fixed times instead.</p>
+      <p>Paced compares how long each step really takes with the minutes you planned. Your first two steps after a break set your starting speed. With Paced breaks, if you slow down below 90% of that speed, or work for 90 minutes straight, Paced suggests a break of about a fifth of the time you’ve worked (5 to 20 minutes). When something is due today or tomorrow, it suggests switching to that task instead, since a change of task can refresh you without losing time. If you’re already on it, it suggests a short break. The other methods use fixed times instead.</p>
     </details>
   </section>`;
 }
@@ -1349,44 +1412,115 @@ function splitHTML(st, el) {
   </section>`;
 }
 
+// The stop at the planned end of a step: you decide what happens next instead of drifting on.
+function timeUpHTML(s, st, canSkip, target) {
+  const a = s.active, as = assess(state.meta);
+  if (state.ask.view === 'stuck') return `<section class="ask-card warn">
+      <div class="eyebrow">Stuck</div>
+      <h2>What would help?</h2>
+      <div class="chips">
+        <button class="chip" data-act="take-break" data-min="${as.breakMin}" data-force="1">Take a ${as.breakMin}-minute break</button>
+        ${canSkip ? '<button class="chip" data-act="skip-step">Skip it for now</button>' : ''}
+        <button class="chip" data-act="split-open">Split this step</button>
+      </div>
+      <div class="ask-links"><button class="link small" data-act="timeup-back">Back</button></div>
+    </section>`;
+  const why = a.autoStopped ? `You didn’t answer for ${AUTO_STOP_MIN} minutes, so the timer stopped there.`
+    : a.extended ? 'Your extra time is up.' : `You planned ${fmtMin(target / 60)} for this step.`;
+  const more = a.extended
+    ? `<p>You’ve already added time once. Save what’s left as a new step so your plan stays real.</p>
+      <div class="chips"><button class="chip" data-act="split-open">Split this step</button></div>`
+    : `<div class="chips">${[5, 10, 15].map(n => `<button class="chip" data-act="extend" data-min="${n}">${n} more min</button>`).join('')}</div>`;
+  return `<section class="ask-card warn">
+      <div class="eyebrow">Time’s up</div>
+      <h2>${a.autoStopped ? 'Paced stopped your timer' : 'Did you finish?'}</h2>
+      <p>${esc(why)}</p>
+      <div class="row"><button class="btn primary" data-act="step-done">${ICON.check}Yes, it’s done</button></div>
+      <h3 class="label">Not yet?</h3>
+      ${more}
+      <div class="ask-links">
+        <button class="link small" data-act="timeup-stuck">I’m stuck</button>
+        <button class="link small" data-act="timeup-forgot">I forgot the timer</button>
+      </div>
+    </section>`;
+}
+
+function forgotHTML(target) {
+  const min = state.ask.min ?? Math.max(1, Math.round(target / 60));
+  return `<section class="ask-card warn">
+      <div class="eyebrow">Fix the time</div>
+      <h2>How long did you really work on this?</h2>
+      <p>Paced will use this number instead of the timer, and this step won’t count toward your speed.</p>
+      <form class="split-form" id="forgot-form">
+        <div class="row">
+          <label class="min-field"><input id="forgot-min" type="number" min="1" max="600" inputmode="numeric" value="${min}" aria-label="Minutes you really worked"><span>min</span></label>
+          <button type="submit" class="btn primary">Save, it’s done</button>
+          <button type="button" class="btn ghost" data-act="forgot-go">Save, keep going</button>
+        </div>
+      </form>
+      <div class="ask-links"><button class="link small" data-act="timeup-back">Back</button></div>
+    </section>`;
+}
+
+function awayHTML(st) {
+  return `<section class="ask-card warn">
+      <div class="eyebrow">Welcome back</div>
+      <h2>You were away for ${fmtDur(state.ask.sec)}</h2>
+      <p>The timer kept running while Paced was closed or this device was asleep. Were you working on “${esc(st.title)}” that whole time?</p>
+      <div class="chips">
+        <button class="chip" data-act="away-keep">Yes, keep the time</button>
+        <button class="chip" data-act="away-drop">No, take it off</button>
+      </div>
+    </section>`;
+}
+
 function runningHTML() {
   const m = state.meta, s = m.session, a = s.active;
   const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
   if (!t || !st) return betweenHTML();
   const idx = t.steps.indexOf(st) + 1, el = elapsedSec(a), paused = !!a.pausedAt;
   const as = assess(m);
-  const pct = st.est ? Math.min(100, el / (st.est * 60) * 100) : 0;
-  const over = st.est && el > st.est * 60;
+  const target = targetSec(a, st);
+  const pct = target ? Math.min(100, el / target * 100) : 0;
+  const over = target != null && el > target;
   const canSkip = !!nextStep(t, s, st.id);
-  const ask = state.ask?.type === 'long' ? `<section class="ask-card warn">
-      <div class="eyebrow">Quick question</div>
-      <h2>This step is taking longer than you planned</h2>
-      <p>You’ve spent ${fmtMin(el / 60)} on it, and planned ${fmtMin(st.est)}. What’s going on?</p>
-      <div class="chips">
-        <button class="chip" data-act="long" data-v="estimate">It’s just bigger than I thought</button>
-        <button class="chip" data-act="long" data-v="tired">I’m getting tired</button>
-      </div>
-    </section>` : '';
-  return `<div class="hero">
-    <div class="eyebrow">Step ${idx} of ${t.steps.length}${paused ? ' · Paused' : ''}</div>
+  const hero = `<div class="eyebrow">Step ${idx} of ${t.steps.length}${paused ? ' · Paused' : ''}</div>
     <h2 class="step-name">${esc(st.title)}</h2>
-    <div class="timer${paused ? ' paused' : ''}" data-tick="timer" role="timer" aria-label="Time spent on this step">${clockHTML(el)}</div>
-    <div class="est-line" data-tick="estline">${planLine(el, st.est)}</div>
-    ${st.est ? `<span class="bar" aria-hidden="true"><i data-tick="prog" class="${over ? 'over' : ''}" style="width:${pct.toFixed(1)}%"></i></span>` : ''}
+    <div class="timer${paused ? ' paused' : ''}${over ? ' over' : ''}" data-tick="timer" role="timer" aria-label="Time left on this step">${clockHTML(target == null ? el : target - el)}</div>
+    <div class="est-line" data-tick="estline">${planLine(el, target, paused)}</div>
+    ${target ? `<span class="bar" aria-hidden="true"><i data-tick="prog" class="${over ? 'over' : ''}" style="width:${pct.toFixed(1)}%"></i></span>` : ''}`;
+  const type = state.ask?.type;
+  if (type === 'timeup') return `<div class="hero">${hero}</div>${timeUpHTML(s, st, canSkip, target)}`;
+  if (type === 'forgot') return `<div class="hero">${hero}</div>${forgotHTML(target)}`;
+  if (type === 'away') return `<div class="hero">${hero}</div>${awayHTML(st)}`;
+  return `<div class="hero">${hero}
     <div class="actions">
       <button class="btn primary big" data-act="step-done">${ICON.check}Done with this step</button>
       <button class="btn ghost big" data-act="step-pause">${paused ? ICON.play + 'Resume' : ICON.pause + 'Pause'}</button>
     </div>
-    ${state.ask?.type === 'split' ? '' : `<div class="hero-more">
+    ${type === 'split' ? '' : `<div class="hero-more">
       ${canSkip ? `<button class="link" data-act="skip-step">${ICON.skip}Skip for now</button>` : ''}
       <button class="link" data-act="split-open">${ICON.split}Split this step</button>
     </div>`}
   </div>
-  ${state.ask?.type === 'split' ? splitHTML(st, el) : ''}
-  ${ask}
+  ${type === 'split' ? splitHTML(st, el) : ''}
   ${statusHTML(as, s)}
   ${stepsPanelHTML(t, s)}
   ${breakArea(as, s)}`;
+}
+
+const gapText = (plan, left) => left < 0 ? 'Nothing is running' : { step: 'Next step starts in', break: 'Your break starts in', hold: 'Pick what’s next in' }[plan.type];
+
+// The clock between steps, so finishing a step never leaves you with nothing running.
+function gapHTML(s) {
+  if (!s.gap) return '';
+  const plan = gapPlan(s), left = (s.gap.until - Date.now()) / 1000;
+  if (plan.type === 'none') return '';
+  const wait = left >= 0 && plan.type !== 'hold' ? '<button class="link small" data-act="gap-wait">Wait 5 more minutes</button>' : '';
+  return `<section class="gap-clock${left < 0 ? ' over' : ''}" data-tick="gapbox">
+    <div><span class="gap-text">${gapText(plan, left)}</span>${wait}</div>
+    <span class="gap-time">${fmtClock(left)}</span>
+  </section>`;
 }
 
 function betweenHTML() {
@@ -1406,6 +1540,7 @@ function betweenHTML() {
         <button class="chip" data-act="feel" data-v="struggling">Hard</button>
       </div>
     </section>`;
+  html += gapHTML(s);
   if (bp) html += statusHTML(as, s);
   const next = t && !t.archived ? nextStep(t, s) : null;
   if (next) {
@@ -1439,11 +1574,13 @@ function pickHTML(t, noSession) {
 
 function breakHTML() {
   const b = state.meta.brk, left = (b.until - Date.now()) / 1000, over = left <= 0;
+  const t = b.taskId && state.tasks.get(b.taskId), next = t && !t.archived ? nextStep(t, null) : null;
   return `<div class="breakscreen">
     <div class="eyebrow">${over ? 'Break’s over' : 'Break time'}</div>
-    <div class="timer" data-tick="break" role="timer" aria-label="Break time left">${clockHTML(left)}</div>
-    <p class="muted">${over ? 'Ready when you are. Paced will measure your speed fresh from here.' : 'Stand up, stretch, and get some water. Your progress is saved.'}</p>
-    <button class="btn ${over ? 'primary' : 'ghost'} big" data-act="end-break">${over ? ICON.play + 'Back to work' : 'I’m ready, end the break'}</button>
+    <div class="timer${left < 0 ? ' over' : ''}" data-tick="break" role="timer" aria-label="Break time left">${clockHTML(left)}</div>
+    <p class="muted">${over ? 'Time to get back. Paced will measure your speed fresh from here.' : `Stand up, stretch, and get some water. Back at ${fmtTime(b.until)}.`}</p>
+    ${next ? `<p>Up next: <b>${esc(next.title)}</b>${next.est ? ` · ${fmtMin(next.est)}` : ''}</p>` : ''}
+    <button class="btn ${over ? 'primary' : 'ghost'} big" data-act="end-break">${over ? ICON.play + 'Back to work' : 'I’m ready, start now'}</button>
   </div>`;
 }
 
@@ -1458,6 +1595,64 @@ function toast(msg, actLabel, fn) {
   toastTimer = setTimeout(hideToast, fn ? 7000 : 3800);
 }
 function hideToast() { $('#toast').hidden = true; toastAction = null; }
+
+/* ---------- alerts: reaching you when you're not looking at Paced ---------- */
+const Alert = {
+  audio: null,
+
+  // Browsers only allow sound after a tap, so this runs on every tap.
+  unlock() {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!this.audio && AC) this.audio = new AC();
+      if (this.audio && this.audio.state === 'suspended') this.audio.resume();
+    } catch (e) {}
+  },
+
+  notifyState() {
+    if (!('Notification' in window)) return 'none';
+    return { granted: 'on', denied: 'blocked' }[Notification.permission] || 'ask';
+  },
+
+  askPermission() {
+    if (this.notifyState() !== 'ask') return;
+    try { return Notification.requestPermission(); } catch (e) {}
+  },
+
+  chime() {
+    const ctx = this.audio;
+    if (!ctx || ctx.state !== 'running') return;
+    [[660, 0], [880, .18]].forEach(([freq, delay]) => {
+      const osc = ctx.createOscillator(), gain = ctx.createGain(), t = ctx.currentTime + delay;
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(.0001, t);
+      gain.gain.exponentialRampToValueAtTime(.2, t + .02);
+      gain.gain.exponentialRampToValueAtTime(.0001, t + .5);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t); osc.stop(t + .5);
+    });
+  },
+
+  send(title, body) {
+    if (state.meta.sound !== false) this.chime();
+    try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (e) {}
+    if (document.visibilityState === 'visible' && document.hasFocus()) return;
+    if (this.notifyState() !== 'on') return;
+    try {
+      const n = new Notification(title, { body, tag: 'paced', renotify: true });
+      n.onclick = () => { window.focus(); n.close(); state.focusOpen = true; render(); };
+    } catch (e) {} // some phones only allow notifications from an installed app
+  }
+};
+
+// True once each time another threshold (minutes past the end) is crossed, however many were passed at once.
+function dueAlert(holder, minutesOver, steps) {
+  const before = holder.alerts || 0;
+  let n = before;
+  while (n < steps.length && minutesOver >= steps[n]) n++;
+  holder.alerts = n;
+  return n > before;
+}
 
 /* ---------- actions: tasks ---------- */
 function openAdd() {
@@ -1511,6 +1706,13 @@ function maybeArchive(t, before) {
 function toggleStep(id, sid) {
   const t = state.tasks.get(id), st = t && t.steps.find(s => s.id === sid);
   if (!st) return;
+  // Checking off the step you're timing is the same as pressing Done, so its time counts.
+  if (state.meta.session?.active?.stepId === sid) {
+    finishStep();
+    if (t.archived) state.layer = null;
+    renderLayer();
+    return;
+  }
   const before = clone(t);
   st.done = !st.done;
   st.doneAt = st.done ? Date.now() : null;
@@ -1543,8 +1745,9 @@ function deleteTask(id) {
 function completeTask(id) {
   const t = state.tasks.get(id); if (!t) return;
   const before = clone(t);
+  if (state.meta.session?.active?.taskId === id) finishStep(); // the running step keeps its time
+  if (t.archived) return;
   t.steps.forEach(s => { if (!s.done) { s.done = true; s.doneAt = Date.now(); } });
-  clearActiveIf(a => a.taskId === id);
   t.archived = true; t.completedAt = Date.now();
   archiveToast(t, before);
   saveTask(t); render();
@@ -1552,8 +1755,30 @@ function completeTask(id) {
 
 /* ---------- actions: working ---------- */
 function beginSession(taskId, priorMin) {
-  state.meta.session = { id: newId('ss'), startedAt: Date.now(), lastAt: Date.now(), priorMin, taskId, log: [], active: null, forceBreak: false, snooze: -1, skipped: [], partialSec: 0, method: methodById(state.meta.method).id, markAt: 0 };
+  state.meta.session = { id: newId('ss'), startedAt: Date.now(), lastAt: Date.now(), priorMin, taskId, log: [], active: null, gap: null, snoozeUntil: 0, skipped: [], partialSec: 0, method: methodById(state.meta.method).id, markAt: 0 };
   saveMeta();
+}
+
+// Time that slipped past the plan, kept so Paced can show it back to you.
+function logSlip(kind, sec) {
+  if (sec < 30) return;
+  const m = state.meta;
+  m.slips = [...(m.slips || []), { kind, sec: Math.round(sec), at: Date.now() }].slice(-200);
+}
+
+function openGap(s, from = Date.now()) { s.gap = { until: from + GAP_SEC * 1000, alerts: 0 }; }
+function closeGap(s, at = Date.now()) {
+  if (s.gap) logSlip('gap', (at - s.gap.until) / 1000);
+  s.gap = null;
+}
+// What happens when the clock between steps runs out: the next step or a due break starts by itself, or it waits for you.
+function gapPlan(s) {
+  const t = state.tasks.get(s.taskId), as = assess(state.meta), bp = breakPlan(as, s);
+  const next = t && !t.archived ? nextStep(t, s) : null;
+  if (!next && !switchTarget(null)) return { type: 'none' };
+  if (bp && bp.type !== 'switch') return { type: 'break', min: bp.type === 'short' ? 5 : bp.min || as.breakMin };
+  if (bp || !next || !next.est) return { type: 'hold' };
+  return { type: 'step', t, next };
 }
 
 function startFocus(taskId) {
@@ -1593,15 +1818,58 @@ function startStep(taskId, stepId) {
   s.skipped = (s.skipped || []).filter(x => x !== stepId);
   if (!st.est) { state.ask = { type: 'estimate', taskId, stepId }; saveMeta(); render(); return; }
   state.ask = null;
-  s.active = { taskId, stepId, startedAt: Date.now(), pausedMs: 0, pausedAt: null, carry: st.spent || 0, longAsked: false, estLow: false };
+  closeGap(s);
+  const carry = st.spent || 0;
+  // Time already spent comes off the plan. A step that's already past its plan gets 10 more minutes.
+  s.active = { taskId, stepId, startedAt: Date.now(), pausedMs: 0, pausedAt: null, carry, target: carry >= st.est * 60 ? carry + 600 : null, alerts: 0, estLow: false };
   s.lastAt = Date.now();
   saveMeta(); render();
 }
 
+function resumeStep(a) {
+  if (a.pausedAt) { a.pausedMs += Date.now() - a.pausedAt; a.pausedAt = null; }
+  a.autoStopped = false;
+}
+
 function togglePause() {
   const a = state.meta.session?.active; if (!a) return;
-  if (a.pausedAt) { a.pausedMs += Date.now() - a.pausedAt; a.pausedAt = null; }
+  if (a.pausedAt) resumeStep(a);
   else a.pausedAt = Date.now();
+  saveMeta(); render();
+}
+
+// "Need more time" at the planned end: a new end, counted from now.
+function extendStep(min) {
+  const a = state.meta.session?.active; if (!a) return;
+  resumeStep(a);
+  a.target = elapsedSec(a) + min * 60;
+  a.extended = (a.extended || 0) + 1;
+  a.alerts = 0;
+  a.estLow = true; // the plan changed mid-step, so this one doesn't count toward your speed
+  state.ask = null;
+  saveMeta(); render();
+  toast(`Okay, ${fmtMin(min)} more. This step won’t count against your speed.`);
+}
+
+// Take time off the running step, as if the timer had been paused for it. Returns the new time.
+function shortenStep(a, sec) {
+  const before = elapsedSec(a), to = clamp(sec, a.carry || 0, before);
+  a.pausedMs += (before - to) * 1000;
+  a.alerts = 0; a.okSec = 0;
+  a.estLow = true; // the time is a best guess now, so this one doesn't count toward your speed
+  logSlip('away', before - to);
+  return to;
+}
+
+// "I forgot the timer": use the time you say you worked.
+function correctTime(min, keepGoing) {
+  const a = state.meta.session?.active; if (!a || !min) return;
+  const st = findStep(a.taskId, a.stepId), sec = shortenStep(a, min * 60);
+  state.ask = null;
+  if (document.activeElement) document.activeElement.blur();
+  if (!keepGoing) { finishStep(); return; }
+  resumeStep(a);
+  if (sec >= targetSec(a, st)) a.target = sec + 600;
   saveMeta(); render();
 }
 
@@ -1618,6 +1886,7 @@ function finishStep() {
   const pace = st.est ? clamp(st.est * 60 / Math.max(sec, 20), 0.25, 3) : null;
   s.log.push({ taskId: t.id, stepId: st.id, title: st.title, est: st.est, actual: sec, worked, pace, excluded: !counts, feel: null });
   s.active = null; s.taskId = t.id; s.lastAt = Date.now();
+  openGap(s);
   const countedN = s.log.filter(l => l.pace != null && !l.excluded).length;
   if (counts && (s.priorMin || 0) < 30 && countedN <= 2) m.fresh = [...(m.fresh || []), pace].slice(-12);
   state.ask = assess(m).paceReady ? null : { type: 'feel' };
@@ -1673,7 +1942,7 @@ function switchTask(taskId) {
   const s = state.meta.session, t = state.tasks.get(taskId); if (!s || !t) return;
   const n = nextStep(t, s); if (!n) return;
   if (s.active) setAside(s);
-  s.snooze = s.log.length; s.forceBreak = false; s.markAt = assess(state.meta).workMin;
+  s.snoozeUntil = Date.now() + 15 * 60e3; s.markAt = assess(state.meta).workMin;
   startStep(taskId, n.id);
   toast(`Switched to “${t.title}”. Switch back after a step or two.`);
 }
@@ -1689,7 +1958,7 @@ function stashActive(s) {
 function requestBreak(min, force) {
   const m = state.meta, s = m.session;
   if (!s || force) return takeBreak(min);
-  const as = assess(m), bp = breakPlan(as, s);
+  const as = assess(m), bp = breakPlan(as, s, true); // a break you pushed back is still a break you need
   if (bp || (!methodOf(s).work && as.kind === 'soon')) return takeBreak(bp && bp.min ? bp.min : min);
   state.ask = { type: 'breakcheck', min };
   renderFocus();
@@ -1699,18 +1968,25 @@ function takeBreak(min) {
   const m = state.meta, s = m.session;
   if (s && s.method === 'pomodoro') { const p = m.pomo && m.pomo.date === dateKey() ? m.pomo : { date: dateKey(), n: 0 }; m.pomo = { date: p.date, n: p.n + 1 }; }
   if (s) recordSession(s);
-  if (s) stashActive(s);
-  m.brk = { startedAt: Date.now(), until: Date.now() + min * 60e3, min, taskId: s ? s.taskId : null };
+  if (s) { closeGap(s); stashActive(s); }
+  m.brk = { startedAt: Date.now(), until: Date.now() + min * 60e3, min, taskId: s ? s.taskId : null, alerts: 0 };
   m.session = null; state.ask = null; state.focusOpen = true;
   saveMeta(); render();
 }
 
+// One tap back: the next step starts right away.
 function endBreak() {
   const m = state.meta, b = m.brk; if (!b) return;
+  const over = (Date.now() - b.until) / 1000;
+  logSlip('break', over);
   m.brk = null; m.lastBreakEnd = Date.now();
-  const t = b.taskId && state.tasks.get(b.taskId);
-  beginSession(t && !t.archived ? t.id : null, 0);
-  state.focusOpen = true; render();
+  const t = b.taskId && state.tasks.get(b.taskId), task = t && !t.archived ? t : null;
+  beginSession(task ? task.id : null, 0);
+  state.focusOpen = true;
+  const next = task ? nextStep(task, m.session) : null;
+  if (next) startStep(task.id, next.id);
+  else { openGap(m.session); saveMeta(); render(); }
+  if (over >= 60) toast(`Your break ran ${fmtDur(over)} over.`);
 }
 
 function endSession() {
@@ -1718,7 +1994,7 @@ function endSession() {
   const worked = s ? assess(m).workMin - (s.priorMin || 0) : 0;
   if (s) m.lastStop = { at: Date.now(), workMin: Math.round(assess(m).workMin) };
   if (s) recordSession(s);
-  if (s) stashActive(s);
+  if (s) { closeGap(s); stashActive(s); }
   m.session = null; state.ask = null; state.focusOpen = false; state.fEdit = false;
   saveMeta(); render();
   if (worked >= 1) toast(`Nice work! You worked for ${fmtMin(worked)}.`);
@@ -1773,6 +2049,8 @@ document.addEventListener('click', e => {
   const { act, id, step, v } = b.dataset;
   const min = parseInt(b.dataset.min, 10);
   const s = state.meta.session;
+  Alert.unlock();
+  if (['focus-task', 'start-step', 'pick-task', 'history'].includes(act)) Alert.askPermission();
   switch (act) {
     case 'open-add': openAdd(); break;
     case 'auth-switch': state.auth.mode = state.auth.mode === 'signup' ? 'signin' : 'signup'; render(); break;
@@ -1837,17 +2115,21 @@ document.addEventListener('click', e => {
       startStep(id, n.id); break;
     }
     case 'feel': { const last = s && s.log[s.log.length - 1]; if (last) last.feel = v; state.ask = null; saveMeta(); render(); break; }
-    case 'long': {
-      if (s && s.active) {
-        if (v === 'estimate') { s.active.estLow = true; toast('Got it. This step won’t count against your speed.'); }
-        else s.forceBreak = true;
-      }
+    case 'extend': extendStep(min); break;
+    case 'timeup-stuck': state.ask = { type: 'timeup', view: 'stuck' }; renderFocus(); break;
+    case 'timeup-forgot': state.ask = { type: 'forgot' }; renderFocus(); break;
+    case 'timeup-back': state.ask = { type: 'timeup' }; renderFocus(); break;
+    case 'forgot-go': correctTime(parseMin($('#forgot-min').value), true); break;
+    case 'away-keep': if (s && s.active) s.active.okSec = elapsedSec(s.active); state.ask = null; saveMeta(); render(); break;
+    case 'away-drop': {
+      if (s && s.active && state.ask) shortenStep(s.active, elapsedSec(s.active) - state.ask.sec);
       state.ask = null; saveMeta(); render(); break;
     }
+    case 'gap-wait': if (s && s.gap) { s.gap.until = Math.max(s.gap.until, Date.now()) + 5 * 60e3; s.gap.alerts = 0; saveMeta(); render(); } break;
     case 'take-break': requestBreak(min || 5, b.dataset.force === '1'); break;
     case 'break-no': state.ask = null; renderFocus(); break;
     case 'break-yes': takeBreak(min || 5); break;
-    case 'keep-going': if (s) { s.snooze = s.log.length; s.forceBreak = false; saveMeta(); } render(); break;
+    case 'keep-going': if (s) { s.snoozeUntil = Date.now() + SNOOZE_MIN * 60e3; saveMeta(); } render(); break;
     case 'end-break': endBreak(); break;
     case 'fedit-toggle': state.fEdit = !state.fEdit; renderFocus(); break;
     case 'fstep-move': moveStep(step, parseInt(v, 10)); break;
@@ -1857,7 +2139,7 @@ document.addEventListener('click', e => {
     case 'method-pick': {
       const x = methodById(v);
       state.meta.method = x.id;
-      if (s) { s.method = x.id; s.markAt = assess(state.meta).workMin; s.snooze = -1; }
+      if (s) { s.method = x.id; s.markAt = assess(state.meta).workMin; s.snoozeUntil = 0; }
       state.ask = null; saveMeta(); renderFocus();
       toast(`Using ${x.name}. ${x.short}.`);
       break;
@@ -1869,6 +2151,8 @@ document.addEventListener('click', e => {
       state.meta.look = look; saveMeta(); applyLook(); renderLayer();
       break;
     }
+    case 'alert-sound': state.meta.sound = v === 'on'; saveMeta(); renderLayer(); if (state.meta.sound) Alert.chime(); break;
+    case 'alert-notify': Promise.resolve(Alert.askPermission()).then(() => renderLayer()); break;
   }
 });
 
@@ -1879,6 +2163,7 @@ document.addEventListener('submit', e => {
   else if (f.id === 'draft-add') addDraftStep();
   else if (f.id === 'est-form') setEstimateAndStart(parseMin($('#est-input').value));
   else if (f.id === 'split-form') splitStep($('#split-name').value.trim(), parseMin($('#split-min').value));
+  else if (f.id === 'forgot-form') correctTime(parseMin($('#forgot-min').value), false);
   else if (f.id === 'detail-add' || f.id === 'fstep-add') {
     const inFocus = f.id === 'fstep-add';
     const t = state.tasks.get(inFocus ? focusTaskId() : state.layer && state.layer.id); if (!t) return;
@@ -1902,7 +2187,7 @@ document.addEventListener('input', e => {
   else if (el.id === 'new-title') { state.draft.title = el.value; if (el.value.trim()) $('#new-err').hidden = true; }
   else if (el.id === 'new-due') state.draft.due = el.value || null;
   else if (el.id === 'split-name' && state.ask) state.ask.name = el.value;
-  else if (el.id === 'split-min' && state.ask) state.ask.min = parseMin(el.value);
+  else if ((el.id === 'split-min' || el.id === 'forgot-min') && state.ask) state.ask.min = parseMin(el.value);
   else if (el.dataset.draft) {
     const d = state.draft.steps[+el.dataset.i]; if (!d) return;
     if (el.dataset.draft === 'title') d.title = el.value; else d.est = parseMin(el.value);
@@ -1939,6 +2224,10 @@ document.addEventListener('change', e => {
   if (el.dataset.field === 'title') {
     const v = el.value.trim();
     if (v) st.title = v; else el.value = st.title;
+  } else if (el.dataset.field === 'actual') {
+    const n = parseMin(el.value);
+    if (n) st.actual = n * 60;
+    el.value = Math.max(1, Math.round(st.actual / 60));
   } else {
     st.est = parseMin(el.value);
     el.value = st.est ?? '';
@@ -1972,38 +2261,138 @@ document.addEventListener('keydown', e => {
 });
 
 /* ---------- clock ---------- */
-let lastMinute = -1, breakWasOver = null;
-function tick() {
-  if (!state.ready) return;
-  const m = state.meta, s = m.session;
-  if (s && s.active) {
-    const a = s.active, el = elapsedSec(a), st = findStep(a.taskId, a.stepId);
-    document.querySelectorAll('[data-tick="timer"]').forEach(n => { n.innerHTML = clockHTML(el); });
-    document.querySelectorAll('[data-tick="mini"]').forEach(n => { n.textContent = fmtClock(el); });
+let lastMinute = -1, breakWasOver = null, lastSeen = null, seenSaved = 0;
+const BASE_TITLE = document.title, SEEN_KEY = 'paced:seen';
+
+// The timer keeps counting while Paced is closed or the device sleeps, so ask about that time on the way back.
+function checkAway(now = Date.now()) {
+  if (lastSeen === null) { try { lastSeen = +localStorage.getItem(SEEN_KEY) || now; } catch (e) { lastSeen = now; } }
+  const a = state.meta.session?.active, gone = now - Math.max(lastSeen, a ? a.startedAt : 0);
+  lastSeen = now;
+  if (now - seenSaved > 15e3) { seenSaved = now; try { localStorage.setItem(SEEN_KEY, now); } catch (e) {} }
+  if (!a || a.pausedAt || gone < AWAY_MIN * 60e3) return;
+  state.ask = { type: 'away', sec: gone / 1000 };
+  state.focusOpen = true;
+  render();
+}
+
+function tickStep(s) {
+  const a = s.active, st = findStep(a.taskId, a.stepId), target = targetSec(a, st);
+  if (target == null) return;
+  let el = elapsedSec(a);
+  // Nobody answered: stop the timer so a forgotten step can't run for hours. Time you haven't been asked about yet doesn't count.
+  const stopAt = Math.max(target, a.okSec || 0) + AUTO_STOP_MIN * 60 + (state.ask?.type === 'away' ? state.ask.sec : 0);
+  if (!a.pausedAt && el > stopAt) {
+    a.pausedAt = Date.now() - (el - stopAt) * 1000;
+    a.autoStopped = true;
+    a.alerts = OVER_ALERTS.length;
+    el = stopAt;
+    saveMeta();
+    Alert.send('Paced stopped your timer', `“${st.title}” ran ${AUTO_STOP_MIN} minutes over.`);
+  }
+  const up = el >= target && (!a.pausedAt || a.autoStopped);
+  if (!up) {
+    if (state.ask?.type === 'timeup') { state.ask = null; renderFocus(); }
+    return;
+  }
+  if (dueAlert(a, (el - target) / 60, OVER_ALERTS)) {
+    saveMeta();
+    Alert.send(a.extended ? 'Your extra time is up' : 'Time’s up', `Did you finish “${st.title}”?`);
+  }
+  if (!state.ask) {
+    state.ask = { type: 'timeup' };
+    state.focusOpen = true;
+    render();
+  }
+}
+
+function tickGap(s) {
+  const plan = gapPlan(s), past = (Date.now() - s.gap.until) / 1000;
+  if (plan.type === 'none' || past < 0) return;
+  const ae = document.activeElement, typing = $('#focus').contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA');
+  const free = !state.layer && !state.fEdit && !typing && (!state.ask || state.ask.type === 'feel');
+  // A little late is fine in a background tab. Much later means nobody was here, so don't start without you.
+  if (plan.type !== 'hold' && past < 90) {
+    if (!free) return;
+    if (plan.type === 'break') { Alert.send('Break time', `Your ${plan.min}-minute break is starting.`); takeBreak(plan.min); }
+    else { Alert.send(`Starting: ${plan.next.title}`, `${fmtMin(plan.next.est)} planned.`); startStep(plan.t.id, plan.next.id); }
+    return;
+  }
+  if (dueAlert(s.gap, past / 60, OVER_ALERTS)) {
+    saveMeta();
+    Alert.send('Nothing is running', 'Start your next step, or take a break.');
+    renderFocus(); renderMini();
+  }
+}
+
+function tickBreak(m) {
+  const b = m.brk, left = (b.until - Date.now()) / 1000, over = left <= 0;
+  if (dueAlert(b, -left / 60, BREAK_ALERTS)) {
+    saveMeta();
+    const t = b.taskId && state.tasks.get(b.taskId), next = t && !t.archived ? nextStep(t, null) : null;
+    Alert.send('Break’s over', next ? `Up next: ${next.title}` : 'Time to get back to work.');
+  }
+  if (breakWasOver === false && over) { renderFocus(); renderMini(); }
+  breakWasOver = over;
+}
+
+// Break-time reminders, for when the working screen isn't what you're looking at.
+function checkBreakDue(s) {
+  const bp = breakPlan(assess(state.meta), s);
+  if (!bp) { s.dueAlerted = false; return; }
+  if (s.dueAlerted) return;
+  s.dueAlerted = true;
+  saveMeta();
+  Alert.send(bp.type === 'switch' ? 'Time to switch tasks' : 'Time for a break', 'Open Paced to start it.');
+}
+
+function showClocks() {
+  const m = state.meta, s = m.session, a = s && s.active, c = liveClock();
+  if (c) document.querySelectorAll('[data-tick="mini"]').forEach(n => { n.textContent = fmtClock(c.left); });
+  $('#mini').classList.toggle('over', !!(c && c.over));
+  const title = !c ? BASE_TITLE : c.paused ? `Paused · ${c.label}` : `${fmtClock(c.left)} ${c.label}`;
+  if (document.title !== title) document.title = title;
+  if (a) {
+    const st = findStep(a.taskId, a.stepId), el = elapsedSec(a), target = targetSec(a, st);
+    document.querySelectorAll('[data-tick="timer"]').forEach(n => {
+      n.innerHTML = clockHTML(target == null ? el : target - el);
+      n.classList.toggle('over', target != null && el > target);
+    });
     const line = $('[data-tick="estline"]');
-    if (line && st) line.textContent = planLine(el, st.est);
-    if (st && st.est) {
-      const bar = $('[data-tick="prog"]');
-      if (bar) { bar.style.width = Math.min(100, el / (st.est * 60) * 100).toFixed(1) + '%'; bar.classList.toggle('over', el > st.est * 60); }
-      if (!a.pausedAt && !a.longAsked && !a.estLow && !state.ask && el > Math.max(st.est * 2, st.est + 5) * 60) {
-        a.longAsked = true; state.ask = { type: 'long' }; saveMeta(); renderFocus();
-      }
-    }
+    if (line) line.textContent = planLine(el, target, !!a.pausedAt);
+    const bar = $('[data-tick="prog"]');
+    if (bar && target) { bar.style.width = Math.min(100, el / target * 100).toFixed(1) + '%'; bar.classList.toggle('over', el > target); }
   }
   if (m.brk) {
     const left = (m.brk.until - Date.now()) / 1000;
-    document.querySelectorAll('[data-tick="break"]').forEach(n => { n.innerHTML = clockHTML(left); });
-    document.querySelectorAll('[data-tick="mini"]').forEach(n => { n.textContent = fmtClock(left); });
-    const over = left <= 0;
-    if (breakWasOver === false && over) { renderFocus(); renderMini(); }
-    breakWasOver = over;
-  } else breakWasOver = null;
+    document.querySelectorAll('[data-tick="break"]').forEach(n => { n.innerHTML = clockHTML(left); n.classList.toggle('over', left < 0); });
+  }
+  const box = $('[data-tick="gapbox"]');
+  if (box && s && s.gap) {
+    const left = (s.gap.until - Date.now()) / 1000;
+    box.classList.toggle('over', left < 0);
+    box.querySelector('.gap-text').textContent = gapText(gapPlan(s), left);
+    box.querySelector('.gap-time').textContent = fmtClock(left);
+  }
+}
+
+function tick() {
+  if (!state.ready) return;
+  checkAway();
+  const m = state.meta;
+  if (m.session && !m.session.active && !m.session.gap) { openGap(m.session, m.session.lastAt); saveMeta(); render(); }
+  if (m.session?.active) tickStep(m.session);
+  else if (m.session?.gap) tickGap(m.session);
+  if (m.brk) tickBreak(m);
+  else breakWasOver = null;
+  showClocks();
   // Once a minute: idle sessions close, and the working screen's numbers catch up.
   const minute = Math.floor(Date.now() / 60000);
   if (minute !== lastMinute) {
     lastMinute = minute;
     if (expireIdleSession()) { render(); return; }
-    if (state.focusOpen && (s || m.brk)) renderFocus();
+    if (m.session?.active && !m.session.active.pausedAt) checkBreakDue(m.session);
+    if (state.focusOpen && (m.session || m.brk)) renderFocus();
   }
 }
 setInterval(tick, 1000);

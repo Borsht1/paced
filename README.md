@@ -3,8 +3,10 @@
 A to-do list that helps you work at a steady pace and balance work with free time.
 
 - Add a task and split it into small steps, with a guess of how many minutes each will take.
-- Press **Start**. Paced times each step and compares it with your guess.
+- Press **Start**. Paced counts down each step and stops you at the planned end to decide what's next.
+- Between steps a one-minute clock runs, then the next step starts by itself, so nothing is left un-timed.
 - It tells you when to take a break once you slow down, or to switch tasks when something is due soon.
+- Sound, notifications and the tab title reach you when you're not looking at Paced. Notifications need the page open in a desktop browser; on most phones you get sound and vibration only.
 - Try different ways of working (Paced breaks, Pomodoro, Long focus, Task rotation) and see which suits you.
 
 ## Running it
