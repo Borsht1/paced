@@ -20,3 +20,10 @@ When it runs as a Claude artifact on claude.ai, tasks are saved to your Claude a
 ```sh
 sh build-pages.sh
 ```
+
+## Accounts on the website
+
+Sign-in and saving across devices use Firebase, on the website only.
+
+- `firebase-config.js` holds the project's settings. Set it to `null` to run the site without accounts.
+- `firestore.rules` holds the privacy rules. Each person can read and change only their own tasks.

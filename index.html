@@ -1,4 +1,5 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}body{margin:0;font:14px system-ui}img{max-width:100%}[hidden]{display:none!important}</style></head><body><title>Paced Tasks</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}body{margin:0;font:14px system-ui}img{max-width:100%}[hidden]{display:none!important}</style></head><body><script src="firebase-config.js"></script>
+<title>Paced Tasks</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -289,6 +290,15 @@ body.has-mini .fab { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 .swatch.on { color: var(--ink); font-weight: 700; }
 .swatch.on i { outline: 3px solid var(--ink); outline-offset: 2px; }
 
+/* Sign-in */
+.auth-form { gap: 6px; }
+.auth-form .label { margin: 8px 0 2px; }
+.auth-form .btn.big { margin-top: 12px; width: 100%; }
+.auth-forgot { justify-self: center; }
+.ok-note { color: var(--zone); font-size: 14px; margin: 8px 0 0; }
+.auth-foot { display: grid; justify-items: center; gap: 8px; margin-top: 18px; text-align: center; }
+.auth-foot p { margin: 0; }
+
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%); z-index: 60;
   bottom: calc(100px + env(safe-area-inset-bottom, 0px));
@@ -407,7 +417,8 @@ const state = {
   // Calendar events from the earlier version stay saved but are no longer used.
   events: new Map(),
   view: 'home', layer: null, draft: null,
-  focusOpen: false, ask: null, howOpen: false, fEdit: false
+  focusOpen: false, ask: null, howOpen: false, fEdit: false,
+  auth: { mode: 'signin', email: '' }
 };
 
 const byDue = (a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.createdAt - b.createdAt;
@@ -518,31 +529,39 @@ const Store = {
   mode: 'loading', col: null, unsub: null, queue: new Map(), localTimer: null,
 
   async init() {
+    if (window.PACED_FIREBASE_CONFIG && await Account.init()) return;
     let db = null, user = null, uid = null;
     if (window.claude && typeof window.claude.use === 'function') {
       try { [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); } catch (e) {}
       if (user) { try { uid = await user.id(); } catch (e) {} }
     }
     if (db && uid) {
-      try {
-        this.col = db.collection('data/users/' + uid);
-        this.mode = 'cloud';
-        await new Promise(resolve => {
-          let first = true;
-          const done = () => { if (first) { first = false; resolve(); } };
-          const timer = setTimeout(() => { if (first) { this.toLocal('Your account storage didn’t answer, so tasks are saved in this browser for now.', true); done(); } }, 15000);
-          this.unsub = this.col.onSnapshot(snap => {
-            if (this.mode !== 'cloud') return;
-            this.applyDocs(snap.docs.filter(d => d.exists).map(d => [d.id, d.data()]));
-            clearTimeout(timer);
-            if (first) done(); else { clearStale(); render(); }
-          }, () => { clearTimeout(timer); this.toLocal('Lost the connection to your account, so changes are saved in this browser for now.', first); done(); });
-        });
-        return;
-      } catch (e) { this.toLocal(null, true); return; }
+      this.col = db.collection('data/users/' + uid);
+      await this.connect();
+      return;
     }
     this.mode = 'local';
     this.loadLocal();
+  },
+
+  // Follow the saved data in this.col, and wait for the first delivery.
+  async connect() {
+    this.connecting = true;
+    try {
+      this.mode = 'cloud';
+      await new Promise(resolve => {
+        let first = true;
+        const done = () => { if (first) { first = false; resolve(); } };
+        const timer = setTimeout(() => { if (first) { this.toLocal('Your account storage didn’t answer, so tasks are saved in this browser for now.', true); done(); } }, 15000);
+        this.unsub = this.col.onSnapshot(snap => {
+          if (this.mode !== 'cloud') return;
+          this.applyDocs(snap.docs.filter(d => d.exists).map(d => [d.id, d.data()]));
+          clearTimeout(timer);
+          if (first) done(); else { clearStale(); render(); }
+        }, () => { clearTimeout(timer); this.toLocal('Lost the connection to your account, so changes are saved in this browser for now.', first); done(); });
+      });
+    } catch (e) { this.toLocal(null, true); }
+    this.connecting = false;
   },
 
   applyDocs(docs) {
@@ -552,6 +571,7 @@ const Store = {
       else if (id.startsWith('t_')) tasks.set(id, normTask(id, d));
       else if (id.startsWith('e_')) events.set(id, clone(d));
     }
+    this.hadMeta = !!meta;
     // Docs with a write still on its way keep their local version.
     for (const id of this.queue.keys()) {
       if (id === 'meta') { meta = state.meta; continue; }
@@ -596,7 +616,7 @@ const Store = {
     this.mode = 'local';
     try { this.unsub && this.unsub(); } catch (e) {}
     this.queue.clear();
-    if (state.ready) this.saveLocal(); else this.loadLocal();
+    if (state.ready && !this.connecting) this.saveLocal(); else this.loadLocal();
     if (msg) setTimeout(() => toast(msg), quiet ? 400 : 0);
     if (state.ready) render();
   },
@@ -614,10 +634,113 @@ const Store = {
   },
 
   saveLocal() {
+    if (this.mode !== 'local') return;
     try { localStorage.setItem(KEY, JSON.stringify({ tasks: [...state.tasks.values()], events: [...state.events.values()], meta: state.meta })); } catch (e) {}
   }
 };
 window.addEventListener('pagehide', () => { if (Store.mode === 'local') Store.saveLocal(); });
+
+/* ---------- accounts (website only): sign-in and saving through Firebase ----------
+   Firebase keeps you signed in on each browser until you sign out. */
+const FIREBASE_SDK = 'https://www.gstatic.com/firebasejs/10.14.1';
+const GUEST_KEY = 'paced:guest';
+const Account = {
+  fb: null, auth: null, db: null, user: null,
+
+  async init() {
+    try {
+      const [app, auth, fs] = await Promise.all(['app', 'auth', 'firestore'].map(n => import(`${FIREBASE_SDK}/firebase-${n}.js`)));
+      const fbApp = app.initializeApp(window.PACED_FIREBASE_CONFIG);
+      this.fb = { ...auth, ...fs };
+      this.auth = auth.getAuth(fbApp);
+      this.db = fs.getFirestore(fbApp);
+    } catch (e) { this.fb = null; return false; } // can't reach Firebase: fall back to this browser
+    const user = await new Promise(resolve => { const off = this.fb.onAuthStateChanged(this.auth, u => { off(); resolve(u); }); });
+    if (user) { await this.enter(user); return true; }
+    let guest = false;
+    try { guest = !!localStorage.getItem(GUEST_KEY); } catch (e) {}
+    if (guest) { Store.mode = 'local'; Store.loadLocal(); } else Store.mode = 'signin';
+    return true;
+  },
+
+  // Each person's tasks live at users/<their id>/docs, which the privacy rules keep to them alone.
+  async enter(user) {
+    this.user = user;
+    const { collection, doc, setDoc, deleteDoc, onSnapshot } = this.fb;
+    const col = collection(this.db, 'users', user.uid, 'docs');
+    Store.col = {
+      doc: id => ({ set: d => setDoc(doc(col, id), d), delete: () => deleteDoc(doc(col, id)) }),
+      onSnapshot: (next, err) => onSnapshot(col, snap => {
+        if (snap.empty && snap.metadata.fromCache) return; // offline: an empty list here isn't the real answer
+        next({ docs: snap.docs.map(d => ({ id: d.id, exists: true, data: () => d.data() })) });
+      }, err)
+    };
+    await Store.connect();
+    if (Store.mode === 'cloud') this.moveLocalTasks();
+  },
+
+  // Tasks made in this browser before signing in move into the account, so nothing is left behind.
+  moveLocalTasks() {
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
+    if (!d) return;
+    let moved = 0;
+    for (const t of d.tasks || []) if (t && t.id && !state.tasks.has(t.id)) { saveTask(normTask(t.id, t)); moved++; }
+    for (const e of d.events || []) if (e && e.id && !state.events.has(e.id)) { state.events.set(e.id, e); Store.write(e.id, e); }
+    if (d.meta && !Store.hadMeta) { state.meta = normMeta(d.meta); saveMeta(); }
+    try { localStorage.removeItem(KEY); localStorage.removeItem(GUEST_KEY); } catch (e) {}
+    if (moved) setTimeout(() => toast(`Moved ${moved} ${moved === 1 ? 'task' : 'tasks'} from this browser into your account.`), 400);
+  },
+
+  async submit(mode, email, password) {
+    const f = this.fb, go = mode === 'signup' ? f.createUserWithEmailAndPassword : f.signInWithEmailAndPassword;
+    const cred = await go(this.auth, email, password);
+    await this.enter(cred.user);
+  },
+
+  resetPassword(email) { return this.fb.sendPasswordResetEmail(this.auth, email); },
+
+  clearScreen() {
+    state.tasks = new Map(); state.events = new Map(); state.meta = defaultMeta(); speedCache = null;
+    state.view = 'home'; state.layer = null; state.focusOpen = false; state.ask = null; state.fEdit = false;
+  },
+
+  async signOut() {
+    for (let i = 0; i < 30 && Store.queue.size; i++) await sleep(100); // let saves finish first
+    try { Store.unsub && Store.unsub(); } catch (e) {}
+    await this.fb.signOut(this.auth);
+    this.user = null; Store.col = null; Store.unsub = null; Store.queue.clear();
+    Store.mode = 'signin';
+    state.auth = { mode: 'signin', email: '' };
+    this.clearScreen();
+  },
+
+  continueAsGuest() {
+    try { localStorage.setItem(GUEST_KEY, '1'); } catch (e) {}
+    Store.mode = 'local';
+    Store.loadLocal();
+  },
+
+  showSignIn() {
+    Store.saveLocal();
+    Store.mode = 'signin';
+    this.clearScreen();
+  }
+};
+
+function authError(e) {
+  return {
+    'auth/invalid-credential': 'That email or password isn’t right.',
+    'auth/wrong-password': 'That email or password isn’t right.',
+    'auth/user-not-found': 'That email or password isn’t right.',
+    'auth/email-already-in-use': 'There’s already an account with that email. Try signing in instead.',
+    'auth/weak-password': 'Use a password with at least 6 characters.',
+    'auth/invalid-email': 'That doesn’t look like an email address.',
+    'auth/too-many-requests': 'Too many tries. Wait a few minutes, then try again.',
+    'auth/network-request-failed': 'Couldn’t reach the sign-in service. Check your connection and try again.',
+    'auth/operation-not-allowed': 'Email sign-in isn’t turned on yet.'
+  }[e && e.code] || 'Something went wrong. Please try again.';
+}
 
 function saveTask(t) { state.tasks.set(t.id, t); speedCache = null; Store.write(t.id, t); }
 function removeTask(id) { state.tasks.delete(id); speedCache = null; Store.write(id, null); }
@@ -702,17 +825,60 @@ function render() {
   renderMini();
   renderFocus();
   const fab = $('#fab');
-  fab.hidden = !state.ready || state.view !== 'home' || !activeTasks().length;
+  fab.hidden = !state.ready || Store.mode === 'signin' || state.view !== 'home' || !activeTasks().length;
   fab.innerHTML = ICON.plus + 'New task';
 }
 
 function renderMain() {
   const main = $('#main');
   if (!state.ready) { main.innerHTML = '<div class="loading"><span class="pulse"></span>Loading your tasks…</div>'; return; }
+  if (Store.mode === 'signin') { main.innerHTML = authHTML(); return; }
   main.innerHTML = state.view === 'archive' ? archiveHTML() : homeHTML();
 }
 
-const savedLine = () => `<p class="saved">${Store.mode === 'cloud' ? 'Saved to your account' : 'Saved in this browser'}</p>`;
+function authHTML() {
+  const a = state.auth, up = a.mode === 'signup';
+  return `<div class="brand-row"><div class="brand">${ICON.mark}Paced</div></div>
+  <h1>${up ? 'Create your account' : 'Sign in'}</h1>
+  <p class="sub">See your tasks on any computer or phone.</p>
+  <form class="panel auth-form" id="auth-form">
+    <label class="label" for="auth-email">Email</label>
+    <input id="auth-email" class="text-input" type="email" autocomplete="username" required value="${esc(a.email)}">
+    <label class="label" for="auth-password">Password</label>
+    <input id="auth-password" class="text-input" type="password" autocomplete="${up ? 'new-password' : 'current-password'}" required>
+    ${up ? '<p class="help" style="margin:4px 0 0">Use at least 6 characters.</p>' : ''}
+    <p class="err" id="auth-err" hidden></p>
+    <p class="ok-note" id="auth-note" hidden></p>
+    <button type="submit" class="btn primary big" id="auth-go">${up ? 'Create account' : 'Sign in'}</button>
+    ${up ? '' : '<button type="button" class="link small auth-forgot" data-act="auth-forgot">Forgot password?</button>'}
+  </form>
+  <div class="auth-foot">
+    <p>${up ? 'Already have an account?' : 'New to Paced?'} <button class="link" data-act="auth-switch">${up ? 'Sign in' : 'Create an account'}</button></p>
+    <p class="muted">You’ll stay signed in on this device until you sign out.</p>
+    <button class="link small" data-act="auth-guest">Continue without an account</button>
+  </div>`;
+}
+function authStatus(err, note) {
+  const e = $('#auth-err'), n = $('#auth-note');
+  if (e) { e.textContent = err || ''; e.hidden = !err; }
+  if (n) { n.textContent = note || ''; n.hidden = !note; }
+}
+async function submitAuth() {
+  const a = state.auth, btn = $('#auth-go');
+  a.email = $('#auth-email').value.trim();
+  const password = $('#auth-password').value;
+  authStatus();
+  btn.disabled = true; btn.textContent = a.mode === 'signup' ? 'Creating your account…' : 'Signing in…';
+  try {
+    await Account.submit(a.mode, a.email, password);
+    clearStale(); render();
+  } catch (e) {
+    authStatus(authError(e));
+    btn.disabled = false; btn.textContent = a.mode === 'signup' ? 'Create account' : 'Sign in';
+  }
+}
+
+const savedLine = () => `<p class="saved">${Store.mode === 'cloud' ? 'Saved to your account' : 'Saved in this browser'}${Account.fb && !Account.user ? ' · <button class="link small" data-act="auth-show">Sign in to use it on other devices</button>' : ''}</p>`;
 
 function homeHTML() {
   const list = activeTasks();
@@ -846,6 +1012,10 @@ function lookHTML(enter) {
     <p class="help" style="margin-top:8px">Auto matches your device.</p>
     <h3 class="label">Color</h3>
     <div class="swatches">${Object.entries(COLORS).map(([id, c]) => `<button class="swatch${color === id ? ' on' : ''}" data-act="look-color" data-v="${id}" aria-pressed="${color === id}"><i style="background:${c.light[0]}">${color === id ? ICON.check : ''}</i>${c.name}</button>`).join('')}</div>
+    ${Account.fb ? `<h3 class="label">Account</h3>
+    ${Account.user
+      ? `<p class="help">Signed in as ${esc(Account.user.email)}</p><button class="btn ghost" data-act="auth-signout">Sign out</button>`
+      : '<p class="help">Sign in to see your tasks on any computer or phone.</p><button class="btn ghost" data-act="auth-show">Sign in</button>'}` : ''}
     <div class="sheet-foot"><span></span><button class="btn primary" data-act="close-layer">Done</button></div>
   </section>`;
 }
@@ -1605,6 +1775,19 @@ document.addEventListener('click', e => {
   const s = state.meta.session;
   switch (act) {
     case 'open-add': openAdd(); break;
+    case 'auth-switch': state.auth.mode = state.auth.mode === 'signup' ? 'signin' : 'signup'; render(); break;
+    case 'auth-guest': Account.continueAsGuest(); render(); break;
+    case 'auth-show': state.auth.mode = 'signin'; Account.showSignIn(); renderLayer(); render(); break;
+    case 'auth-signout': Account.signOut().then(() => { renderLayer(); render(); toast('You’re signed out.'); }); break;
+    case 'auth-forgot': {
+      const email = $('#auth-email').value.trim();
+      if (!email) { authStatus('Type your email above, then tap Forgot password.'); $('#auth-email').focus(); break; }
+      state.auth.email = email; authStatus();
+      Account.resetPassword(email)
+        .then(() => authStatus('', 'If there’s an account for that email, a reset link is on its way. Check your inbox.'))
+        .catch(e => authStatus(authError(e)));
+      break;
+    }
     case 'close-layer': closeLayer(); break;
     case 'save-new': saveNew(); break;
     case 'draft-remove': state.draft.steps.splice(+b.dataset.i, 1); renderDraftSteps(); break;
@@ -1692,7 +1875,8 @@ document.addEventListener('click', e => {
 document.addEventListener('submit', e => {
   e.preventDefault();
   const f = e.target;
-  if (f.id === 'draft-add') addDraftStep();
+  if (f.id === 'auth-form') submitAuth();
+  else if (f.id === 'draft-add') addDraftStep();
   else if (f.id === 'est-form') setEstimateAndStart(parseMin($('#est-input').value));
   else if (f.id === 'split-form') splitStep($('#split-name').value.trim(), parseMin($('#split-min').value));
   else if (f.id === 'detail-add' || f.id === 'fstep-add') {
@@ -1714,7 +1898,8 @@ document.addEventListener('input', e => {
     if (el.value.includes('\n')) el.value = el.value.replace(/\s*\n+\s*/g, ' ');
     autosize(el);
   }
-  if (el.id === 'new-title') { state.draft.title = el.value; if (el.value.trim()) $('#new-err').hidden = true; }
+  if (el.id === 'auth-email') state.auth.email = el.value;
+  else if (el.id === 'new-title') { state.draft.title = el.value; if (el.value.trim()) $('#new-err').hidden = true; }
   else if (el.id === 'new-due') state.draft.due = el.value || null;
   else if (el.id === 'split-name' && state.ask) state.ask.name = el.value;
   else if (el.id === 'split-min' && state.ask) state.ask.min = parseMin(el.value);

@@ -6,6 +6,7 @@
 cd "$(dirname "$0")" || exit 1
 {
   printf '%s' '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}body{margin:0;font:14px system-ui}img{max-width:100%}[hidden]{display:none!important}</style></head><body>'
+  printf '%s\n' '<script src="firebase-config.js"></script>'
   cat paced.html
   printf '%s\n' '</body></html>'
 } > index.html
