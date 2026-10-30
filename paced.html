@@ -458,6 +458,8 @@ const SNOOZE_MIN = 10; // how long "Not now" holds off a break
 const BREAK_GIVE_UP_MIN = 60; // a break this far past its end counts as over
 const IDLE_MIN = 5; // minutes without using the computer before a step pauses, unless you change it in Settings
 const IDLE_RESUME_MIN = 60; // idle for longer than this and you've moved on, so the step stays paused
+const CHECK_MIN = 15; // minutes between "Still working?" notifications, unless you change it in Settings
+const CHECK_WAIT_MIN = 3; // how long a "Still working?" notification waits for an answer
 
 function dueInfo(t) {
   if (!t.due) return null;
@@ -1090,7 +1092,17 @@ function idleHTML() {
   return `<h3 class="label">Pause when idle</h3>
     <p class="help">If you stop using your computer, Paced takes that time off the step and carries on when you’re back.</p>
     <div class="seg four">${btn(0, 'Off')}${btn(5, '5 min')}${btn(10, '10 min')}${btn(15, '15 min')}</div>
-    <p class="help">${extIdle ? 'The Paced Timer extension is watching for this, so it works in any app.' : 'Without the Paced Timer extension, this only works while Paced is the window you’re using, and not on phones.'}</p>`;
+    <p class="help">${extIdle ? 'The Paced Timer extension is watching for this, so it works in any app.' : 'Without the Paced Timer extension, this only works while Paced is the window you’re using, and not on phones.'}</p>
+    ${!extIdle && cur ? checkInHTML() : ''}`;
+}
+
+function checkInHTML() {
+  const cur = checkMin();
+  const btn = (v, label) => `<button class="seg-btn${cur === v ? ' on' : ''}" data-act="check-min" data-v="${v}" aria-pressed="${cur === v}">${label}</button>`;
+  return `<h3 class="label">“Still working?” check-ins</h3>
+    <p class="help">When you’re in another app, Paced can’t tell if you’re there, so it asks with a notification. Click it to keep going. With no answer in ${CHECK_WAIT_MIN} minutes, the step pauses from when Paced asked.</p>
+    <div class="seg four">${btn(0, 'Off')}${btn(10, '10 min')}${btn(15, '15 min')}${btn(25, '25 min')}</div>
+    ${Alert.notifyState() === 'on' ? '' : '<p class="help">Check-ins need notifications, so they won’t run until those are on.</p>'}`;
 }
 
 function lookHTML(enter) {
@@ -1661,6 +1673,17 @@ const Alert = {
     });
   },
 
+  // A question you answer by clicking the notification, without leaving what you're doing.
+  ask(title, body, onAnswer) {
+    if (this.notifyState() !== 'on') return null;
+    try {
+      const n = new Notification(title, { body, tag: 'paced-check', renotify: true, requireInteraction: true });
+      n.onclick = e => { e.preventDefault(); n.close(); onAnswer(); };
+      if (state.meta.sound !== false) this.chime();
+      return n;
+    } catch (e) { return null; }
+  },
+
   send(title, body) {
     if (state.meta.sound !== false) this.chime();
     try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (e) {}
@@ -1742,7 +1765,9 @@ window.addEventListener('message', e => {
 /* ---------- idle: a step stops counting when you stop using the computer, and carries on when you're back ---------- */
 let extIdle = false; // the extension watches every app. Without it, Paced only sees its own window.
 let lastInput = Date.now(), backWaiting = false;
+let checkIn = null; // the "Still working?" notification that's waiting for you
 const idleMin = () => state.meta.idleMin ?? IDLE_MIN; // 0 means off
+const checkMin = () => state.meta.checkMin ?? CHECK_MIN; // 0 means off
 // A phone can sit untouched beside you while you work, so only a mouse and keyboard count here.
 const seesOwnInput = window.matchMedia('(pointer: fine)').matches;
 
@@ -1779,6 +1804,7 @@ function backFromIdle() {
 
 function noteInput() {
   lastInput = Date.now();
+  endCheckIn();
   if (state.meta.session?.active?.idlePaused) backFromIdle();
 }
 ['pointermove', 'pointerdown', 'keydown', 'wheel', 'focus'].forEach(n => window.addEventListener(n, noteInput, { passive: true }));
@@ -1788,6 +1814,34 @@ window.addEventListener('blur', () => { if (!extIdle) noteInput(); });
 function watchIdle() {
   const min = idleMin();
   if (min && !extIdle && seesOwnInput && document.hasFocus() && Date.now() - lastInput >= min * 60e3) goIdle(lastInput);
+}
+
+function endCheckIn() {
+  if (!checkIn) return;
+  checkIn.note.close();
+  checkIn = null;
+}
+
+// In another app Paced can't see you, so it asks. Nobody answering is the only sign you've gone.
+function watchCheckIn() {
+  const a = state.meta.session?.active, now = Date.now();
+  if (checkIn && (!a || a.stepId !== checkIn.stepId || !!a.pausedAt !== !!checkIn.paused)) endCheckIn();
+  if (!a || a.pausedAt || extIdle || !idleMin() || !checkMin() || document.hasFocus()) return;
+  const st = findStep(a.taskId, a.stepId), stepId = a.stepId;
+  if (checkIn) {
+    if (now - checkIn.at < CHECK_WAIT_MIN * 60e3) return;
+    goIdle(checkIn.at);
+    if (!a.idlePaused) return;
+    endCheckIn();
+    const note = Alert.ask(`Paused “${st.title}”`, 'No answer, so Paced paused your step. Click to carry on.', backFromIdle);
+    if (note) checkIn = { note, stepId, paused: true };
+    return;
+  }
+  const target = targetSec(a, st);
+  if (target != null && target - elapsedSec(a) <= CHECK_WAIT_MIN * 60) return; // "Time's up" is about to ask anyway
+  if (now - Math.max(lastInput, a.startedAt) < checkMin() * 60e3) return;
+  const note = Alert.ask('Still working?', `Click to keep the timer going on “${st.title}”.`, noteInput);
+  if (note) checkIn = { note, stepId, at: now };
 }
 
 /* ---------- actions: tasks ---------- */
@@ -2289,6 +2343,7 @@ document.addEventListener('click', e => {
     }
     case 'alert-sound': state.meta.sound = v === 'on'; saveMeta(); renderLayer(); if (state.meta.sound) Alert.chime(); break;
     case 'idle-min': state.meta.idleMin = +v; saveMeta(); renderLayer(); break;
+    case 'check-min': state.meta.checkMin = +v; saveMeta(); renderLayer(); break;
     case 'alert-notify': Promise.resolve(Alert.askPermission()).then(() => renderLayer()); break;
   }
 });
@@ -2525,6 +2580,7 @@ function tick() {
   checkAway();
   if (backWaiting) { backWaiting = false; backFromIdle(); }
   watchIdle();
+  watchCheckIn();
   const m = state.meta;
   if (m.session && !m.session.active && !m.session.gap) { openGap(m.session, m.session.lastAt); saveAlerts(); render(); }
   if (m.session?.active) tickStep(m.session);
