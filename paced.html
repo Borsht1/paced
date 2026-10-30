@@ -268,6 +268,10 @@ body.has-mini .fab { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 .panel-head h3 { margin: 0; font: 700 18px/1.2 var(--font-display); }
 .panel-head .link { display: inline-flex; align-items: center; gap: 6px; }
 .fsteps { list-style: none; margin: 0; padding: 0; display: grid; }
+.record-total { margin: 12px 0 0; font-weight: 600; }
+.record { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; font-size: 14px; }
+.record li { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 10px; overflow-wrap: anywhere; }
+.record time { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .fstep { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .fstep:last-child { border-bottom: none; }
 .fstep-main { display: grid; gap: 2px; min-width: 0; }
@@ -431,7 +435,7 @@ function normTask(id, d) {
 }
 
 const state = {
-  ready: false, tasks: new Map(), meta: defaultMeta(),
+  ready: false, tasks: new Map(), records: new Map(), meta: defaultMeta(),
   // Calendar events from the earlier version stay saved but are no longer used.
   events: new Map(),
   view: 'home', layer: null, draft: null,
@@ -604,21 +608,24 @@ const Store = {
   },
 
   applyDocs(docs) {
-    const tasks = new Map(), events = new Map(); let meta = null;
+    const tasks = new Map(), events = new Map(), records = new Map(); let meta = null;
     for (const [id, d] of docs) {
       if (id === 'meta') meta = d;
       else if (id.startsWith('t_')) tasks.set(id, normTask(id, d));
       else if (id.startsWith('e_')) events.set(id, clone(d));
+      else if (id.startsWith('r_')) records.set(id, clone(d));
     }
     this.hadMeta = !!meta;
     // Docs with a write still on its way keep their local version.
     for (const id of this.queue.keys()) {
       if (id === 'meta') { meta = state.meta; continue; }
+      if (id.startsWith('r_')) { const r = state.records.get(id); if (r) records.set(id, r); else records.delete(id); continue; }
       const loc = state.tasks.get(id);
       if (loc) tasks.set(id, loc); else tasks.delete(id);
     }
     state.tasks = tasks;
     state.events = events;
+    state.records = records;
     state.meta = normMeta(meta);
     speedCache = null;
   },
@@ -667,6 +674,7 @@ const Store = {
       const d = JSON.parse(raw);
       state.tasks = new Map((d.tasks || []).filter(t => t && t.id).map(t => [t.id, normTask(t.id, t)]));
       state.events = new Map((d.events || []).filter(e => e && e.id).map(e => [e.id, e]));
+      state.records = new Map((d.records || []).filter(r => r && r.id).map(r => [r.id, r]));
       state.meta = normMeta(d.meta);
       speedCache = null;
     } catch (e) {}
@@ -674,7 +682,7 @@ const Store = {
 
   saveLocal() {
     if (this.mode !== 'local') return;
-    try { localStorage.setItem(KEY, JSON.stringify({ tasks: [...state.tasks.values()], events: [...state.events.values()], meta: state.meta })); } catch (e) {}
+    try { localStorage.setItem(KEY, JSON.stringify({ tasks: [...state.tasks.values()], events: [...state.events.values()], records: [...state.records.values()], meta: state.meta })); } catch (e) {}
   }
 };
 window.addEventListener('pagehide', () => { if (Store.mode === 'local') Store.saveLocal(); });
@@ -726,6 +734,7 @@ const Account = {
     let moved = 0;
     for (const t of d.tasks || []) if (t && t.id && !state.tasks.has(t.id)) { saveTask(normTask(t.id, t)); moved++; }
     for (const e of d.events || []) if (e && e.id && !state.events.has(e.id)) { state.events.set(e.id, e); Store.write(e.id, e); }
+    for (const r of d.records || []) if (r && r.id && !state.records.has(r.id)) saveRecord(r);
     if (d.meta && !Store.hadMeta) { state.meta = normMeta(d.meta); saveMeta(); }
     try { localStorage.removeItem(KEY); localStorage.removeItem(GUEST_KEY); } catch (e) {}
     if (moved) setTimeout(() => toast(`Moved ${moved} ${moved === 1 ? 'task' : 'tasks'} from this browser into your account.`), 400);
@@ -740,7 +749,7 @@ const Account = {
   resetPassword(email) { return this.fb.sendPasswordResetEmail(this.auth, email); },
 
   clearScreen() {
-    state.tasks = new Map(); state.events = new Map(); state.meta = defaultMeta(); speedCache = null;
+    state.tasks = new Map(); state.events = new Map(); state.records = new Map(); state.meta = defaultMeta(); speedCache = null;
     state.view = 'home'; state.layer = null; state.focusOpen = false; state.ask = null; state.fEdit = false;
   },
 
@@ -805,11 +814,15 @@ function expireIdleSession(force) {
   const m = state.meta, s = m.session, now = Date.now();
   if (m.brk && now - m.brk.until >= BREAK_GIVE_UP_MIN * 60e3) {
     logSlip('break', BREAK_GIVE_UP_MIN * 60);
+    logEvent('break', { at: m.brk.startedAt, end: m.brk.until, min: m.brk.min });
     m.lastBreakEnd = m.brk.until + BREAK_GIVE_UP_MIN * 60e3;
     m.brk = null;
+    endRun();
     saveMeta();
     return true;
   }
+  // Steps ticked off with no timer running make a record too, once they've stopped coming.
+  if (m.run && !s && !m.brk && now - runEnd(m.run.events) >= 30 * 60e3) { endRun(); saveMeta(); return true; }
   if (!s || s.active || m.brk || (state.focusOpen && !force)) return false;
   const last = s.lastAt || s.startedAt || 0;
   if (now - last < 30 * 60e3) return false;
@@ -817,6 +830,7 @@ function expireIdleSession(force) {
   m.lastStop = { at: last, workMin: Math.round(assess(m, last).workMin) };
   recordSession(s, last);
   m.session = null;
+  endRun();
   if (state.ask && state.ask.type !== 'history') state.ask = null;
   saveMeta();
   return true;
@@ -1053,14 +1067,15 @@ function liveClock(now = Date.now()) {
 function renderLayer(enter) {
   const el = $('#layer'), L = state.layer;
   const t = L && L.type === 'detail' ? state.tasks.get(L.id) : null;
-  if (!L || (L.type === 'detail' && !t)) {
+  const rec = L && L.type === 'record' ? state.records.get(L.id) : null;
+  if (!L || (L.type === 'detail' && !t) || (L.type === 'record' && !rec)) {
     state.layer = null; el.hidden = true; el.innerHTML = '';
     document.body.classList.toggle('locked', state.focusOpen);
     return;
   }
   el.hidden = false;
   document.body.classList.add('locked');
-  el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : detailHTML(t, enter));
+  el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : L.type === 'record' ? recordHTML(rec, enter) : detailHTML(t, enter));
   autosizeAll(el);
 }
 const sheetOpen = (enter, label) => `<section class="sheet${enter ? ' enter' : ''}" role="dialog" aria-modal="true" aria-label="${esc(label)}">`;
@@ -1120,6 +1135,43 @@ function lookHTML(enter) {
     ${Account.user
       ? `<p class="help">Signed in as ${esc(Account.user.email)}</p><button class="btn ghost" data-act="auth-signout">Sign out</button>`
       : '<p class="help">Sign in to see your tasks on any computer or phone.</p><button class="btn ghost" data-act="auth-show">Sign in</button>'}` : ''}
+    <div class="sheet-foot"><span></span><button class="btn primary" data-act="close-layer">Done</button></div>
+  </section>`;
+}
+
+/* ----- the summary at the end of a session ----- */
+function recordTotals(rec) {
+  const sum = type => rec.events.filter(e => e.type === type).reduce((a, e) => a + (e.took ?? (e.end - e.at) / 1000), 0);
+  return { worked: sum('done') + sum('aside'), breaks: sum('break'), paused: sum('pause'), done: rec.events.filter(e => e.type === 'done').length };
+}
+
+function eventText(e) {
+  const len = fmtDur((e.end - e.at) / 1000);
+  switch (e.type) {
+    case 'done': return `${e.title}${e.est ? `, planned ${fmtMin(e.est)}` : ''}, took ${fmtDur(e.took)}`;
+    case 'aside': return `${{ skip: 'Skipped', switch: 'Switched away from' }[e.why] || 'Stopped'} ${e.title} after ${fmtDur(e.took)}`;
+    case 'extend': return `Added ${fmtMin(e.min)} to ${e.title}`;
+    case 'split': return `Split ${e.title}, leaving ${e.rest}`;
+    case 'pause': return e.away ? `Away for ${len}` : e.stopped ? `Timer stopped for ${len}` : `Paused for ${len}${e.idle ? ' (idle)' : ''}`;
+    case 'break': return `Break, ${len}`;
+    case 'gap': return `Nothing running for ${len}`;
+    case 'checkin': return 'Answered “Still working?”';
+    case 'ticked': return `Ticked off ${e.title}, no time recorded`;
+  }
+  return '';
+}
+
+function recordHTML(rec, enter) {
+  const sum = recordTotals(rec), day = dateKey(new Date(rec.startedAt));
+  const totals = [`${fmtDur(sum.worked)} worked`, `${sum.done} ${sum.done === 1 ? 'step' : 'steps'} done`];
+  if (sum.breaks >= 60) totals.push(`${fmtDur(sum.breaks)} break`);
+  if (sum.paused >= 60) totals.push(`${fmtDur(sum.paused)} paused`);
+  return `${sheetOpen(enter, 'Your session')}${sheetHead('Your session')}
+    <p class="sub">${day === dateKey() ? '' : esc(fmtDayShort(day)) + ', '}${fmtTime(rec.startedAt)} to ${fmtTime(rec.endedAt)}</p>
+    <p class="record-total">${esc(totals.join(' · '))}</p>
+    <ol class="record">${rec.events.map(e => `<li><time>${fmtTime(e.at)}</time><span>${esc(eventText(e))}</span></li>`).join('')}</ol>
+    <label class="label" for="record-note">Note <span class="muted">(optional)</span></label>
+    <textarea id="record-note" class="text-input" rows="2" maxlength="500" placeholder="What got done, or what got in the way?">${esc(rec.note || '')}</textarea>
     <div class="sheet-foot"><span></span><button class="btn primary" data-act="close-layer">Done</button></div>
   </section>`;
 }
@@ -1785,7 +1837,7 @@ function backFromIdle() {
   const a = state.meta.session?.active;
   if (!a || !a.idlePaused) return;
   if (Date.now() < syncUntil) { backWaiting = true; return; } // this tab may be out of date until your account catches up
-  const sec = (Date.now() - a.pausedAt) / 1000, stepId = a.stepId;
+  const sec = (Date.now() - a.pausedAt) / 1000, stepId = a.stepId, from = a.pausedAt;
   if (sec > IDLE_RESUME_MIN * 60) a.idlePaused = false;
   else resumeStep(a);
   saveMeta(); render(); shareClock();
@@ -1795,6 +1847,7 @@ function backFromIdle() {
     const now = state.meta.session?.active;
     if (!now || now.stepId !== stepId) return;
     now.pausedMs -= sec * 1000;
+    if (state.meta.run) state.meta.run.events = state.meta.run.events.filter(e => !(e.type === 'pause' && e.at === from));
     saveMeta(); render();
   };
   const say = () => toast(`Paused for ${fmtDur(sec)} while you were idle.`, 'I was working', addBack);
@@ -1840,7 +1893,7 @@ function watchCheckIn() {
   const target = targetSec(a, st);
   if (target != null && target - elapsedSec(a) <= CHECK_WAIT_MIN * 60) return; // "Time's up" is about to ask anyway
   if (now - Math.max(lastInput, a.startedAt) < checkMin() * 60e3) return;
-  const note = Alert.ask('Still working?', `Click to keep the timer going on “${st.title}”.`, noteInput);
+  const note = Alert.ask('Still working?', `Click to keep the timer going on “${st.title}”.`, () => { logEvent('checkin'); saveMeta(); noteInput(); });
   if (note) checkIn = { note, stepId, at: now };
 }
 
@@ -1908,6 +1961,9 @@ function toggleStep(id, sid) {
   st.doneAt = st.done ? Date.now() : null;
   if (!st.done) st.actual = null;
   clearActiveIf(a => a.stepId === sid);
+  if (st.done) logEvent('ticked', { task: t.title, title: st.title, stepId: sid });
+  else if (state.meta.run) state.meta.run.events = state.meta.run.events.filter(e => e.stepId !== sid);
+  saveMeta();
   if (maybeArchive(t, before)) state.layer = null;
   saveTask(t);
   renderLayer(); render();
@@ -1937,7 +1993,8 @@ function completeTask(id) {
   const before = clone(t);
   if (state.meta.session?.active?.taskId === id) finishStep(); // the running step keeps its time
   if (t.archived) return;
-  t.steps.forEach(s => { if (!s.done) { s.done = true; s.doneAt = Date.now(); } });
+  t.steps.forEach(s => { if (!s.done) { s.done = true; s.doneAt = Date.now(); logEvent('ticked', { task: t.title, title: s.title, stepId: s.id }); } });
+  saveMeta();
   t.archived = true; t.completedAt = Date.now();
   archiveToast(t, before);
   saveTask(t); render();
@@ -1956,9 +2013,55 @@ function logSlip(kind, sec) {
   m.slips = [...(m.slips || []), { kind, sec: Math.round(sec), at: Date.now() }].slice(-200);
 }
 
+/* ---------- the record of a session: what you did from your first step until you stop, breaks included ---------- */
+const RECORDS_KEPT = 200;
+// An internal session ends at every break, so the record runs alongside it in m.run.
+function logEvent(type, data) {
+  const m = state.meta, at = Date.now();
+  if (!m.run) m.run = { id: newId('r'), startedAt: at, events: [] };
+  m.run.events = [...m.run.events, { type, at, ...data }].slice(-400);
+}
+const logStepTime = (type, a, st, t, took, data) => logEvent(type, { at: a.startedAt, end: Date.now(), task: t.title, title: st.title, est: st.est, took: Math.round(took), ...data });
+function logPause(a) {
+  if (!a.pausedAt || Date.now() - a.pausedAt < 30e3) return;
+  logEvent('pause', { at: a.pausedAt, end: Date.now(), idle: !!a.idlePaused, stopped: !!a.autoStopped });
+}
+const runEnd = events => Math.max(...events.map(e => e.end || e.at));
+
+function saveRecord(r) {
+  state.records.set(r.id, r);
+  Store.write(r.id, r);
+  [...state.records.values()].sort((a, b) => b.startedAt - a.startedAt).slice(RECORDS_KEPT).forEach(x => { state.records.delete(x.id); Store.write(x.id, null); });
+}
+
+function endRun() {
+  const m = state.meta, run = m.run;
+  if (!run) return;
+  m.run = null;
+  const events = [...run.events].sort((a, b) => a.at - b.at);
+  while (events.length && events[events.length - 1].type === 'gap') events.pop(); // waiting after your last step isn't part of it
+  if (!events.length) return;
+  const rec = { id: run.id, startedAt: events[0].at, endedAt: runEnd(events), events };
+  saveRecord(rec);
+  if (recordTotals(rec).worked >= 60) m.recordToShow = rec.id;
+}
+
+// Sessions often end while you're gone, so the summary waits until you're back.
+function showRecord() {
+  const m = state.meta;
+  if (!m.recordToShow || m.session || m.brk || state.layer || state.focusOpen || !state.records.has(m.recordToShow)) return;
+  state.layer = { type: 'record', id: m.recordToShow };
+  m.recordToShow = null;
+  saveMeta();
+  renderLayer(true);
+}
+
 function openGap(s, from = Date.now()) { s.gap = { until: from + GAP_SEC * 1000, alerts: 0 }; }
 function closeGap(s, at = Date.now()) {
-  if (s.gap) logSlip('gap', (at - s.gap.until) / 1000);
+  if (s.gap) {
+    logSlip('gap', (at - s.gap.until) / 1000);
+    if (at - s.gap.until >= 60e3) logEvent('gap', { at: s.gap.until, end: at });
+  }
   s.gap = null;
 }
 // What happens when the clock between steps runs out: the next step or a due break starts by itself, or it waits for you.
@@ -2017,6 +2120,7 @@ function startStep(taskId, stepId) {
 }
 
 function resumeStep(a) {
+  logPause(a);
   if (a.pausedAt) { a.pausedMs += Date.now() - a.pausedAt; a.pausedAt = null; }
   a.autoStopped = false; a.idlePaused = false;
 }
@@ -2037,6 +2141,7 @@ function extendStep(min) {
   a.alerts = 0;
   a.estLow = true; // the plan changed mid-step, so this one doesn't count toward your speed
   state.ask = null;
+  logEvent('extend', { title: findStep(a.taskId, a.stepId)?.title, min });
   saveMeta(); render();
   toast(`Okay, ${fmtMin(min)} more. This step won’t count against your speed.`);
 }
@@ -2048,6 +2153,7 @@ function shortenStep(a, sec) {
   a.alerts = 0; a.okSec = 0;
   a.estLow = true; // the time is a best guess now, so this one doesn't count toward your speed
   logSlip('away', before - to);
+  if (before - to >= 30) logEvent('pause', { at: Date.now() - (before - to) * 1000, end: Date.now(), away: true });
   return to;
 }
 
@@ -2075,6 +2181,8 @@ function finishStep() {
   const counts = !!st.est && !a.estLow && !a.carry;
   const pace = st.est ? clamp(st.est * 60 / Math.max(sec, 20), 0.25, 3) : null;
   s.log.push({ taskId: t.id, stepId: st.id, title: st.title, est: st.est, actual: sec, worked, pace, excluded: !counts, feel: null });
+  logPause(a);
+  logStepTime('done', a, st, t, worked);
   s.active = null; s.taskId = t.id; s.lastAt = Date.now();
   openGap(s);
   const countedN = s.log.filter(l => l.pace != null && !l.excluded).length;
@@ -2085,11 +2193,12 @@ function finishStep() {
 }
 
 // Put the running step aside, keeping the time spent on it, so you can come back to it later.
-function setAside(s) {
+function setAside(s, why) {
   const a = s.active; if (!a) return;
   const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
   const el = elapsedSec(a);
-  if (st) { st.spent = Math.round(el); saveTask(t); }
+  logPause(a);
+  if (st) { st.spent = Math.round(el); saveTask(t); logStepTime('aside', a, st, t, el - (a.carry || 0), { why }); }
   s.partialSec = (s.partialSec || 0) + Math.max(0, el - (a.carry || 0));
   s.active = null; s.lastAt = Date.now();
 }
@@ -2098,7 +2207,7 @@ function switchStep(stepId) {
   const s = state.meta.session, tid = focusTaskId();
   if (!s || !tid) return;
   if (s.active && s.active.stepId === stepId) return;
-  if (s.active) setAside(s);
+  if (s.active) setAside(s, 'switch');
   startStep(tid, stepId);
 }
 
@@ -2107,7 +2216,7 @@ function skipStep() {
   const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
   const next = nextStep(t, { skipped: [...(s.skipped || []), a.stepId] }, a.stepId);
   if (!next) { toast('That’s the last step left in this task.'); return; }
-  setAside(s);
+  setAside(s, 'skip');
   s.skipped = [...new Set([...(s.skipped || []), st.id])];
   startStep(t.id, next.id);
   toast(`Skipped “${st.title}” for now. It’s still in your steps.`);
@@ -2123,6 +2232,7 @@ function splitStep(name, min) {
   a.estLow = true; // the plan changed mid-step, so this one doesn't count toward your speed
   state.ask = null;
   if (document.activeElement) document.activeElement.blur();
+  logEvent('split', { title: st.title, rest: rest.title });
   finishStep();
   toast(`Split it. “${rest.title}” is up next.`);
 }
@@ -2131,16 +2241,17 @@ function splitStep(name, min) {
 function switchTask(taskId) {
   const s = state.meta.session, t = state.tasks.get(taskId); if (!s || !t) return;
   const n = nextStep(t, s); if (!n) return;
-  if (s.active) setAside(s);
+  if (s.active) setAside(s, 'switch');
   s.snoozeUntil = Date.now() + 15 * 60e3; s.markAt = assess(state.meta).workMin;
   startStep(taskId, n.id);
   toast(`Switched to “${t.title}”. Switch back after a step or two.`);
 }
 
-function stashActive(s) {
+function stashActive(s, why) {
   const a = s.active; if (!a) return;
   const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
-  if (st) { st.spent = Math.round(elapsedSec(a)); saveTask(t); }
+  logPause(a);
+  if (st) { st.spent = Math.round(elapsedSec(a)); saveTask(t); logStepTime('aside', a, st, t, elapsedSec(a) - (a.carry || 0), { why }); }
   s.active = null;
 }
 
@@ -2158,7 +2269,7 @@ function takeBreak(min) {
   const m = state.meta, s = m.session;
   if (s && s.method === 'pomodoro') { const p = m.pomo && m.pomo.date === dateKey() ? m.pomo : { date: dateKey(), n: 0 }; m.pomo = { date: p.date, n: p.n + 1 }; }
   if (s) recordSession(s);
-  if (s) { closeGap(s); stashActive(s); }
+  if (s) { closeGap(s); stashActive(s, 'break'); }
   m.brk = { startedAt: Date.now(), until: Date.now() + min * 60e3, min, taskId: s ? s.taskId : null, alerts: 0 };
   m.session = null; state.ask = null; state.focusOpen = true;
   saveMeta(); render();
@@ -2169,6 +2280,7 @@ function endBreak() {
   const m = state.meta, b = m.brk; if (!b) return;
   const over = (Date.now() - b.until) / 1000;
   logSlip('break', over);
+  logEvent('break', { at: b.startedAt, end: Date.now(), min: b.min });
   m.brk = null; m.lastBreakEnd = Date.now();
   const t = b.taskId && state.tasks.get(b.taskId), task = t && !t.archived ? t : null;
   beginSession(task ? task.id : null, 0);
@@ -2184,10 +2296,12 @@ function endSession() {
   const worked = s ? assess(m).workMin - (s.priorMin || 0) : 0;
   if (s) m.lastStop = { at: Date.now(), workMin: Math.round(assess(m).workMin) };
   if (s) recordSession(s);
-  if (s) { closeGap(s); stashActive(s); }
+  if (s) { closeGap(s); stashActive(s, 'end'); }
   m.session = null; state.ask = null; state.focusOpen = false; state.fEdit = false;
+  if (!m.brk) endRun();
   saveMeta(); render();
-  if (worked >= 1) toast(`Nice work! You worked for ${fmtMin(worked)}.`);
+  if (m.recordToShow) showRecord();
+  else if (worked >= 1) toast(`Nice work! You worked for ${fmtMin(worked)}.`);
 }
 
 function minimizeFocus() {
@@ -2370,6 +2484,11 @@ document.addEventListener('submit', e => {
 });
 
 document.addEventListener('input', e => {
+  if (e.target.id === 'record-note') {
+    const r = state.records.get(state.layer?.id);
+    if (r) { r.note = e.target.value; saveRecord(r); }
+    return;
+  }
   const el = e.target;
   if (el.matches('textarea.step-title')) {
     if (el.value.includes('\n')) el.value = el.value.replace(/\s*\n+\s*/g, ' ');
@@ -2581,6 +2700,7 @@ function tick() {
   if (backWaiting) { backWaiting = false; backFromIdle(); }
   watchIdle();
   watchCheckIn();
+  if (document.visibilityState === 'visible') showRecord();
   const m = state.meta;
   if (m.session && !m.session.active && !m.session.gap) { openGap(m.session, m.session.lastAt); saveAlerts(); render(); }
   if (m.session?.active) tickStep(m.session);
