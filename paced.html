@@ -5,7 +5,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500;600&family=Figtree:wght@400;500;600;700&family=Schibsted+Grotesk:wght@600;700;800&display=swap">
 <style>
-/* Layout: one centered 600px column for the task list; sheets rise from the bottom on phones and float centered on wide screens; the working screen takes the whole screen */
+/* Layout: one centered 600px column for the task list, with the day's timeline above it on phones and beside it on wide screens; sheets rise from the bottom on phones and float centered on wide screens; the working screen takes the whole screen */
 :root {
   --bg: #F2F3EF;
   --surface: #FFFFFF;
@@ -107,6 +107,9 @@ button.check:hover > span { border-color: var(--zone); color: var(--zone); }
 .bar i { display: block; height: 100%; background: var(--zone); border-radius: 2px; transition: width .3s; }
 .bar i.over { background: var(--warn); }
 .start { padding-left: 12px; }
+.task.can-plan { grid-template-columns: auto auto minmax(0, 1fr) auto; padding-left: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: grab; }
+.grip { width: 22px; align-self: stretch; display: grid; place-items: center; color: var(--muted); opacity: .55; touch-action: none; }
+.task.can-plan .task-body { cursor: inherit; }
 .empty { background: var(--surface); border-radius: var(--r); padding: 26px 24px; box-shadow: var(--shadow); display: grid; gap: 12px; justify-items: start; }
 .empty h2 { font: 700 22px/1.2 var(--font-display); margin: 0; }
 .empty p { margin: 0; color: var(--muted); max-width: 52ch; }
@@ -128,6 +131,63 @@ button.check:hover > span { border-color: var(--zone); color: var(--zone); }
 }
 .fab:hover { transform: scale(1.04); }
 body.has-mini .fab { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+
+/* The day's timeline */
+.home { display: flex; flex-direction: column; }
+.home-main { min-width: 0; }
+.day { order: -1; margin-top: 16px; }
+.day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.day-head h2 { font: 700 22px/1.2 var(--font-display); margin: 0; }
+.day-tools { display: flex; align-items: center; gap: 14px; }
+.day-tools .btn { cursor: grab; touch-action: none; }
+.day-sum { margin: 2px 0 12px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.day-sum b { color: var(--stop); font-weight: 600; }
+.rail { position: relative; isolation: isolate; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.tick { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); }
+.tick span { position: absolute; left: 0; top: 3px; font: 500 11px/1 var(--font-mono); color: var(--muted); }
+.win { position: absolute; left: 46px; right: 0; background: var(--zone-soft); border-radius: 8px; }
+.win-edge { position: absolute; left: 0; right: 0; height: 14px; padding: 0; border: none; background: none; cursor: ns-resize; touch-action: none; z-index: 4; }
+.win-edge.top { top: -7px; }
+.win-edge.bottom { bottom: -7px; }
+.win-edge::after { content: ""; position: absolute; left: 50%; top: 5px; width: 34px; height: 4px; margin-left: -17px; border-radius: 2px; background: var(--zone); opacity: .35; transition: opacity .15s; }
+.win-edge:hover::after, .win-edge:focus-visible::after { opacity: 1; }
+.spent { position: absolute; left: 46px; right: 0; top: 0; background: var(--bg); opacity: .62; z-index: 1; pointer-events: none; }
+.now-line { position: absolute; left: 0; right: 0; border-top: 2px solid var(--stop); z-index: 3; pointer-events: none; }
+.now-line span { position: absolute; left: 0; top: -9px; background: var(--stop); color: var(--surface); font: 600 10px/1 var(--font-mono); padding: 3px 4px; border-radius: 4px; }
+.rail-hint { position: absolute; left: 46px; right: 0; text-align: center; color: var(--zone); font-size: 14px; font-weight: 600; pointer-events: none; z-index: 2; }
+.tblock { position: absolute; left: 52px; right: 6px; display: flex; background: var(--surface); border-radius: 6px; box-shadow: 0 0 0 1px var(--line); overflow: hidden; cursor: grab; z-index: 2; touch-action: pan-y; }
+.tblock.cont { border-radius: 2px 2px 6px 6px; }
+.tblock.cut { border-radius: 6px 6px 2px 2px; }
+.tb-open { flex: 1; min-width: 0; display: grid; align-content: start; padding: 2px 8px; border: none; background: none; color: inherit; text-align: left; font-size: 13px; line-height: 1.25; cursor: inherit; overflow: hidden; }
+.tb-open b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-open span { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tb-go, .tb-x { flex: none; width: 26px; height: 26px; padding: 0; border: none; background: none; color: var(--accent); display: grid; place-items: center; }
+.tb-x { color: var(--muted); opacity: 0; }
+.tblock:hover .tb-x, .tb-x:focus-visible { opacity: 1; }
+.tblock.live { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
+.tblock.live .tb-open span { color: inherit; opacity: .8; }
+.tblock.late { background: var(--stop-soft); box-shadow: 0 0 0 1px var(--stop); }
+.tblock.guess { box-shadow: none; outline: 1px dashed var(--muted); outline-offset: -1px; }
+.tblock.brk { background: repeating-linear-gradient(135deg, var(--surface-2) 0 6px, var(--surface) 6px 12px); box-shadow: 0 0 0 1px var(--line); }
+.tblock.ago { background: var(--surface-2); box-shadow: none; color: var(--muted); cursor: default; }
+.tblock.lifted { box-shadow: 0 0 0 2px var(--accent); }
+.day-sum .link { padding: 0; font-size: 13px; }
+.day-foot { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.drag-ghost { position: fixed; left: 0; top: 0; z-index: 70; max-width: 240px; padding: 6px 12px; border-radius: 10px; background: var(--ink); color: var(--bg); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 8px 28px rgba(0, 0, 0, .25); pointer-events: none; }
+body.dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+body.dragging .tblock, body.dragging .task { cursor: grabbing; }
+.hours-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; flex-wrap: wrap; }
+.hours-row .text-input { width: auto; }
+@media (min-width: 920px) {
+  .app.wide { max-width: 1000px; }
+  .app.wide .home { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 40px; align-items: start; }
+  .day { order: 0; position: sticky; top: 16px; margin-top: 18px; }
+  .app.wide ~ .fab { right: calc(50vw - 500px + 380px); }
+}
+@media (hover: none) {
+  .tb-x { display: none; }
+  .win-edge::after { opacity: 1; }
+}
 
 /* Bar at the bottom while you're working or on a break */
 .mini { position: fixed; left: 0; right: 0; bottom: 0; z-index: 19; padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
@@ -268,6 +328,25 @@ body.has-mini .fab { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 .panel-head h3 { margin: 0; font: 700 18px/1.2 var(--font-display); }
 .panel-head .link { display: inline-flex; align-items: center; gap: 6px; }
 .fsteps { list-style: none; margin: 0; padding: 0; display: grid; }
+.stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.stat { background: var(--surface); border-radius: var(--r); padding: 14px 16px; box-shadow: var(--shadow); display: grid; gap: 2px; min-width: 0; }
+.stat b { font: 700 25px/1.15 var(--font-display); font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: 13px; }
+.insight { margin-top: 10px; }
+.insight h3 { margin: 0; font: 700 18px/1.2 var(--font-display); }
+.bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.bar-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 46px; gap: 10px; align-items: center; font-size: 14px; }
+.bar-row small { display: block; color: var(--muted); font-size: 12px; }
+.bar-row .value { text-align: right; font-variant-numeric: tabular-nums; }
+.bar-row.best .label-text, .bar-row.best .value { font-weight: 700; }
+.bar-track { position: relative; height: 10px; }
+.bar-track i { display: block; height: 10px; background: var(--accent); border-radius: 0 4px 4px 0; }
+.bar-track em { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.section-head { font: 700 20px/1.2 var(--font-display); margin: 28px 0 0; }
+.session-day { margin: 18px 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.sessions { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.session { display: grid; gap: 2px; width: 100%; border: none; text-align: left; background: var(--surface); border-radius: var(--r); padding: 12px 16px; box-shadow: var(--shadow); }
+.session span { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
 .record-total { margin: 12px 0 0; font-weight: 600; }
 .record { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; font-size: 14px; }
 .record li { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 10px; overflow-wrap: anywhere; }
@@ -365,6 +444,8 @@ const ICON = {
   edit: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 00-3-3L5 17v3zM14.5 7.5l2 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
   cup: '<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 9.5h12v4a5 5 0 01-5 5h-2a5 5 0 01-5-5v-4zM16.5 11h1.25a2.25 2.25 0 010 4.5H16M8 3.5v2.5M12 3.5v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
   swap: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h12l-3-3M17 17H5l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+  clock: '<svg width="19" height="19" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg>',
+  grip: '<svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><g fill="currentColor"><circle cx="2.5" cy="3" r="1.4"/><circle cx="7.5" cy="3" r="1.4"/><circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/><circle cx="2.5" cy="13" r="1.4"/><circle cx="7.5" cy="13" r="1.4"/></g></svg>',
   gear: '<svg width="19" height="19" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'
 };
 
@@ -500,8 +581,8 @@ function nextStep(t, s, exceptId) {
 }
 // A deadline is close when something due today or tomorrow (or overdue) still has steps left.
 const tightTask = () => activeTasks().find(t => t.due && t.due <= addDays(dateKey(), 1) && stepsLeft(t).length) || null;
-// Another task to switch to instead of taking a full break.
-const switchTarget = currentId => activeTasks().find(t => t.id !== currentId && stepsLeft(t).length) || null;
+// Another task to switch to instead of taking a full break. What's on today's timeline comes first.
+const switchTarget = currentId => nextPlanned(currentId)?.task || activeTasks().find(t => t.id !== currentId && stepsLeft(t).length) || null;
 
 /* Ways of working you can try. "work" is minutes of work before a break (or, for task rotation, a switch). */
 const METHODS = [
@@ -887,6 +968,138 @@ function assess(meta, now = Date.now()) {
   return { eff, from, paceReady, counted, workMin, breakMin, kind, title, why, steps: s.log.length };
 }
 
+/* ---------- the day's timeline ----------
+   A day has stretches of time you can work (windows, in minutes after midnight) and a plan (items).
+   Tasks have no fixed slot. They flow through the free time in order, never sooner than where you
+   dropped them (item.at), so the plan moves whenever a task, your hours or the clock does.
+   Breaks stay at the time you gave them and tasks flow around them. */
+const DEFAULT_HOURS = [{ s: 9 * 60, e: 17 * 60 }];
+const PLAN_SNAP = 5, HOURS_SNAP = 15; // minutes
+const NO_EST_MIN = 15; // the room a step with no minutes takes up
+const NO_STEPS_MIN = 30; // the room a task with no steps takes up
+const PLAN_BREAK_MIN = 15; // the length of a break dragged onto the timeline
+const BREAK_NEAR_MIN = 30; // a break you take this soon before a planned one counts as that one
+const PLAN_ALERT_MIN = 15; // how late Paced will still tell you it's time to start
+const MIN_PIECE = 15; // a task won't start in a slot shorter than this if it has to carry on later
+
+const minuteNow = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; };
+const snapTo = (min, by) => Math.round(min / by) * by;
+const clockAt = min => { const d = new Date(); d.setHours(0, Math.round(min), 0, 0); return fmtTime(+d); };
+const hourName = h => { const d = new Date(); d.setHours(h, 0, 0, 0); return d.toLocaleTimeString([], { hour: 'numeric' }); };
+const usualHours = () => state.meta.hours?.length ? state.meta.hours : DEFAULT_HOURS;
+// Today's plan. A new day starts empty, with your usual hours.
+function dayPlan() {
+  const p = state.meta.plan;
+  return p && p.date === dateKey() ? p : { date: dateKey(), windows: clone(usualHours()), items: [] };
+}
+function savePlan(p) { state.meta.plan = p; saveMeta(); }
+// Windows in order, with any that touch joined and any with no length dropped.
+function cleanWindows(list) {
+  const out = [];
+  for (const w of [...list].filter(w => w.e > w.s).sort((a, b) => a.s - b.s)) {
+    const last = out[out.length - 1];
+    if (last && w.s <= last.e) last.e = Math.max(last.e, w.e); else out.push({ ...w });
+  }
+  return out;
+}
+const sameHours = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+// The room a task takes: what's left of it, at the speed you really work rather than the speed you guess.
+function taskRoom(t) {
+  if (!t.steps.length) return { min: NO_STEPS_MIN, guess: true };
+  const a = state.meta.session?.active, f = timeFactor();
+  let min = 0, guess = false;
+  for (const st of stepsLeft(t)) {
+    if (a && a.stepId === st.id) { const el = elapsedSec(a); min += Math.max(0, (targetSec(a, st) ?? el) - el) / 60; }
+    else if (st.est) min += Math.max(1, st.est * f - (st.spent || 0) / 60);
+    else { min += NO_EST_MIN; guess = true; }
+  }
+  return { min: Math.max(1, Math.ceil(min)), guess };
+}
+const onPlan = t => !!t && !t.archived && (!t.steps.length || stepsLeft(t).length > 0);
+
+// Where everything lands right now. Blocks are the tasks, each in one or more pieces; stops are the breaks.
+function layoutDay(p = dayPlan(), now = minuteNow()) {
+  const m = state.meta, s = m.session;
+  const stops = [];
+  let cur = now;
+  if (m.brk) { cur = now + Math.max(0, (m.brk.until - Date.now()) / 60e3); stops.push({ s: now, e: cur, live: true }); }
+  // A break whose time has come waits at "now" until you take it or an hour has gone by.
+  const breaks = p.items.filter(i => i.brk && i.at + i.brk + BREAK_GIVE_UP_MIN > now).sort((a, b) => a.at - b.at);
+  for (const item of breaks) { const start = Math.max(item.at, cur); stops.push({ item, s: start, e: start + item.brk }); cur = start + item.brk; }
+  const free = [];
+  for (const w of p.windows) {
+    let from = w.s;
+    for (const b of stops) {
+      if (b.e <= from || b.s >= w.e) continue;
+      if (b.s > from) free.push({ s: from, e: b.s });
+      from = Math.max(from, b.e);
+    }
+    if (from < w.e) free.push({ s: from, e: w.e });
+  }
+  // What's happening right now goes first, planned or not.
+  const liveId = m.brk ? m.brk.taskId : s && (s.active ? s.active.taskId : s.taskId);
+  const tasks = p.items.filter(i => i.taskId && onPlan(state.tasks.get(i.taskId)) && i.taskId !== liveId);
+  if (liveId && onPlan(state.tasks.get(liveId))) tasks.unshift({ ...(p.items.find(i => i.taskId === liveId) || { id: 'live', taskId: liveId }), at: null, front: true, live: !!s?.active });
+  const blocks = [];
+  let at = now;
+  for (const item of tasks) {
+    const t = state.tasks.get(item.taskId), { min, guess } = taskRoom(t), pieces = [];
+    if (item.at != null) at = Math.max(at, item.at);
+    let need = min;
+    while (need > 0) {
+      const w = free.find(f => f.e > at);
+      if (!w) { pieces.push({ s: at, e: at + need, late: true }); at += need; break; }
+      const start = Math.max(at, w.s), len = Math.min(need, w.e - start);
+      if (len < need && len < MIN_PIECE && !item.front) { at = w.e; continue; } // too short to be worth starting
+      pieces.push({ s: start, e: start + len });
+      at = start + len;
+      need -= len;
+    }
+    blocks.push({ item, task: t, min, guess, pieces, start: pieces[0].s, end: at });
+  }
+  const sum = (list, f) => list.reduce((a, x) => a + f(x), 0);
+  return {
+    blocks, stops,
+    freeMin: sum(free, f => Math.max(0, f.e - Math.max(f.s, now))),
+    planMin: sum(blocks, b => b.min),
+    lateMin: sum(blocks, b => sum(b.pieces, x => x.late ? x.e - x.s : 0))
+  };
+}
+
+// The first task on the timeline after this one, and whether its time has come.
+function nextPlanned(exceptId) {
+  const b = layoutDay().blocks.find(x => x.task.id !== exceptId && stepsLeft(x.task).length);
+  return b ? { task: b.task, waits: b.item.at != null && b.item.at > minuteNow() + PLAN_SNAP } : null;
+}
+const dueBreak = (now = minuteNow()) => dayPlan().items.find(i => i.brk && i.at <= now && i.at + i.brk + BREAK_GIVE_UP_MIN > now) || null;
+const plannedBreakSoon = () => dayPlan().items.some(i => i.brk && i.at > minuteNow() && i.at <= minuteNow() + BREAK_NEAR_MIN);
+// Taking a break uses up the planned one it stands in for, and keeps that one's length.
+function usePlannedBreak(min) {
+  const p = dayPlan(), i = p.items.findIndex(x => x.brk && x.at <= minuteNow() + BREAK_NEAR_MIN);
+  if (i < 0) return min;
+  const [used] = p.items.splice(i, 1);
+  state.meta.plan = p;
+  return used.brk;
+}
+
+// Where an item lands when dropped at a time: inside a block it goes before or after it, in free time it stays there.
+function placeItem(p, item, time) {
+  const rest = p.items.filter(i => i.id !== item.id), now = minuteNow();
+  time = snapTo(time, PLAN_SNAP);
+  if (item.brk) return { ...p, items: [...rest, { ...item, at: Math.max(time, Math.ceil(now / PLAN_SNAP) * PLAN_SNAP) }] };
+  const blocks = layoutDay({ ...p, items: rest }, now).blocks;
+  let i = 0;
+  while (i < blocks.length && (blocks[i].item.front || time >= (blocks[i].start + blocks[i].end) / 2)) i++;
+  const before = i ? blocks[i - 1].end : now, after = blocks[i] ? blocks[i].start : Infinity;
+  const at = Math.min(time, after);
+  const placed = { ...item, at: at > before ? at : null };
+  const anchor = blocks[i] && rest.indexOf(blocks[i].item);
+  const items = [...rest];
+  items.splice(anchor != null && anchor >= 0 ? anchor : items.length, 0, placed);
+  return { ...p, items };
+}
+
 /* ---------- main screen ---------- */
 function render() {
   applyLook();
@@ -900,9 +1113,10 @@ function render() {
 
 function renderMain() {
   const main = $('#main');
+  $('.app').classList.toggle('wide', state.ready && Store.mode !== 'signin' && state.view === 'home' && activeTasks().length > 0);
   if (!state.ready) { main.innerHTML = '<div class="loading"><span class="pulse"></span>Loading your tasks…</div>'; return; }
   if (Store.mode === 'signin') { main.innerHTML = authHTML(); return; }
-  main.innerHTML = state.view === 'archive' ? archiveHTML() : homeHTML();
+  main.innerHTML = state.view === 'archive' ? archiveHTML() : state.view === 'history' ? historyPageHTML() : homeHTML();
 }
 
 function authHTML() {
@@ -953,12 +1167,16 @@ function homeHTML() {
   const list = activeTasks();
   const archived = archivedTasks().length;
   const left = list.reduce((a, t) => a + minLeft(t), 0);
+  const lay = layoutDay();
   return `<div class="brand-row"><div class="brand">${ICON.mark}Paced</div>
     <div class="row-actions"><button class="icon-btn" data-act="open-look" title="Settings" aria-label="Settings">${ICON.gear}</button>
+    <button class="icon-btn" data-act="show-history" title="History" aria-label="History">${ICON.clock}</button>
     <button class="btn ghost small" data-act="show-archive">${ICON.trash}Trash${archived ? `<span class="count">${archived}</span>` : ''}</button></div></div>
+  <div class="home">
+  <div class="home-main">
   <h1>My tasks</h1>
   ${list.length ? `<p class="sub">${list.length} ${list.length === 1 ? 'task' : 'tasks'}${left ? ` · about ${fmtMin(left)} of work` : ''}</p>
-  <ul class="tasks">${list.map(taskHTML).join('')}</ul>
+  <ul class="tasks">${list.map(t => taskHTML(t, lay)).join('')}</ul>
   ${methodCardHTML()}` : `
   <p class="sub">Nothing to do yet</p>
   <section class="empty">
@@ -970,10 +1188,126 @@ function homeHTML() {
     </ol>
     <button class="btn primary" data-act="open-add">${ICON.plus}Add your first task</button>
   </section>`}
-  ${savedLine()}`;
+  ${savedLine()}
+  </div>
+  ${list.length ? dayHTML() : ''}
+  </div>`;
 }
 
-function taskHTML(t) {
+/* ----- the timeline ----- */
+let railView = null; // where the timeline last drew itself, for turning a position into a time
+
+function dayView() {
+  const p = drag?.preview || dayPlan(), now = minuteNow(), lay = layoutDay(p, now), past = pastWork(now);
+  const points = [now, ...p.windows.flatMap(w => [w.s, w.e]), ...lay.stops.flatMap(b => [b.s, b.e]), ...lay.blocks.flatMap(b => [b.start, b.end]), ...past.flatMap(b => [b.s, b.e])];
+  const wide = innerWidth >= 920;
+  let start = Math.max(0, Math.floor((Math.min(...points) - (wide ? 20 : 0)) / 60) * 60), end = Math.ceil((Math.max(...points) + (wide ? 20 : 0)) / 60) * 60, ppm;
+  if (!wide) start = Math.max(start, Math.floor((now - 60) / 60) * 60); // on a phone, what's over doesn't get to push your list off the screen
+  if (drag) { start = drag.frozen.start; end = Math.max(end, drag.frozen.end); ppm = drag.frozen.ppm; } // the timeline holds still under your finger
+  else ppm = wide ? clamp((innerHeight - 170) / (end - start), .7, 2.2) : .75;
+  return (railView = { p, now, lay, past: past.filter(b => b.e > start).map(b => ({ ...b, s: Math.max(b.s, start) })), start, end, ppm });
+}
+
+// What you've really done today, from the session records.
+function pastWork(now) {
+  const m = state.meta, today = dateKey(), a = m.session?.active;
+  const minOf = ms => { const d = new Date(ms); return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; };
+  const events = [...[...state.records.values()].flatMap(r => r.events), ...(m.run?.events || [])]
+    .filter(e => ['done', 'aside', 'break'].includes(e.type) && dateKey(new Date(e.at)) === today);
+  if (a) events.push({ type: 'done', at: a.startedAt, end: Date.now(), task: state.tasks.get(a.taskId)?.title });
+  if (m.brk) events.push({ type: 'break', at: m.brk.startedAt, end: Date.now() });
+  const out = [];
+  for (const e of events.sort((x, y) => x.at - y.at)) {
+    const title = e.type === 'break' ? 'Break' : e.task, last = out[out.length - 1], s = minOf(e.at), end = Math.min(minOf(e.end), now);
+    if (last && last.title === title && s - last.e <= 3) last.e = Math.max(last.e, end); else out.push({ title, s, e: end });
+  }
+  return out.filter(x => x.e - x.s >= 1);
+}
+
+const atY = (v, min) => ((min - v.start) * v.ppm).toFixed(1);
+const heightOf = (v, a, b) => Math.max(3, (b - a) * v.ppm - 1).toFixed(1);
+
+function pieceHTML(b, piece, i, v) {
+  const t = b.task, h = (piece.e - piece.s) * v.ppm, s = state.meta.session, item = b.item;
+  const cls = [item.live && 'live', piece.late && 'late', b.guess && !item.live && 'guess', i && 'cont', i < b.pieces.length - 1 && 'cut', drag?.item?.id === item.id && 'lifted'].filter(Boolean).join(' ');
+  const when = i ? 'continued' : `${clockAt(b.start)} · ${fmtMin(b.min)}${b.guess ? ' (a guess)' : ''}`;
+  const words = h >= 16 ? `<b>${esc(t.title)}</b>${h >= 34 ? `<span>${esc(when)}</span>` : ''}` : '';
+  const go = !i && !item.front && !s?.active && !state.meta.brk && h >= 26 && t.steps.length ? `<button class="tb-go" data-act="focus-task" data-id="${t.id}" title="Start now" aria-label="Start “${esc(t.title)}” now">${ICON.play}</button>` : '';
+  const off = !i && !item.front && h >= 26 ? `<button class="tb-x" data-act="plan-off" data-id="${item.id}" title="Take off today" aria-label="Take “${esc(t.title)}” off today">${ICON.x}</button>` : '';
+  return `<div class="tblock ${cls}"${item.front ? '' : ` data-drag="item" data-item="${item.id}"`} style="top:${atY(v, piece.s)}px;height:${heightOf(v, piece.s, piece.e)}px" title="${esc(t.title)}">
+    <button class="tb-open" data-act="open-task" data-id="${t.id}" aria-label="${esc(t.title)}, ${clockAt(b.start)} to ${clockAt(b.end)}${piece.late ? ', past the end of your day' : ''}">${words}</button>${go}${off}
+  </div>`;
+}
+
+function breakBlockHTML(b, v) {
+  const min = Math.round(b.e - b.s), h = (b.e - b.s) * v.ppm, item = b.item;
+  const words = h >= 16 ? `<b>Break</b>${h >= 34 ? `<span>${clockAt(b.s)} · ${fmtMin(min)}</span>` : ''}` : '';
+  return `<div class="tblock brk${b.live ? ' live' : ''}${item && drag?.item?.id === item.id ? ' lifted' : ''}"${item ? ` data-drag="item" data-item="${item.id}"` : ''} style="top:${atY(v, b.s)}px;height:${heightOf(v, b.s, b.e)}px" title="Break, ${fmtMin(min)}">
+    <div class="tb-open">${words}</div>${item && h >= 26 ? `<button class="tb-x" data-act="plan-off" data-id="${item.id}" title="Take off today" aria-label="Take this break off today">${ICON.x}</button>` : ''}
+  </div>`;
+}
+
+function dayHTML() {
+  const v = dayView(), { p, now, lay } = v, ticks = [];
+  for (let h = Math.ceil(v.start / 60); h <= v.end / 60; h++) ticks.push(`<div class="tick" style="top:${atY(v, h * 60)}px"><span>${hourName(h % 24)}</span></div>`);
+  const wins = p.windows.map((w, i) => {
+    if (w.e <= v.start) return '';
+    const s = Math.max(w.s, v.start);
+    return `<div class="win" style="top:${atY(v, s)}px;height:${((w.e - s) * v.ppm).toFixed(1)}px">
+      ${w.s >= v.start ? `<button class="win-edge top" data-edge="s" data-i="${i}" title="Drag to change when you start" aria-label="Start time, ${clockAt(w.s)}. Use the arrow keys to change it."></button>` : ''}
+      <button class="win-edge bottom" data-edge="e" data-i="${i}" title="Drag to change when you stop" aria-label="End time, ${clockAt(w.e)}. Use the arrow keys to change it."></button>
+    </div>`;
+  }).join('');
+  const first = p.windows.find(w => w.e > now), hintAt = first ? (Math.max(first.s, now) + first.e) / 2 : now + 30;
+  // Something doesn't fit only because blocks are waiting at the times you dropped them.
+  const gaps = lay.lateMin >= 1 && lay.planMin <= lay.freeMin && lay.blocks.some(b => b.item.at != null);
+  const sum = lay.freeMin < 1 ? 'No free time left today' : `${fmtMin(lay.freeMin)} free${lay.planMin && lay.lateMin < 1 ? ` · ${fmtMin(lay.planMin)} planned` : ''}`;
+  return `<aside class="day" id="day" aria-label="Today">
+    <div class="day-head"><h2>Today</h2><div class="day-tools">
+      <button class="btn ghost small" data-drag="brk" data-act="plan-break" title="Drag onto the timeline, or click to add one after your next task">${ICON.cup}Break</button>
+      <button class="link small" data-act="open-hours">Hours</button>
+    </div></div>
+    <p class="day-sum">${sum}${lay.lateMin >= 1 ? ` · <b>${fmtMin(lay.lateMin)} over</b>` : ''}${gaps ? ' · <button class="link small" data-act="plan-tidy">Close the gaps</button>' : ''}</p>
+    <div class="rail" id="rail" style="height:${((v.end - v.start) * v.ppm).toFixed(1)}px">
+      ${ticks.join('')}${wins}
+      <div class="spent" style="height:${atY(v, now)}px"></div>
+      ${v.past.map(b => `<div class="tblock ago" style="top:${atY(v, b.s)}px;height:${heightOf(v, b.s, b.e)}px" title="${esc(b.title)}"><div class="tb-open">${(b.e - b.s) * v.ppm >= 16 ? `<b>${esc(b.title)}</b>` : ''}</div></div>`).join('')}
+      ${lay.blocks.flatMap(b => b.pieces.map((x, i) => pieceHTML(b, x, i, v))).join('')}
+      ${lay.stops.map(b => breakBlockHTML(b, v)).join('')}
+      ${lay.blocks.length ? '' : `<div class="rail-hint" style="top:${atY(v, hintAt)}px">Drag a task here</div>`}
+      <div class="now-line" style="top:${atY(v, now)}px"><span>${clockAt(now).replace(/\s?[AP]M$/i, '')}</span></div>
+    </div>
+    ${extraPct() ? `<p class="day-foot">Sized for your real speed, about ${extraPct()}% over your guesses</p>` : ''}
+  </aside>`;
+}
+
+function renderDay() { const el = $('#day'); if (el) el.outerHTML = dayHTML(); }
+window.addEventListener('resize', () => { if (!drag) renderDay(); });
+
+/* ----- your hours ----- */
+const hhmm = min => `${pad(Math.floor(min / 60))}:${pad(min % 60)}`;
+const parseHHMM = v => { const m = /^(\d\d):(\d\d)$/.exec(v || ''); return m ? +m[1] * 60 + +m[2] : null; };
+
+function hoursHTML(enter) {
+  const p = dayPlan();
+  const rows = p.windows.map((w, i) => `<div class="hours-row">
+    <input type="time" class="text-input" data-hour="s" data-i="${i}" value="${hhmm(w.s)}" aria-label="Start of stretch ${i + 1}">
+    <span class="muted">to</span>
+    <input type="time" class="text-input" data-hour="e" data-i="${i}" value="${hhmm(w.e)}" aria-label="End of stretch ${i + 1}">
+    <button class="icon-btn" data-act="hours-del" data-i="${i}" title="Remove" aria-label="Remove stretch ${i + 1}">${ICON.trash}</button>
+  </div>`).join('');
+  return `${sheetOpen(enter, 'Your hours today')}${sheetHead('Your hours today')}
+    <p class="help" style="margin-top:8px">The times you can work today. On the timeline you can also drag the top or bottom of a green area, or drag across it to block off time.</p>
+    ${rows || '<p class="help">No time set aside today.</p>'}
+    <button class="btn ghost small" data-act="hours-add">${ICON.plus}Add more time</button>
+    <div class="sheet-foot">
+      ${sameHours(p.windows, usualHours()) ? '<span></span>' : '<button class="link small" data-act="hours-usual">Use these hours every day</button>'}
+      <button class="btn primary" data-act="close-layer">Done</button>
+    </div>
+  </section>`;
+}
+
+function taskHTML(t, lay) {
   const total = t.steps.length, done = total - stepsLeft(t).length, left = minLeft(t);
   let meta;
   if (!total) meta = 'No steps yet';
@@ -983,11 +1317,14 @@ function taskHTML(t) {
   const action = !total
     ? `<button class="btn ghost small" data-act="add-steps" data-id="${t.id}">Add steps</button>`
     : `<button class="btn soft small start" data-act="focus-task" data-id="${t.id}" aria-label="${live ? 'Show the timer for' : 'Start working on'} “${esc(t.title)}”">${live ? 'Show' : ICON.play + 'Start'}</button>`;
-  return `<li class="task">
+  const slot = lay.blocks.find(b => b.task.id === t.id);
+  const today = !slot ? '' : slot.pieces[0].late ? ' · <span class="due late">Doesn’t fit today</span>' : ` · Today ${clockAt(slot.start)}`;
+  return `<li class="task can-plan" data-drag="task" data-id="${t.id}">
+    <span class="grip" title="Drag onto the timeline">${ICON.grip}</span>
     <button class="check" data-act="complete-task" data-id="${t.id}" title="Mark the whole task as done" aria-label="Mark “${esc(t.title)}” as done"><span>${ICON.check}</span></button>
     <button class="task-body" data-act="open-task" data-id="${t.id}">
       <span class="task-title">${esc(t.title)}</span>
-      <span class="task-meta">${meta}${t.due ? ' · ' + dueHTML(t) : ''}</span>
+      <span class="task-meta">${meta}${t.due ? ' · ' + dueHTML(t) : ''}${today}</span>
       ${live ? '<span class="badge"><span class="dot"></span>Working on this now</span>' : ''}
       ${total ? `<span class="bar" aria-hidden="true"><i style="width:${Math.round(done / total * 100)}%"></i></span>` : ''}
     </button>
@@ -1075,7 +1412,7 @@ function renderLayer(enter) {
   }
   el.hidden = false;
   document.body.classList.add('locked');
-  el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : L.type === 'record' ? recordHTML(rec, enter) : detailHTML(t, enter));
+  el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'hours' ? hoursHTML(enter) : L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : L.type === 'record' ? recordHTML(rec, enter) : detailHTML(t, enter));
   autosizeAll(el);
 }
 const sheetOpen = (enter, label) => `<section class="sheet${enter ? ' enter' : ''}" role="dialog" aria-modal="true" aria-label="${esc(label)}">`;
@@ -1142,7 +1479,7 @@ function lookHTML(enter) {
 /* ----- the summary at the end of a session ----- */
 function recordTotals(rec) {
   const sum = type => rec.events.filter(e => e.type === type).reduce((a, e) => a + (e.took ?? (e.end - e.at) / 1000), 0);
-  return { worked: sum('done') + sum('aside'), breaks: sum('break'), paused: sum('pause'), done: rec.events.filter(e => e.type === 'done').length };
+  return { worked: sum('done') + sum('aside'), breaks: sum('break'), paused: sum('pause'), idle: sum('gap'), done: rec.events.filter(e => e.type === 'done').length, ticked: rec.events.filter(e => e.type === 'ticked').length };
 }
 
 function eventText(e) {
@@ -1174,6 +1511,95 @@ function recordHTML(rec, enter) {
     <textarea id="record-note" class="text-input" rows="2" maxlength="500" placeholder="What got done, or what got in the way?">${esc(rec.note || '')}</textarea>
     <div class="sheet-foot"><span></span><button class="btn primary" data-act="close-layer">Done</button></div>
   </section>`;
+}
+
+/* ----- history: past sessions, and when you work best ----- */
+const SPEED_MIN_STEPS = 4; // fewer steps than this in a group is too little to compare
+const SPEED_CLEAR_GAP = 5; // points between two groups before one counts as faster
+
+// Timed steps with a fair time to compare. Steps from before records began have no session to go with them.
+function speedSamples() {
+  const recs = [...state.records.values()], first = Math.min(Infinity, ...recs.map(r => r.startedAt)), out = [];
+  for (const r of recs) {
+    let rested = r.startedAt;
+    for (const e of r.events) {
+      if (e.type === 'break') rested = e.end;
+      if (e.type === 'done' && e.est && !e.noSpeed && e.took >= 30) out.push({ at: e.at, est: e.est, took: e.took, sinceBreak: (e.at - rested) / 60e3 });
+    }
+  }
+  for (const t of state.tasks.values())
+    for (const st of t.steps)
+      if (st.done && st.est && st.actual >= 30 && st.doneAt < first) out.push({ at: st.doneAt - st.actual * 1000, est: st.est, took: st.actual, sinceBreak: null });
+  return out;
+}
+const samplePace = x => clamp(x.est * 60 / x.took, 0.25, 3);
+
+function speedGroups(samples, labels, pick) {
+  return labels.map((label, i) => {
+    const paces = samples.filter(x => pick(x) === i).map(samplePace);
+    return { label, steps: paces.length, speed: paces.length ? Math.round(median(paces) * 100) : null };
+  }).filter(g => g.steps);
+}
+const dayPart = x => { const h = new Date(x.at).getHours(); return h >= 5 && h < 12 ? 0 : h >= 12 && h < 17 ? 1 : h >= 17 && h < 22 ? 2 : 3; };
+const weekDay = x => (new Date(x.at).getDay() + 6) % 7;
+const breakStretch = x => x.sinceBreak == null ? -1 : Math.min(3, Math.floor(x.sinceBreak / 30));
+const WEEK_DAYS = [0, 1, 2, 3, 4, 5, 6].map(i => new Date(2024, 0, 1 + i).toLocaleDateString(undefined, { weekday: 'short' })); // Jan 1, 2024 was a Monday
+
+// One labeled bar per group. The line in each bar marks 100%, exactly as planned.
+function speedBarsHTML(title, noun, groups) {
+  if (!groups.length) return '';
+  const ready = groups.filter(g => g.steps >= SPEED_MIN_STEPS), ranked = [...ready].sort((a, b) => b.speed - a.speed);
+  const best = ranked.length >= 2 && ranked[0].speed - ranked[1].speed >= SPEED_CLEAR_GAP ? ranked[0] : null;
+  const say = best ? `${best.label} is your fastest ${noun}, at ${best.speed}% of your planned speed. ${ranked[1].label} is next at ${ranked[1].speed}%.`
+    : ready.length >= 2 ? 'No clear difference yet.' : 'Not enough steps to compare yet.';
+  const top = Math.max(100, ...ready.map(g => g.speed));
+  const rows = groups.map(g => {
+    const ok = g.steps >= SPEED_MIN_STEPS;
+    return `<li class="bar-row${g === best ? ' best' : ''}"><span><span class="label-text">${esc(g.label)}</span><small>${g.steps} ${g.steps === 1 ? 'step' : 'steps'}</small></span>
+      <span class="bar-track" aria-hidden="true">${ok ? `<i style="width:${(g.speed / top * 100).toFixed(1)}%"></i><em style="left:${(100 / top * 100).toFixed(1)}%"></em>` : ''}</span>
+      <span class="value${ok ? '' : ' muted'}">${ok ? g.speed + '%' : 'Too few'}</span></li>`;
+  }).join('');
+  return `<section class="panel insight"><h3>${esc(title)}</h3><p class="why">${esc(say)}</p><ul class="bars">${rows}</ul></section>`;
+}
+
+function insightsHTML() {
+  const now = Date.now(), inDays = (at, n) => at >= now - n * 864e5;
+  const samples = speedSamples().filter(x => inDays(x.at, 60));
+  const month = [...state.records.values()].filter(r => inDays(r.startedAt, 30)).map(recordTotals);
+  const add = key => month.reduce((a, t) => a + t[key], 0), worked = add('worked'), lost = add('paused') + add('idle');
+  const week = [...state.records.values()].filter(r => inDays(r.startedAt, 7)).reduce((a, r) => a + recordTotals(r).worked, 0);
+  const stats = [[fmtDur(week), 'worked in the last 7 days']];
+  if (worked) stats.push([`${Math.round(worked / (worked + lost) * 100)}%`, 'of session time on a step, last 30 days']);
+  if (samples.length) stats.push([`${Math.round(samples.filter(x => x.took <= x.est * 60).length / samples.length * 100)}%`, 'of steps done within the plan']);
+  if (samples.length >= SPEED_MIN_STEPS) stats.push([`${Math.round(median(samples.map(samplePace)) * 100)}%`, 'usual speed against your plan']);
+  const parts = ['Morning', 'Afternoon', 'Evening', 'Night'], stretches = ['First 30 min', '30 to 60 min', '60 to 90 min', 'Over 90 min'];
+  return `<div class="stat-grid">${stats.map(([v, l]) => `<div class="stat"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join('')}</div>
+    ${samples.length < SPEED_MIN_STEPS ? `<p class="help" style="margin-top:12px">Finish ${SPEED_MIN_STEPS - samples.length} more timed ${SPEED_MIN_STEPS - samples.length === 1 ? 'step' : 'steps'} to start seeing when you work best.</p>` : `
+    ${speedBarsHTML('Time of day', 'time of day', speedGroups(samples, parts, dayPart))}
+    ${speedBarsHTML('Day of the week', 'day', speedGroups(samples, WEEK_DAYS, weekDay))}
+    ${speedBarsHTML('After a break', 'stretch after a break', speedGroups(samples, stretches, breakStretch))}
+    <p class="help" style="margin-top:12px">100% means steps take exactly as long as you planned, and higher is faster. This compares your time with your own guesses over the last 60 days, so easy work can make a time look better than it is.</p>`}`;
+}
+
+function sessionRowHTML(r) {
+  const sum = recordTotals(r), parts = [];
+  if (sum.worked >= 60) parts.push(`${fmtDur(sum.worked)} worked`);
+  if (sum.done) parts.push(`${sum.done} ${sum.done === 1 ? 'step' : 'steps'} done`);
+  if (sum.ticked) parts.push(`${sum.ticked} ticked off`);
+  return `<li><button class="session" data-act="open-record" data-id="${esc(r.id)}"><b>${fmtTime(r.startedAt)} to ${fmtTime(r.endedAt)}</b>
+    <span>${esc(parts.join(' · ') || 'Under a minute')}</span>${r.note ? `<span>${esc(r.note)}</span>` : ''}</button></li>`;
+}
+
+function historyPageHTML() {
+  const list = [...state.records.values()].sort((a, b) => b.startedAt - a.startedAt);
+  const head = `<div class="brand-row"><button class="btn ghost small" data-act="show-home">${ICON.back}My tasks</button></div><h1>History</h1>`;
+  const days = new Map();
+  for (const r of list) { const k = dateKey(new Date(r.startedAt)); days.set(k, [...(days.get(k) || []), r]); }
+  return `${head}<p class="sub">${list.length ? 'When you work best, and what you’ve done' : 'Nothing here yet'}</p>
+    ${insightsHTML()}
+    <h2 class="section-head">Past sessions</h2>
+    ${list.length ? [...days].map(([k, rs]) => `<h3 class="session-day">${esc(fmtDayShort(k))}</h3><ul class="sessions">${rs.map(sessionRowHTML).join('')}</ul>`).join('') : '<p class="help" style="margin-top:8px">Each session you finish will show up here.</p>'}
+    ${savedLine()}`;
 }
 
 /* ----- new task ----- */
@@ -1234,6 +1660,13 @@ function detailSummary(t) {
 }
 const missingMinutes = t => t.steps.some(s => !s.done && !s.est);
 
+function planRowHTML(t) {
+  const item = dayPlan().items.find(i => i.taskId === t.id), b = layoutDay().blocks.find(x => x.task.id === t.id);
+  if (!item) return `<button class="btn ghost small" data-act="plan-on" data-id="${t.id}">Add to today</button>`;
+  return `<span class="muted">${b && b.pieces[0].late ? 'Doesn’t fit today' : b ? `Planned for ${clockAt(b.start)}` : 'On today’s timeline'}</span>
+    <button class="btn ghost small" data-act="plan-off" data-id="${item.id}">Take off today</button>`;
+}
+
 function detailHTML(t, enter) {
   const live = state.meta.session?.active;
   const rows = t.steps.map(s => {
@@ -1264,6 +1697,8 @@ function detailHTML(t, enter) {
     <p class="sub" id="detail-sum">${detailSummary(t)}</p>
     <label class="label" for="detail-due">Due date</label>
     <div class="due-row"><input type="date" id="detail-due" class="text-input date" value="${t.due || ''}">${t.due ? `${dueHTML(t)}<button class="btn ghost small" data-act="clear-due" data-id="${t.id}">Remove due date</button>` : '<span class="muted">Optional</span>'}</div>
+    <h3 class="label">Today</h3>
+    <div class="due-row">${planRowHTML(t)}</div>
     <h3 class="label">Steps</h3>
     <p class="help">${t.steps.length ? 'Tap a step’s name or minutes to change them. Check a step off when it’s finished.' : 'No steps yet. Add the first one below.'}</p>
     ${t.steps.length ? `<ol class="steps">${rows}</ol>` : ''}
@@ -1368,6 +1803,9 @@ function planLine(el, target, paused) {
 // to the urgent task (or a short break if you're already on it). With a timed method: its break or switch.
 function breakPlan(as, s, ignoreSnooze) {
   if (!ignoreSnooze && Date.now() < (s.snoozeUntil || 0)) return null;
+  const planned = dueBreak();
+  if (planned) return { type: 'break', min: planned.brk, planned: true };
+  if (plannedBreakSoon()) return null; // the break you planned comes before any Paced would suggest
   const method = methodOf(s);
   if (method.work) {
     if (sinceMark(as, s) < method.work) return null;
@@ -1406,7 +1844,8 @@ function statusHTML(as, s) {
   } else if (bp) {
     const min = bp.min || as.breakMin;
     kind = 'now';
-    if (method.work) { title = 'Break time'; why = `You’ve done ${fmtMin(method.work)} of focused work. ${method.name} says take a ${min}-minute break now.`; }
+    if (bp.planned) { title = 'Break time'; why = `You planned a ${min}-minute break for now.`; }
+    else if (method.work) { title = 'Break time'; why = `You’ve done ${fmtMin(method.work)} of focused work. ${method.name} says take a ${min}-minute break now.`; }
     else why += ' A short rest will help you get back up to speed.';
     buttons = `<button class="btn primary" data-act="take-break" data-min="${min}" data-force="1">${ICON.cup}Start a ${min}-minute break</button>`;
   }
@@ -1504,6 +1943,15 @@ function splitHTML(st, el) {
   </section>`;
 }
 
+// What more time on this step costs the rest of today.
+function planCostHTML() {
+  const lay = layoutDay(), next = lay.blocks.find(b => !b.item.front);
+  if (!next) return '';
+  const spare = Math.max(0, Math.floor(lay.freeMin - lay.planMin));
+  const room = lay.lateMin >= 1 ? `Today’s plan is ${fmtMin(lay.lateMin)} over your hours.` : `You have ${spare ? fmtMin(spare) : 'no time'} to spare today.`;
+  return `<p>Next up is “${esc(next.task.title)}” at ${clockAt(next.start)}. ${room}</p>`;
+}
+
 // The stop at the planned end of a step: you decide what happens next instead of drifting on.
 function timeUpHTML(s, st, canSkip, target) {
   const a = s.active, as = assess(state.meta);
@@ -1527,6 +1975,7 @@ function timeUpHTML(s, st, canSkip, target) {
       <div class="eyebrow">Time’s up</div>
       <h2>${a.autoStopped ? 'Paced stopped your timer' : 'Did you finish?'}</h2>
       <p>${esc(why)}</p>
+      ${planCostHTML()}
       <div class="row"><button class="btn primary" data-act="step-done">${ICON.check}Yes, it’s done</button></div>
       <h3 class="label">Not yet?</h3>
       ${more}
@@ -1643,7 +2092,18 @@ function betweenHTML() {
       ${next.spent ? `<p class="muted" style="margin:0">You already spent ${fmtDur(next.spent)} on this earlier.</p>` : ''}
       <div class="row" style="margin-top:6px"><button class="btn ${bp ? 'ghost' : 'primary'} big" data-act="start-step" data-id="${t.id}" data-step="${next.id}">${ICON.play}${last ? 'Start next step' : 'Start'}</button></div>
     </section>`;
-  } else html += pickHTML(t, false);
+  } else {
+    const plan = gapPlan(s);
+    if (plan.type === 'step') html += `<section class="panel">
+      <div class="eyebrow">Up next on your timeline</div>
+      <h2 class="step-name">${esc(plan.t.title)}</h2>
+      <p class="muted" style="margin:0">First step: ${esc(plan.next.title)} · ${fmtMin(plan.next.est)}</p>
+      <div class="row" style="margin-top:6px"><button class="btn ${bp ? 'ghost' : 'primary'} big" data-act="start-step" data-id="${plan.t.id}" data-step="${plan.next.id}">${ICON.play}Start now</button></div>
+    </section>`;
+    const later = plan.type === 'none' && layoutDay().blocks.find(b => stepsLeft(b.task).length);
+    if (later) html += `<p class="muted" style="margin:0;text-align:center">“${esc(later.task.title)}” is on your timeline for ${clockAt(later.start)}. Until then, the time is yours.</p>`;
+    html += pickHTML(t, false);
+  }
   if (!bp) html += statusHTML(as, s);
   if (t && !t.archived) html += stepsPanelHTML(t, s);
   html += breakArea(as, s);
@@ -1651,7 +2111,8 @@ function betweenHTML() {
 }
 
 function pickHTML(t, noSession) {
-  const others = activeTasks().filter(x => x.steps.some(s => !s.done));
+  const planned = layoutDay().blocks.map(b => b.task);
+  const others = [...planned, ...activeTasks().filter(x => !planned.includes(x))].filter(x => x.steps.some(s => !s.done));
   const head = t && t.archived
     ? `<div class="eyebrow">Task complete</div><h2 class="step-name">You finished “${esc(t.title)}”!</h2><p class="muted" style="margin:0">It’s been moved to the Trash.</p>`
     : '';
@@ -2068,9 +2529,14 @@ function closeGap(s, at = Date.now()) {
 function gapPlan(s) {
   const t = state.tasks.get(s.taskId), as = assess(state.meta), bp = breakPlan(as, s);
   const next = t && !t.archived ? nextStep(t, s) : null;
+  const after = next ? null : nextPlanned(s.taskId);
   if (!next && !switchTarget(null)) return { type: 'none' };
   if (bp && bp.type !== 'switch') return { type: 'break', min: bp.type === 'short' ? 5 : bp.min || as.breakMin };
-  if (bp || !next || !next.est) return { type: 'hold' };
+  if (bp) return { type: 'hold' };
+  // Done with this task: the timeline says what's next. Time before something you placed later is yours.
+  if (after?.waits) return { type: 'none' };
+  if (after) { const n = nextStep(after.task, s); return n && n.est ? { type: 'step', t: after.task, next: n } : { type: 'hold' }; }
+  if (!next || !next.est) return { type: 'hold' };
   return { type: 'step', t, next };
 }
 
@@ -2152,6 +2618,7 @@ function shortenStep(a, sec) {
   a.pausedMs += (before - to) * 1000;
   a.alerts = 0; a.okSec = 0;
   a.estLow = true; // the time is a best guess now, so this one doesn't count toward your speed
+  a.timeGuess = true;
   logSlip('away', before - to);
   if (before - to >= 30) logEvent('pause', { at: Date.now() - (before - to) * 1000, end: Date.now(), away: true });
   return to;
@@ -2182,7 +2649,7 @@ function finishStep() {
   const pace = st.est ? clamp(st.est * 60 / Math.max(sec, 20), 0.25, 3) : null;
   s.log.push({ taskId: t.id, stepId: st.id, title: st.title, est: st.est, actual: sec, worked, pace, excluded: !counts, feel: null });
   logPause(a);
-  logStepTime('done', a, st, t, worked);
+  logStepTime('done', a, st, t, worked, a.carry || a.timeGuess || a.autoStopped || a.splitUp ? { noSpeed: true } : null);
   s.active = null; s.taskId = t.id; s.lastAt = Date.now();
   openGap(s);
   const countedN = s.log.filter(l => l.pace != null && !l.excluded).length;
@@ -2233,6 +2700,7 @@ function splitStep(name, min) {
   state.ask = null;
   if (document.activeElement) document.activeElement.blur();
   logEvent('split', { title: st.title, rest: rest.title });
+  a.splitUp = true;
   finishStep();
   toast(`Split it. “${rest.title}” is up next.`);
 }
@@ -2270,6 +2738,7 @@ function takeBreak(min) {
   if (s && s.method === 'pomodoro') { const p = m.pomo && m.pomo.date === dateKey() ? m.pomo : { date: dateKey(), n: 0 }; m.pomo = { date: p.date, n: p.n + 1 }; }
   if (s) recordSession(s);
   if (s) { closeGap(s); stashActive(s, 'break'); }
+  min = usePlannedBreak(min);
   m.brk = { startedAt: Date.now(), until: Date.now() + min * 60e3, min, taskId: s ? s.taskId : null, alerts: 0 };
   m.session = null; state.ask = null; state.focusOpen = true;
   saveMeta(); render();
@@ -2342,6 +2811,153 @@ function deleteFocusStep(sid) {
   toast(`Deleted “${st ? st.title : 'step'}”`, 'Undo', () => { saveTask(before); render(); });
 }
 
+/* ---------- actions: the timeline ---------- */
+function takeOffPlan(itemId) {
+  const p = dayPlan(), before = clone(p);
+  savePlan({ ...p, items: p.items.filter(i => i.id !== itemId) });
+  renderLayer(); render();
+  toast('Taken off today', 'Undo', () => { savePlan(before); renderLayer(); render(); });
+}
+
+// Keyboard reordering: swap a task with its neighbor on the timeline.
+function movePlanItem(itemId, dir) {
+  const p = dayPlan(), tasks = p.items.filter(i => i.taskId), i = tasks.findIndex(x => x.id === itemId), j = i + dir;
+  if (i < 0 || j < 0 || j >= tasks.length) return;
+  const a = p.items.indexOf(tasks[i]), b = p.items.indexOf(tasks[j]), items = [...p.items];
+  [items[a], items[b]] = [{ ...items[b], at: null }, { ...items[a], at: null }];
+  savePlan({ ...p, items });
+  render();
+}
+
+/* ----- dragging: tasks and breaks onto the timeline, and the edges of your hours ----- */
+const LONG_PRESS_MS = 280;
+let press = null, drag = null, skipClick = false;
+
+const railTime = y => railView.start + (y - $('#rail').getBoundingClientRect().top) / railView.ppm;
+const ghostShow = (text, x, y) => {
+  let g = $('#drag-ghost');
+  if (!g) { g = document.createElement('div'); g.id = 'drag-ghost'; g.className = 'drag-ghost'; document.body.appendChild(g); }
+  g.textContent = text;
+  g.style.transform = `translate(${x + 14}px, ${y + 14}px)`;
+};
+
+function liftItem(src) {
+  const p = dayPlan(), type = src.dataset.drag;
+  const item = type === 'brk' ? { id: newId('i'), brk: PLAN_BREAK_MIN, at: 0 }
+    : type === 'task' ? p.items.find(i => i.taskId === src.dataset.id) || { id: newId('i'), taskId: src.dataset.id, at: null }
+    : p.items.find(i => i.id === src.dataset.item);
+  if (!item) return null;
+  const t = item.taskId && state.tasks.get(item.taskId);
+  return { type: 'plan', item, known: p.items.includes(item), preview: null, label: t ? `${t.title} · ${fmtMin(taskRoom(t).min)}` : `Break · ${fmtMin(item.brk)}` };
+}
+function liftEdge(i, side) { return { type: 'hours', list: clone(dayPlan().windows), i, side, preview: null }; }
+// Dragging across your hours blocks off time. Dragging across time outside them adds it.
+function liftPaint(y) {
+  const list = clone(dayPlan().windows), at = snapTo(railTime(y), HOURS_SNAP), inside = list.findIndex(w => at > w.s && at < w.e);
+  if (inside >= 0) {
+    list.splice(inside + 1, 0, { s: at, e: list[inside].e });
+    list[inside].e = at;
+    return { type: 'hours', list, i: inside + 1, side: 's', carve: true, preview: null };
+  }
+  const after = list.findIndex(w => w.s > at), i = after < 0 ? list.length : after;
+  list.splice(i, 0, { s: at, e: at });
+  return { type: 'hours', list, i, side: 'e', preview: null };
+}
+
+function lift(p, x, y) {
+  press = null;
+  clearTimeout(p.timer);
+  const d = p.src.dataset, v = railView;
+  const started = d.edge ? liftEdge(+d.i, d.edge) : d.drag ? liftItem(p.src) : liftPaint(p.y);
+  if (!started) return;
+  drag = { ...started, frozen: { start: v.start, end: v.end, ppm: v.ppm }, x, y };
+  try { document.body.setPointerCapture(p.id); } catch (e) {}
+  document.body.classList.add('dragging');
+  if (p.touch) { try { navigator.vibrate && navigator.vibrate(10); } catch (e) {} }
+  scrolledAt = performance.now();
+  requestAnimationFrame(autoScroll);
+  dragTo(x, y);
+}
+
+function dragTo(x, y) {
+  drag.x = x; drag.y = y;
+  if (!$('#rail')) return;
+  if (drag.type === 'hours') {
+    const { list, i, side } = drag;
+    const lo = side === 's' ? (list[i - 1]?.e ?? 0) : list[i].s, hi = side === 's' ? list[i].e : (list[i + 1]?.s ?? 1440);
+    const at = clamp(snapTo(railTime(y), HOURS_SNAP), lo, hi);
+    ghostShow(drag.carve ? `Blocked off until ${clockAt(at)}` : `${side === 's' ? 'Start' : 'Stop'} at ${clockAt(at)}`, x, y);
+    if (at === drag.key) return;
+    drag.key = at;
+    const windows = clone(list);
+    windows[i][side] = at;
+    drag.preview = { ...dayPlan(), windows };
+    drag.frozen.end = Math.max(drag.frozen.end, Math.ceil((at + 30) / 60) * 60);
+    renderDay();
+    return;
+  }
+  const r = $('#rail').getBoundingClientRect(), near = 36;
+  const inside = x >= r.left - near && x <= r.right + near && y >= r.top - near && y <= r.bottom + near;
+  ghostShow(!inside && drag.known ? 'Take off today' : drag.label, x, y);
+  const key = inside ? snapTo(railTime(y), PLAN_SNAP) : 'out';
+  if (key === drag.key) return;
+  drag.key = key;
+  const p = dayPlan();
+  drag.preview = inside ? placeItem(p, drag.item, key) : drag.known ? { ...p, items: p.items.filter(i => i.id !== drag.item.id) } : null;
+  renderDay();
+}
+
+// On phones the list and the timeline don't fit on screen together, so the page moves when you reach an edge.
+let scrolledAt = 0;
+function autoScroll() {
+  if (!drag) return;
+  const now = performance.now(), ms = Math.min(now - scrolledAt, 500), edge = 70, y = drag.y, h = innerHeight;
+  const speed = y < edge ? (y - edge) / 100 : y > h - edge ? (y - h + edge) / 100 : 0; // pixels per millisecond
+  scrolledAt = now;
+  if (speed) { window.scrollBy(0, speed * ms); dragTo(drag.x, drag.y); }
+  requestAnimationFrame(autoScroll);
+}
+
+function endDrag(cancel) {
+  const d = drag;
+  if (!d) return;
+  drag = null;
+  $('#drag-ghost')?.remove();
+  document.body.classList.remove('dragging');
+  skipClick = true;
+  setTimeout(() => { skipClick = false; }, 60);
+  if (!cancel && d.preview) {
+    const before = clone(dayPlan()), p = d.preview;
+    if (d.type === 'hours') p.windows = cleanWindows(p.windows);
+    savePlan(p);
+    if (d.type === 'plan' && !p.items.some(i => i.id === d.item.id)) toast('Taken off today', 'Undo', () => { savePlan(before); render(); });
+  }
+  render();
+}
+
+document.addEventListener('pointerdown', e => {
+  if (e.button || drag || state.layer || state.focusOpen || !$('#rail')) return;
+  const el = e.target, touch = e.pointerType === 'touch';
+  if (el.closest('.check, .start, .tb-go, .tb-x')) return;
+  const src = el.closest('[data-drag], [data-edge]') || (!touch && el.closest('#rail'));
+  if (!src) return;
+  // A grip or an edge moves at once. Anywhere else a finger has to hold first, so it can still scroll the page.
+  const now = !!el.closest('.grip, .win-edge, .day-tools .btn');
+  press = { id: e.pointerId, x: e.clientX, y: e.clientY, src, touch, now };
+  if (touch && !now) press.timer = setTimeout(() => { if (press) lift(press, press.x, press.y); }, LONG_PRESS_MS);
+});
+window.addEventListener('pointermove', e => {
+  if (drag) { dragTo(e.clientX, e.clientY); return; }
+  if (!press || e.pointerId !== press.id) return;
+  const moved = Math.hypot(e.clientX - press.x, e.clientY - press.y);
+  if (press.touch && !press.now) { if (moved > 10) { clearTimeout(press.timer); press = null; } return; }
+  if (moved > 5) lift(press, e.clientX, e.clientY);
+});
+window.addEventListener('pointerup', () => { if (press) { clearTimeout(press.timer); press = null; } endDrag(); });
+window.addEventListener('pointercancel', () => { if (press) { clearTimeout(press.timer); press = null; } endDrag(true); });
+document.addEventListener('touchmove', e => { if (drag) e.preventDefault(); }, { passive: false });
+document.addEventListener('click', e => { if (skipClick) { e.stopPropagation(); e.preventDefault(); } }, true);
+
 /* ---------- events ---------- */
 document.addEventListener('click', e => {
   if (e.target.closest('.toast-act')) { const f = toastAction; hideToast(); if (f) f(); return; }
@@ -2375,6 +2991,8 @@ document.addEventListener('click', e => {
     case 'draft-remove': state.draft.steps.splice(+b.dataset.i, 1); renderDraftSteps(); break;
     case 'show-archive': state.view = 'archive'; render(); window.scrollTo(0, 0); break;
     case 'show-home': state.view = 'home'; render(); window.scrollTo(0, 0); break;
+    case 'show-history': state.view = 'history'; render(); window.scrollTo(0, 0); break;
+    case 'open-record': state.layer = { type: 'record', id }; renderLayer(true); break;
     case 'open-task': openDetail(id); break;
     case 'add-steps': openDetail(id, true); break;
     case 'complete-task': completeTask(id); break;
@@ -2449,6 +3067,32 @@ document.addEventListener('click', e => {
       break;
     }
     case 'open-look': state.layer = { type: 'look' }; renderLayer(true); break;
+    case 'open-hours': state.layer = { type: 'hours' }; renderLayer(true); break;
+    case 'hours-add': {
+      const p = dayPlan(), from = Math.min(1320, p.windows.length ? p.windows[p.windows.length - 1].e + 60 : 540);
+      savePlan({ ...p, windows: cleanWindows([...p.windows, { s: from, e: Math.min(1440, from + 60) }]) });
+      renderLayer(); render(); break;
+    }
+    case 'hours-del': { const p = dayPlan(); savePlan({ ...p, windows: p.windows.filter((w, i) => i !== +b.dataset.i) }); renderLayer(); render(); break; }
+    case 'hours-usual': state.meta.hours = clone(dayPlan().windows); saveMeta(); renderLayer(); toast('These are your usual hours now.'); break;
+    case 'plan-on': {
+      const p = dayPlan();
+      savePlan({ ...p, items: [...p.items, { id: newId('i'), taskId: id, at: null }] });
+      renderLayer(); render(); break;
+    }
+    case 'plan-off': takeOffPlan(id); break;
+    case 'plan-tidy': {
+      const p = dayPlan(), before = clone(p);
+      savePlan({ ...p, items: p.items.map(i => i.brk ? i : { ...i, at: null }) });
+      render();
+      toast('Closed the gaps', 'Undo', () => { savePlan(before); render(); });
+      break;
+    }
+    case 'plan-break': {
+      const p = dayPlan(), first = layoutDay().blocks.find(x => !x.item.front);
+      savePlan(placeItem(p, { id: newId('i'), brk: PLAN_BREAK_MIN, at: 0 }, first ? first.end : minuteNow() + 60));
+      render(); break;
+    }
     case 'look-theme': case 'look-color': {
       const look = { ...(state.meta.look || {}) };
       look[act === 'look-theme' ? 'theme' : 'color'] = v;
@@ -2509,6 +3153,13 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.id === 'new-due' && state.draft) { state.draft.due = el.value || null; return; }
+  if (el.dataset.hour) {
+    const p = dayPlan(), list = clone(p.windows), w = list[+el.dataset.i], v = parseHHMM(el.value);
+    if (w && v != null) w[el.dataset.hour] = v;
+    savePlan({ ...p, windows: w && w.e > w.s ? cleanWindows(list) : p.windows });
+    renderLayer(); render();
+    return;
+  }
   // Steps edited on the working screen
   if (el.dataset.fedit) {
     const t = state.tasks.get(focusTaskId()), st = t && t.steps.find(s => s.id === el.dataset.step);
@@ -2565,7 +3216,23 @@ document.addEventListener('keydown', e => {
     if (el.dataset && el.dataset.draft) { e.preventDefault(); $('#draft-step').focus(); return; }
     if (el.dataset && (el.dataset.field || el.dataset.fedit)) { e.preventDefault(); el.blur(); return; }
   }
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    const dir = e.key === 'ArrowUp' ? -1 : 1, edge = el.closest?.('[data-edge]'), block = el.closest?.('.tblock[data-item]');
+    if (edge) {
+      e.preventDefault();
+      const p = dayPlan(), list = clone(p.windows), w = list[+edge.dataset.i];
+      w[edge.dataset.edge] = clamp(w[edge.dataset.edge] + dir * HOURS_SNAP, 0, 1440);
+      savePlan({ ...p, windows: cleanWindows(list) });
+      render();
+      $(`[data-edge="${edge.dataset.edge}"][data-i="${edge.dataset.i}"]`)?.focus();
+    } else if (block) {
+      e.preventDefault();
+      movePlanItem(block.dataset.item, dir);
+      $(`.tblock[data-item="${block.dataset.item}"] .tb-open`)?.focus();
+    }
+  }
   if (e.key === 'Escape') {
+    if (drag) { endDrag(true); return; }
     if (state.layer) closeLayer();
     else if (state.focusOpen) minimizeFocus();
   }
@@ -2687,6 +3354,18 @@ function showClocks() {
   }
 }
 
+// With nothing running there's no clock to run out, so the timeline is what gets you started.
+let planAlerted = null;
+function tickPlan(m) {
+  if (m.session?.active || m.brk) return;
+  const p = dayPlan(), first = layoutDay().blocks[0], now = minuteNow();
+  if (!first || !first.task.steps.length || planAlerted === first.item.id) return;
+  const due = Math.max(first.item.at ?? 0, p.windows[0]?.s ?? 0);
+  if (now < due || now >= due + PLAN_ALERT_MIN) return;
+  planAlerted = first.item.id;
+  Alert.send(`Time to start: ${first.task.title}`, `${fmtMin(first.min)} on your timeline.`);
+}
+
 let lastTick = 0, syncUntil = 0;
 function tick() {
   if (!state.ready) return;
@@ -2715,6 +3394,8 @@ function tick() {
     lastMinute = minute;
     if (expireIdleSession()) { render(); return; }
     if (m.session?.active && !m.session.active.pausedAt) checkBreakDue(m.session);
+    tickPlan(m);
+    if (!drag) renderDay();
     if (state.focusOpen && (m.session || m.brk)) renderFocus();
   }
 }

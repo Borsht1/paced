@@ -5,10 +5,13 @@ A to-do list that helps you work at a steady pace and balance work with free tim
 - Add a task and split it into small steps, with a guess of how many minutes each will take.
 - Press **Start**. Paced counts down each step and stops you at the planned end to decide what's next.
 - Between steps a one-minute clock runs, then the next step starts by itself, so nothing is left un-timed.
+- The Today timeline shows the hours you can work. Drag tasks onto it and each takes up room for the time it needs. Tasks flow through your free time in order and never start sooner than where you dropped them, so changing a task, your hours or running over moves everything after it, and anything that no longer fits turns red. Drag the edges of your hours, drag across them to block off time, or use **Hours**. Your changes last for the day, unless you choose to use them every day.
+- Drag **Break** onto the timeline to plan one. Tasks flow around it, and a break you planned comes before any Paced would suggest. When a task ends, the next one on the timeline starts by itself, and Paced alerts you when the first thing on it is due.
 - It tells you when to take a break once you slow down, or to switch tasks when something is due soon.
 - Sound, notifications and the tab title reach you when you're not looking at Paced. Notifications need the page open in a desktop browser; on most phones you get sound and vibration only.
 - When you stop using your computer, the step pauses from the moment you stopped and carries on when you're back. It's on by default, and you can change it in Settings. It needs the browser extension to see activity in other apps. Without the extension, Paced sends a "Still working?" notification every 15 minutes while you're in another app, and pauses if you don't click it within 3 minutes.
 - When you stop, Paced shows a summary of the session: what you worked on, your breaks and pauses, and how long each took, with room for a note. Each session is saved, breaks included.
+- History shows your past sessions and when you work best: by time of day, by day of the week, and by how long it's been since a break.
 - Try different ways of working (Paced breaks, Pomodoro, Long focus, Task rotation) and see which suits you.
 
 ## Running it
