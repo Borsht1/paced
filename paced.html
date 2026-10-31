@@ -428,7 +428,7 @@ body.has-mini .toast { bottom: calc(172px + env(safe-area-inset-bottom, 0px)); }
 'use strict';
 
 const ICON = {
-  mark: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="8" width="3.4" height="7" rx="1" fill="currentColor"/><rect x="6.3" y="4" width="3.4" height="11" rx="1" fill="currentColor"/><rect x="11.6" y="1" width="3.4" height="14" rx="1" fill="currentColor" opacity=".4"/></svg>',
+  mark: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M6.1 1h3.8a1.2 1.2 0 0 1 1.16.9l3 11.6A1.2 1.2 0 0 1 12.9 15H3.1a1.2 1.2 0 0 1-1.16-1.5l3-11.6A1.2 1.2 0 0 1 6.1 1zM7.2 11.2 9.7 3.4l1.45.45-2.3 7.35z"/></svg>',
   plus: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>',
   play: '<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8v14.4L19 12z" fill="currentColor"/></svg>',
   pause: '<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>',
@@ -636,9 +636,9 @@ function applyLook() {
   if (!el) { el = document.createElement('style'); el.id = 'look-vars'; document.body.appendChild(el); } // after the page's own styles, so it wins
   const v = ([a, ink, soft]) => `--accent:${a};--accent-ink:${ink};--accent-soft:${soft};`;
   el.textContent = `:root{${v(c.light)}}@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${v(c.dark)}}}:root[data-theme="dark"]{${v(c.dark)}}`;
-  // The browser tab icon: the same three bars as the header, in your color.
+  // The browser tab icon: the same metronome as the header, in your color.
   const mark = ICON.mark.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
-    .replace('aria-hidden="true">', `><style>rect{fill:${c.light[0]}}@media (prefers-color-scheme:dark){rect{fill:${c.dark[0]}}}</style>`);
+    .replace('aria-hidden="true">', `><style>path{fill:${c.light[0]}}@media (prefers-color-scheme:dark){path{fill:${c.dark[0]}}}</style>`);
   const href = 'data:image/svg+xml,' + encodeURIComponent(mark);
   let icon = document.getElementById('tab-icon');
   if (!icon) { icon = document.createElement('link'); icon.id = 'tab-icon'; icon.rel = 'icon'; icon.type = 'image/svg+xml'; document.head.appendChild(icon); }
