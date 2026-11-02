@@ -166,7 +166,8 @@ body.has-mini .day.shut { bottom: calc(96px + env(safe-area-inset-bottom, 0px));
 .day-grip { position: absolute; top: 0; left: 50%; width: 72px; height: 12px; margin-left: -36px; padding: 0; border: none; background: none; cursor: ns-resize; touch-action: none; }
 .day-grip::after { content: ""; position: absolute; top: 4px; left: 18px; right: 18px; height: 4px; border-radius: 2px; background: var(--line); transition: background .15s; }
 .day-grip:hover::after, .day-grip:focus-visible::after { background: var(--accent); }
-.rail { position: relative; isolation: isolate; height: min(var(--rail-h, 60px), calc(100vh - 220px)); margin-top: 4px; overflow: hidden; cursor: crosshair; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.rail-scroll { height: min(var(--rail-h, 60px), calc(100vh - 220px)); margin-top: 4px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: thin; touch-action: pan-x; }
+.rail { position: relative; isolation: isolate; height: 100%; overflow: hidden; cursor: crosshair; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); }
 .tick span { position: absolute; left: 3px; top: 1px; font: 500 10px/1 var(--font-mono); color: var(--muted); white-space: nowrap; }
 .win { position: absolute; top: 15px; bottom: 0; background: var(--zone-soft); border-radius: 6px; }
@@ -1291,6 +1292,8 @@ function setRailH(h) {
   renderDay('quiet');
 }
 const saveRailH = () => { try { localStorage.setItem(RAIL_KEY, railH); } catch (e) {} };
+const RAIL_ZOOM = { min: 1, max: 3 }, RAIL_PEEK = 32, RAIL_EDGE = 40; // pixels: per minute, of the next hour left showing, and where a drag starts scrolling
+let railAt = null, railPx = 0; // the time at the left edge once you've scrolled; until then it follows your hours
 let dayFilter = 'task'; // what dragging across the timeline selects: 'task' or 'brk'
 let daySel = null; // what's selected: { kind, ids }, or { range } for a stretch with nothing in it
 
@@ -1303,12 +1306,29 @@ function setDayOpen(open) {
 
 function dayView() {
   const p = drag?.preview || dayPlan(), now = minuteNow(), lay = layoutDay(p, now), past = pastWork(now);
-  const points = [now, ...p.windows.flatMap(w => [w.s, w.e]), ...lay.stops.flatMap(b => [b.s, b.e]), ...lay.blocks.flatMap(b => [b.start, b.end]), ...past.flatMap(b => [b.s, b.e])];
+  const points = [now, ...p.windows.flatMap(w => [w.s, w.e])];
   const laneW = Math.min(1040, innerWidth - 24) - 24, wide = laneW >= 600;
-  let start = Math.max(0, Math.floor((Math.min(...points) - (wide ? 20 : 0)) / 60) * 60), end = Math.ceil((Math.max(...points) + (wide ? 20 : 0)) / 60) * 60;
-  if (!wide) start = Math.max(start, Math.floor((now - 60) / 60) * 60); // on a phone, what's over doesn't get to squeeze what's left
-  if (drag) { start = drag.frozen.start; end = drag.frozen.end; } // the timeline holds still under your finger
-  return (railView = { p, now, lay, past: past.filter(b => b.e > start).map(b => ({ ...b, s: Math.max(b.s, start) })), start, end, pxPerMin: laneW / (end - start) });
+  // The whole day is always there to scroll through. Your hours set the zoom and where it opens, so what's on it never changes the scale.
+  let home = Math.max(0, Math.floor((Math.min(...points) - (wide ? 20 : 0)) / 60) * 60), last = Math.ceil((Math.max(...points) + (wide ? 20 : 0)) / 60) * 60;
+  if (!wide) home = Math.max(home, Math.floor((now - 60) / 60) * 60); // on a phone, what's over doesn't get to squeeze what's left
+  let end = Math.max(1440, ...lay.blocks.map(b => Math.ceil(b.end / 60) * 60)), pxPerMin = clamp((laneW - RAIL_PEEK) / (last - home), RAIL_ZOOM.min, RAIL_ZOOM.max);
+  if (drag) ({ home, end, pxPerMin } = drag.frozen); // the timeline holds still under your finger
+  return (railView = { p, now, lay, past, start: 0, end, home, pxPerMin });
+}
+
+// Scrolling replaces nothing on screen, so a redraw has to put the timeline back where it was.
+function placeRail(v) {
+  const s = $('.rail-scroll');
+  s.scrollLeft = ((railAt ?? v.home) - v.start) * v.pxPerMin;
+  railPx = s.scrollLeft;
+}
+function railScrolled(s) {
+  if (!railView || Math.abs(s.scrollLeft - railPx) < 1) return; // that was us putting it back
+  railPx = s.scrollLeft;
+  railAt = railView.start + railPx / railView.pxPerMin;
+  $('#day-now').hidden = false;
+  const menu = $('.day-menu');
+  if (menu) menu.style.left = menuLeft(railView, railView.menuAt);
 }
 
 // What you've really done today, from the session records.
@@ -1329,6 +1349,7 @@ function pastWork(now) {
 
 const atPct = (v, min) => ((min - v.start) / (v.end - v.start) * 100).toFixed(2);
 const spanStyle = (v, a, b) => `left:${atPct(v, a)}%;width:calc(${((b - a) / (v.end - v.start) * 100).toFixed(2)}% - 2px)`;
+const menuLeft = (v, at) => `clamp(0px, calc(${Math.round((at - (railAt ?? v.home)) * v.pxPerMin)}px - 138px), calc(100% - 300px))`;
 const rangeWords = (s, e) => `${clockAt(s)} to ${clockAt(e)}`;
 
 // Everything of the chosen kind that a stretch of time touches. What's happening now can't be selected.
@@ -1369,10 +1390,9 @@ const dayWords = lay => lay.freeMin < 1 ? 'No free time left today' : `${fmtMin(
 
 function dayHTML() {
   const v = dayView(), { p, now, lay } = v, ticks = [], box = marquee();
-  const every = v.pxPerMin * 60 < 46 ? 2 : 1;
-  for (let h = Math.ceil(v.start / 60); h * 60 < v.end; h++) ticks.push(`<div class="tick" style="left:${atPct(v, h * 60)}%">${h % every || Math.abs(h * 60 - now) * v.pxPerMin < 44 ? '' : `<span>${hourName(h % 24)}</span>`}</div>`);
-  const wins = p.windows.map((w, i) => w.e <= v.start ? '' : `<div class="win" style="left:${atPct(v, w.s)}%;width:${((w.e - w.s) / (v.end - v.start) * 100).toFixed(2)}%">
-    ${w.s >= v.start ? `<button class="win-edge opens" data-edge="s" data-i="${i}" title="Drag to change when you start" aria-label="Start time, ${clockAt(w.s)}. Use the arrow keys to change it."></button>` : ''}
+  for (let h = Math.ceil(v.start / 60); h * 60 < v.end; h++) ticks.push(`<div class="tick" style="left:${atPct(v, h * 60)}%">${Math.abs(h * 60 - now) * v.pxPerMin < 44 ? '' : `<span>${hourName(h % 24)}</span>`}</div>`);
+  const wins = p.windows.map((w, i) => `<div class="win" style="left:${atPct(v, w.s)}%;width:${((w.e - w.s) / (v.end - v.start) * 100).toFixed(2)}%">
+    <button class="win-edge opens" data-edge="s" data-i="${i}" title="Drag to change when you start" aria-label="Start time, ${clockAt(w.s)}. Use the arrow keys to change it."></button>
     <button class="win-edge closes" data-edge="e" data-i="${i}" title="Drag to change when you stop" aria-label="End time, ${clockAt(w.e)}. Use the arrow keys to change it."></button>
   </div>`).join('');
   const first = p.windows.find(w => w.e > now), hintFrom = first ? Math.max(first.s, now) : now, hintTo = first ? first.e : now + 60;
@@ -1388,12 +1408,13 @@ function dayHTML() {
         ${gaps ? '<button class="link small" data-act="plan-tidy">Close the gaps</button>' : ''}
         <span class="day-filter" role="group" aria-label="What dragging across the timeline selects"><span>Select</span>${filterBtn('task', 'Tasks')}${filterBtn('brk', 'Breaks')}</span>
         <button class="btn ghost small" data-drag="brk" data-act="plan-break" title="Drag onto the timeline, or click to add one after your next task">${ICON.cup}Break</button>
+        <button class="link small" id="day-now" data-act="day-now" title="Back to today’s hours"${railAt == null ? ' hidden' : ''}>Back</button>
         <button class="link small" data-act="open-hours">Hours</button>
         <button class="link small" data-act="plan-reset"${fresh ? ' disabled' : ''} title="Clear today’s timeline and go back to your usual hours">Reset</button>
       </div>
       <button class="icon-btn day-toggle" data-act="day-toggle" title="Close the timeline" aria-label="Close the timeline">${ICON.minus}</button>
     </div>
-    <div class="rail${dayFilter === 'brk' ? ' for-breaks' : ''}" id="rail">
+    <div class="rail-scroll"><div class="rail${dayFilter === 'brk' ? ' for-breaks' : ''}" id="rail" style="width:${Math.round((v.end - v.start) * v.pxPerMin)}px">
       ${ticks.join('')}${wins}
       <div class="spent" style="width:${atPct(v, now)}%"></div>
       ${v.past.map(b => `<div class="tblock ago" style="${spanStyle(v, b.s, b.e)}" title="${esc(b.title)}, done"><div class="tb-open">${(b.e - b.s) * v.pxPerMin >= 24 ? `<b>${esc(b.title)}</b>` : ''}</div></div>`).join('')}
@@ -1402,7 +1423,7 @@ function dayHTML() {
       ${lay.blocks.length ? '' : `<div class="rail-hint" style="${spanStyle(v, hintFrom, hintTo)}">Drag a task here</div>`}
       ${box ? `<div class="marquee" style="${spanStyle(v, box.s, box.e)}"></div>` : ''}
       <div class="now-line" style="left:${atPct(v, now)}%"><span>${clockAt(now).replace(/\s?[AP]M$/i, '')}</span></div>
-    </div>
+    </div></div>
     ${extraPct() ? `<p class="day-foot">Sized for your real speed, about ${extraPct()}% over your guesses</p>` : ''}
     ${dayMenuHTML(v)}`;
 }
@@ -1472,7 +1493,8 @@ function dayMenuHTML(v) {
   }
   if (!body) { daySel = null; return ''; }
   if (range && ids.length && range.e - range.s <= STRETCH_MAX_MIN) body += `<div class="dm-label">The stretch you selected, ${rangeWords(range.s, range.e)}</div>${rangeRowHTML(range, p)}`;
-  return `<section class="day-menu" role="dialog" aria-label="Change what you selected" style="left:clamp(0px, calc(${atPct(v, at)}% - 150px), calc(100% - 300px))">${body}</section>`;
+  v.menuAt = at;
+  return `<section class="day-menu" role="dialog" aria-label="Change what you selected" style="left:${menuLeft(v, at)}">${body}</section>`;
 }
 
 /* ----- the colored row on each task: when the timeline says it'll be finished ----- */
@@ -1480,7 +1502,7 @@ function slotInfo(t, lay) {
   const b = lay.blocks.find(x => x.task.id === t.id);
   if (!b) return null;
   const over = b.pieces.reduce((a, x) => a + (x.late ? x.e - x.s : 0), 0), end = clockAt(b.end);
-  if (b.pieces[0].late) return { cls: 'late', text: 'Doesn’t fit today', side: `Would finish ${end}` };
+  if (b.pieces[0].late) return { cls: 'late', text: b.item.at != null ? 'Outside your hours' : 'Doesn’t fit today', side: `Would finish ${end}` };
   if (over >= 1) return { cls: 'late', text: `Runs ${fmtMin(over)} past your hours`, side: `Would finish ${end}` };
   if (b.item.front) return { cls: 'live', text: `Finish by ${end}`, side: `${fmtMin(b.min)} left` };
   if (b.guess) return { cls: 'guess', text: `Finish by about ${end}`, side: 'Add minutes to be sure' };
@@ -1508,7 +1530,9 @@ function renderDay(how) {
   if (!show) { daySel = null; document.documentElement.style.setProperty('--day-lift', '0px'); return; }
   el.classList.toggle('shut', !dayOpen);
   el.style.setProperty('--rail-h', `${railH}px`);
-  if (dayOpen) el.innerHTML = dayHTML();
+  const scroller = $('.rail-scroll');
+  if (scroller) railScrolled(scroller); // the browser may not have told us about the latest scroll yet
+  if (dayOpen) { el.innerHTML = dayHTML(); placeRail(railView); }
   else {
     const lay = layoutDay();
     el.innerHTML = `<button class="day-pill" data-act="day-toggle" title="Open the timeline" aria-label="Open the timeline">${ICON.plus}Today<span class="${lay.lateMin >= 1 ? 'over' : ''}">${lay.lateMin >= 1 ? `${fmtMin(lay.lateMin)} over` : dayWords(lay)}</span></button>`;
@@ -1518,6 +1542,14 @@ function renderDay(how) {
   document.documentElement.style.setProperty('--day-lift', dayOpen ? `${el.offsetHeight + 8}px` : '0px');
 }
 window.addEventListener('resize', () => { if (!drag) renderDay('quiet'); });
+document.addEventListener('scroll', e => { if (e.target.classList?.contains('rail-scroll')) railScrolled(e.target); }, true);
+// A mouse wheel only goes up and down, so over the timeline that moves it through the day.
+document.addEventListener('wheel', e => {
+  const s = e.target.closest?.('.rail-scroll');
+  if (!s || e.ctrlKey || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+  e.preventDefault();
+  s.scrollLeft += e.deltaY * (e.deltaMode === 1 ? 16 : 1);
+}, { passive: false });
 
 /* ----- your hours ----- */
 const hhmm = min => `${pad(Math.floor(min / 60))}:${pad(min % 60)}`;
@@ -3262,11 +3294,30 @@ function lift(p, x, y) {
   const d = p.src.dataset;
   const started = d.grow ? liftGrow(d.grow, p.x) : d.size ? liftSize(p.y) : d.edge ? liftEdge(+d.i, d.edge) : d.drag ? liftItem(p.src) : liftSelect(p.x);
   if (!started) return;
-  drag = { ...started, frozen: { start: railView.start, end: railView.end }, x, y };
+  const { home, end, pxPerMin } = railView;
+  drag = { ...started, frozen: { start: railView.start, end, home, pxPerMin }, armed: !!p.src.closest('.rail-scroll'), x, y };
   try { document.body.setPointerCapture(p.id); } catch (e) {}
   document.body.classList.add('dragging');
   if (p.touch) { try { navigator.vibrate && navigator.vibrate(10); } catch (e) {} }
   dragTo(x, y);
+  requestAnimationFrame(edgeScroll);
+}
+
+// Holding a drag near either end of the timeline carries on through the day.
+// One that came from the list has to reach the timeline first, or a grip near the edge would set it off.
+function edgeScroll() {
+  if (!drag) return;
+  const s = $('.rail-scroll'), r = s?.getBoundingClientRect(), d = $('#day').getBoundingClientRect(), { x, y } = drag;
+  if (s && drag.type !== 'size' && (drag.type !== 'plan' || (y >= d.top - 24 && y <= d.bottom + 24))) {
+    const over = x < r.left + RAIL_EDGE ? x - r.left - RAIL_EDGE : x > r.right - RAIL_EDGE ? x - r.right + RAIL_EDGE : 0;
+    if (!over) drag.armed = true;
+    else if (drag.armed) {
+      s.scrollLeft += Math.sign(over) * Math.ceil(Math.min(Math.abs(over), RAIL_EDGE) / 8);
+      railScrolled(s);
+      dragTo(x, y);
+    }
+  }
+  requestAnimationFrame(edgeScroll);
 }
 
 function dragTo(x, y) {
@@ -3348,7 +3399,8 @@ document.addEventListener('pointerdown', e => {
   const src = select ? $('#rail') : el.closest('[data-grow], [data-size], [data-drag], [data-edge]') || el.closest('#rail');
   if (!src) return;
   // Anything on the timeline moves at once. In the list a finger has to hold first, so it can still scroll the page.
-  const now = !!el.closest('.grip, #day');
+  // The same goes for an empty part of the timeline: a finger scrolls it, and holding first selects.
+  const now = !!el.closest('.grip, #day') && !(touch && !onBlock && src.id === 'rail');
   press = { id: e.pointerId, x: e.clientX, y: e.clientY, src, touch, now };
   if (touch && !now) press.timer = setTimeout(() => { if (press) lift(press, press.x, press.y); }, LONG_PRESS_MS);
 });
@@ -3492,6 +3544,7 @@ document.addEventListener('click', e => {
     case 'plan-off': takeOffPlan(id); break;
     case 'plan-reset': resetPlan(); break;
     case 'day-toggle': setDayOpen(!dayOpen); break;
+    case 'day-now': railAt = null; renderDay('quiet'); break;
     case 'day-filter': dayFilter = v; daySel = null; renderDay('quiet'); break;
     case 'day-close': daySel = null; renderDay('quiet'); break;
     case 'day-pick': pickItem(b.dataset.item, e.shiftKey || e.metaKey || e.ctrlKey); break;
