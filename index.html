@@ -63,7 +63,7 @@ button:disabled { cursor: default; opacity: .45; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .muted { color: var(--muted); }
 
-.app { max-width: 600px; margin: 0 auto; padding-block: 22px 150px; }
+.app { max-width: 600px; margin: 0 auto; padding-block: 22px calc(150px + var(--day-lift, 0px)); }
 .brand-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; }
 .brand { display: flex; align-items: center; gap: 7px; font: 700 13px/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
 h1 { font: 800 clamp(32px, 8vw, 42px)/1.05 var(--font-display); letter-spacing: -.02em; margin: 18px 0 6px; text-wrap: balance; }
@@ -111,6 +111,13 @@ button.check:hover > span { border-color: var(--zone); color: var(--zone); }
 .task.can-plan { grid-template-columns: auto auto minmax(0, 1fr) auto; padding-left: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: grab; }
 .grip { width: 22px; align-self: stretch; display: grid; place-items: center; color: var(--muted); opacity: .55; touch-action: none; }
 .task.can-plan .task-body { cursor: inherit; }
+.task-slot { grid-column: 1 / -1; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 2px -12px -6px 0; padding: 6px 14px; border-radius: 0 0 var(--r) var(--r); background: var(--zone-soft); color: var(--zone); font-size: 13px; font-variant-numeric: tabular-nums; }
+.task-slot b { font-weight: 700; }
+.task-slot.live { background: var(--accent-soft); color: var(--accent); }
+.task-slot.guess { background: var(--warn-soft); color: var(--warn); }
+.task-slot.late { background: var(--stop-soft); color: var(--stop); }
+.task-slot.moved { animation: slot-moved 1.4s ease-out; }
+@keyframes slot-moved { 0%, 40% { box-shadow: inset 0 0 0 2px currentColor; } 100% { box-shadow: inset 0 0 0 2px transparent; } }
 .empty { background: var(--surface); border-radius: var(--r); padding: 26px 24px; box-shadow: var(--shadow); display: grid; gap: 12px; justify-items: start; }
 .empty h2 { font: 700 22px/1.2 var(--font-display); margin: 0; }
 .empty p { margin: 0; color: var(--muted); max-width: 52ch; }
@@ -123,7 +130,7 @@ button.check:hover > span { border-color: var(--zone); color: var(--zone); }
 .fab {
   position: fixed; z-index: 20;
   right: max(calc(16px + env(safe-area-inset-right, 0px)), calc(50vw - 300px));
-  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(24px + var(--day-lift, 0px) + env(safe-area-inset-bottom, 0px));
   height: 56px; padding: 0 24px 0 18px; border-radius: 999px; border: none;
   background: var(--accent); color: var(--accent-ink);
   font-weight: 700; font-size: 16px;
@@ -131,62 +138,90 @@ button.check:hover > span { border-color: var(--zone); color: var(--zone); }
   display: flex; align-items: center; gap: 8px; transition: transform .15s;
 }
 .fab:hover { transform: scale(1.04); }
-body.has-mini .fab { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+body.has-mini .fab { bottom: calc(96px + var(--day-lift, 0px) + env(safe-area-inset-bottom, 0px)); }
 
-/* The day's timeline */
-.home { display: flex; flex-direction: column; }
-.home-main { min-width: 0; }
-.day { order: -1; margin-top: 16px; }
-.day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.day-head h2 { font: 700 22px/1.2 var(--font-display); margin: 0; }
-.day-tools { display: flex; align-items: center; gap: 14px; }
-.day-tools .btn { cursor: grab; touch-action: none; }
-.day-sum { margin: 2px 0 12px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The day's timeline: a thin strip in a panel of its own, over the bottom of the window */
+.day { position: fixed; z-index: 21; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); width: min(1040px, calc(100vw - 24px)); padding: 7px 12px 10px; background: var(--surface); border-radius: 16px; box-shadow: 0 0 0 1px var(--line), 0 8px 28px rgba(20, 24, 28, .16); }
+body.has-mini .day { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+.day.shut { left: max(16px, calc(50vw - 300px)); transform: none; width: auto; padding: 0; background: none; box-shadow: none; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+body.has-mini .day.shut { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+.day-pill { display: flex; align-items: center; gap: 8px; max-width: min(240px, calc(100vw - 180px)); height: 44px; padding: 0 16px 0 12px; border: none; border-radius: 999px; background: var(--surface); color: var(--ink); font-weight: 700; font-size: 14px; box-shadow: 0 0 0 1px var(--line), 0 6px 20px rgba(20, 24, 28, .12); }
+.day-pill span { font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.day-pill span.over { color: var(--stop); font-weight: 600; }
+.day-head { display: flex; align-items: center; gap: 10px; min-height: 30px; flex-wrap: wrap; }
+.day-head h2 { font: 700 16px/1 var(--font-display); margin: 0; }
+.day-sum { flex: 1; min-width: 0; margin: 0; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .day-sum b { color: var(--stop); font-weight: 600; }
-.rail { position: relative; isolation: isolate; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-.tick { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); }
-.tick span { position: absolute; left: 0; top: 3px; font: 500 11px/1 var(--font-mono); color: var(--muted); }
-.win { position: absolute; left: 46px; right: 0; background: var(--zone-soft); border-radius: 8px; }
-.win-edge { position: absolute; left: 0; right: 0; height: 14px; padding: 0; border: none; background: none; cursor: ns-resize; touch-action: none; z-index: 4; }
-.win-edge.top { top: -7px; }
-.win-edge.bottom { bottom: -7px; }
-.win-edge::after { content: ""; position: absolute; left: 50%; top: 5px; width: 34px; height: 4px; margin-left: -17px; border-radius: 2px; background: var(--zone); opacity: .35; transition: opacity .15s; }
+.day-tools { display: flex; align-items: center; gap: 12px; }
+.day-tools .btn { padding: 4px 10px; font-size: 13px; cursor: grab; touch-action: none; }
+.day-tools .link { padding: 4px 0; font-size: 13px; }
+.day-tools .link:disabled { color: var(--muted); }
+.day-filter { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; color: var(--muted); }
+.day-filter > span { margin-right: 4px; }
+.day-filter button { border: 1px solid var(--line); background: none; padding: 3px 9px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.day-filter button:first-of-type { border-radius: 999px 0 0 999px; }
+.day-filter button:last-of-type { border-radius: 0 999px 999px 0; margin-left: -1px; }
+.day-filter button.on { position: relative; background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.day-toggle { width: 30px; height: 30px; }
+.rail { position: relative; isolation: isolate; height: 60px; margin-top: 4px; overflow: hidden; cursor: crosshair; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); }
+.tick span { position: absolute; left: 3px; top: 1px; font: 500 10px/1 var(--font-mono); color: var(--muted); white-space: nowrap; }
+.win { position: absolute; top: 15px; bottom: 0; background: var(--zone-soft); border-radius: 6px; }
+.win-edge { position: absolute; top: 0; bottom: 0; width: 14px; padding: 0; border: none; background: none; cursor: ew-resize; touch-action: none; z-index: 4; }
+.win-edge.opens { left: -7px; }
+.win-edge.closes { right: -7px; }
+.win-edge::after { content: ""; position: absolute; top: 50%; left: 5px; width: 4px; height: 24px; margin-top: -12px; border-radius: 2px; background: var(--zone); opacity: .45; transition: opacity .15s; }
 .win-edge:hover::after, .win-edge:focus-visible::after { opacity: 1; }
-.spent { position: absolute; left: 46px; right: 0; top: 0; background: var(--bg); opacity: .62; z-index: 1; pointer-events: none; }
-.now-line { position: absolute; left: 0; right: 0; border-top: 2px solid var(--stop); z-index: 3; pointer-events: none; }
-.now-line span { position: absolute; left: 0; top: -9px; background: var(--stop); color: var(--surface); font: 600 10px/1 var(--font-mono); padding: 3px 4px; border-radius: 4px; }
-.rail-hint { position: absolute; left: 46px; right: 0; text-align: center; color: var(--zone); font-size: 14px; font-weight: 600; pointer-events: none; z-index: 2; }
-.tblock { position: absolute; left: 52px; right: 6px; display: flex; background: var(--surface); border-radius: 6px; box-shadow: 0 0 0 1px var(--line); overflow: hidden; cursor: grab; z-index: 2; touch-action: pan-y; }
-.tblock.cont { border-radius: 2px 2px 6px 6px; }
-.tblock.cut { border-radius: 6px 6px 2px 2px; }
-.tb-open { flex: 1; min-width: 0; display: grid; align-content: start; padding: 2px 8px; border: none; background: none; color: inherit; text-align: left; font-size: 13px; line-height: 1.25; cursor: inherit; overflow: hidden; }
+.spent { position: absolute; left: 0; top: 15px; bottom: 0; background: var(--surface); opacity: .6; z-index: 1; pointer-events: none; }
+.now-line { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--stop); z-index: 3; pointer-events: none; }
+.now-line span { position: absolute; left: -2px; top: 0; background: var(--stop); color: var(--surface); font: 600 10px/1 var(--font-mono); padding: 2px 3px; border-radius: 0 3px 3px 0; }
+.rail-hint { position: absolute; top: 15px; bottom: 0; display: grid; place-items: center; color: var(--zone); font-size: 13px; font-weight: 600; pointer-events: none; z-index: 2; }
+.tblock { position: absolute; top: 18px; bottom: 3px; display: flex; background: var(--surface); border-radius: 5px; box-shadow: 0 0 0 1px var(--line); overflow: hidden; cursor: grab; z-index: 2; touch-action: none; }
+.tblock.cont { border-top-left-radius: 1px; border-bottom-left-radius: 1px; }
+.tblock.cut { border-top-right-radius: 1px; border-bottom-right-radius: 1px; }
+.tb-open { flex: 1; min-width: 0; display: grid; align-content: center; padding: 0 6px; border: none; background: none; color: inherit; text-align: left; font-size: 12px; line-height: 1.2; cursor: inherit; overflow: hidden; }
 .tb-open b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tb-open span { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.tb-go, .tb-x { flex: none; width: 26px; height: 26px; padding: 0; border: none; background: none; color: var(--accent); display: grid; place-items: center; }
-.tb-x { color: var(--muted); opacity: 0; }
-.tblock:hover .tb-x, .tb-x:focus-visible { opacity: 1; }
+.tb-open span { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .tblock.live { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
 .tblock.live .tb-open span { color: inherit; opacity: .8; }
 .tblock.late { background: var(--stop-soft); box-shadow: 0 0 0 1px var(--stop); }
 .tblock.guess { box-shadow: none; outline: 1px dashed var(--muted); outline-offset: -1px; }
 .tblock.brk { background: repeating-linear-gradient(135deg, var(--surface-2) 0 6px, var(--surface) 6px 12px); box-shadow: 0 0 0 1px var(--line); }
-.tblock.ago { background: var(--surface-2); box-shadow: none; color: var(--muted); cursor: default; }
-.tblock.lifted { box-shadow: 0 0 0 2px var(--accent); }
-.day-sum .link { padding: 0; font-size: 13px; }
-.day-foot { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.tblock.brk.live { color: var(--ink); box-shadow: 0 0 0 1px var(--accent); }
+.tblock.ago { background: var(--surface-2); box-shadow: none; color: var(--muted); cursor: crosshair; }
+.tblock.lifted, .tblock.picked { box-shadow: 0 0 0 2px var(--accent); z-index: 3; }
+.tblock.dim { opacity: .35; }
+.rail.for-breaks .tblock:not(.brk, .ago, .dim) { opacity: .6; cursor: crosshair; }
+.marquee { position: absolute; top: 15px; bottom: 0; background: color-mix(in srgb, var(--accent) 16%, transparent); border-left: 1px solid var(--accent); border-right: 1px solid var(--accent); z-index: 3; pointer-events: none; }
+.day-foot { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.day-menu { position: absolute; bottom: calc(100% + 8px); width: 300px; max-width: 100%; max-height: calc(100vh - 220px); overflow-y: auto; padding: 12px 14px; display: grid; gap: 8px; background: var(--surface); border-radius: 14px; box-shadow: 0 0 0 1px var(--line), 0 10px 32px rgba(20, 24, 28, .24); }
+.dm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dm-head b { font-size: 15px; overflow-wrap: anywhere; }
+.dm-head .icon-btn { width: 28px; height: 28px; margin: -4px -6px -4px 0; }
+.dm-sub { margin: -6px 0 0; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dm-label { margin: 2px 0 -2px; font-size: 12px; font-weight: 700; color: var(--muted); }
+.dm-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.dm-row .btn { padding: 6px 12px; font-size: 13px; }
+.dm-chip { min-width: 40px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 8px; background: none; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dm-chip:hover { border-color: var(--accent); color: var(--accent); }
+.dm-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.dm-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.dm-list button { width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: none; text-align: left; font-size: 13px; font-weight: 600; }
+.dm-list button:hover { border-color: var(--accent); }
+.dm-list span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dm-list small { flex: none; font-size: 12px; font-weight: 500; color: var(--muted); }
 .drag-ghost { position: fixed; left: 0; top: 0; z-index: 70; max-width: 240px; padding: 6px 12px; border-radius: 10px; background: var(--ink); color: var(--bg); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 8px 28px rgba(0, 0, 0, .25); pointer-events: none; }
 body.dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
-body.dragging .tblock, body.dragging .task { cursor: grabbing; }
+body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbing; }
 .hours-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; flex-wrap: wrap; }
 .hours-row .text-input { width: auto; }
-@media (min-width: 920px) {
-  .app.wide { max-width: 1000px; }
-  .app.wide .home { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 40px; align-items: start; }
-  .day { order: 0; position: sticky; top: 16px; margin-top: 18px; }
-  .app.wide ~ .fab { right: calc(50vw - 500px + 380px); }
+@media (max-width: 760px) {
+  .day-tools { order: 3; flex-basis: 100%; justify-content: space-between; gap: 8px; }
+  .day-toggle { order: 2; }
+  .day-filter > span { display: none; }
+  .day-menu { left: 0 !important; right: 0; width: auto; }
 }
 @media (hover: none) {
-  .tb-x { display: none; }
   .win-edge::after { opacity: 1; }
 }
 
@@ -231,7 +266,6 @@ body.dragging .tblock, body.dragging .task { cursor: grabbing; }
 .text-input { width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 11px 12px; font-size: 15px; min-width: 0; }
 .text-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .text-input.big { font-size: 18px; font-weight: 600; padding: 13px 14px; }
-.text-input.date { width: auto; }
 .title-wrap { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; color: var(--muted); cursor: text; }
 .title-edit { flex: 1; min-width: 0; font: 700 24px/1.2 var(--font-display); letter-spacing: -.01em; border: 1px solid transparent; background: transparent; border-radius: 10px; padding: 4px 8px; margin-left: -8px; }
 .title-edit:hover { border-color: var(--line); }
@@ -242,6 +276,21 @@ body.dragging .tblock, body.dragging .task { cursor: grabbing; }
 .tip { margin: 14px 0; padding: 12px 14px; border-radius: 12px; background: var(--accent-soft); font-size: 14px; }
 .total { margin: 10px 0 0; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .due-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.due-btn { width: auto; display: inline-flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.due-btn.none { color: var(--muted); font-weight: 400; }
+.due-btn svg { color: var(--muted); }
+.cal { max-width: 320px; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.cal .chips { margin: 0 0 10px; gap: 6px; }
+.cal .chip { padding: 6px 12px; font-size: 14px; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; font-weight: 600; }
+.cal-next svg { transform: rotate(180deg); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-dow { padding: 4px 0; text-align: center; font-size: 12px; color: var(--muted); }
+.cal-day { aspect-ratio: 1; padding: 0; border: none; border-radius: 50%; background: none; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.cal-day:hover { background: var(--surface-2); }
+.cal-day.past { color: var(--muted); font-weight: 400; }
+.cal-day.today { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.cal-day.on { background: var(--accent); color: var(--accent-ink); }
 
 .steps { list-style: none; margin: 4px 0 0; padding: 0; }
 .step { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--line); }
@@ -409,14 +458,14 @@ body.dragging .tblock, body.dragging .task { cursor: grabbing; }
 
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%); z-index: 60;
-  bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(100px + var(--day-lift, 0px) + env(safe-area-inset-bottom, 0px));
   width: max-content; max-width: min(520px, calc(100vw - 32px));
   display: flex; align-items: center; gap: 12px;
   background: var(--ink); color: var(--bg); border-radius: 12px;
   padding: 10px 10px 10px 16px; font-size: 14px; box-shadow: 0 8px 28px rgba(0, 0, 0, .25);
   animation: rise .2s ease-out;
 }
-body.has-mini .toast { bottom: calc(172px + env(safe-area-inset-bottom, 0px)); }
+body.has-mini .toast { bottom: calc(172px + var(--day-lift, 0px) + env(safe-area-inset-bottom, 0px)); }
 .toast-act { background: transparent; border: none; color: var(--bg); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; padding: 6px 8px; }
 
 @media (max-width: 420px) {
@@ -431,6 +480,7 @@ body.has-mini .toast { bottom: calc(172px + env(safe-area-inset-bottom, 0px)); }
 <div class="app"><main id="main"></main></div>
 <button class="fab" id="fab" data-act="open-add" hidden></button>
 <div class="mini" id="mini" hidden></div>
+<aside class="day" id="day" aria-label="Today" hidden></aside>
 <div class="focus" id="focus" hidden></div>
 <div class="layer" id="layer" hidden></div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
@@ -440,6 +490,7 @@ body.has-mini .toast { bottom: calc(172px + env(safe-area-inset-bottom, 0px)); }
 const ICON = {
   mark: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M6.1 1h3.8a1.2 1.2 0 0 1 1.16.9l3 11.6A1.2 1.2 0 0 1 12.9 15H3.1a1.2 1.2 0 0 1-1.16-1.5l3-11.6A1.2 1.2 0 0 1 6.1 1zM7.2 11.2 9.7 3.4l1.45.45-2.3 7.35z"/></svg>',
   plus: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>',
+  minus: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>',
   play: '<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8v14.4L19 12z" fill="currentColor"/></svg>',
   pause: '<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>',
   skip: '<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5v13l9-6.5zM17 5.5v13" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" fill="none"/></svg>',
@@ -449,6 +500,7 @@ const ICON = {
   back: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
   up: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
   down: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+  calendar: '<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 5.5h13a2 2 0 012 2v11a2 2 0 01-2 2h-13a2 2 0 01-2-2v-11a2 2 0 012-2zM3.5 10.5h17M8 3.5v4M16 3.5v4" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" fill="none"/></svg>',
   archive: '<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 4.5h17v4h-17zM5 8.5V18a2 2 0 002 2h10a2 2 0 002-2V8.5M10 12.5h4" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" fill="none"/></svg>',
   trash: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15M10 7V4.5h4V7M6.5 7l1 13h9l1-13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
   edit: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 00-3-3L5 17v3zM14.5 7.5l2 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
@@ -504,6 +556,7 @@ function fmtDayShort(k) {
   if (k === addDays(today, -1)) return 'Yesterday';
   return keyDate(k).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
+const fmtFullDay = k => keyDate(k).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: k.slice(0, 4) === dateKey().slice(0, 4) ? undefined : 'numeric' });
 
 /* ---------- state ---------- */
 const defaultMeta = () => ({ fresh: [], session: null, brk: null, lastBreakEnd: null, lastStop: null });
@@ -1059,7 +1112,16 @@ function layoutDay(p = dayPlan(), now = minuteNow()) {
     let need = min;
     while (need > 0) {
       const w = free.find(f => f.e > at);
-      if (!w) { pieces.push({ s: at, e: at + need, late: true }); at += need; break; }
+      if (!w) {
+        // Past the end of your hours there's nothing left but breaks to work around.
+        const stop = stops.find(b => b.e > at && b.s < at + need);
+        if (stop && stop.s <= at) { at = stop.e; continue; }
+        const len = stop ? stop.s - at : need;
+        pieces.push({ s: at, e: at + len, late: true });
+        at += len;
+        need -= len;
+        continue;
+      }
       const start = Math.max(at, w.s), len = Math.min(need, w.e - start);
       if (len < need && len < MIN_PIECE && !item.front) { at = w.e; continue; } // too short to be worth starting
       pieces.push({ s: start, e: start + len });
@@ -1116,6 +1178,7 @@ function render() {
   renderMain();
   renderMini();
   renderFocus();
+  renderDay();
   showPip();
   const fab = $('#fab');
   fab.hidden = !state.ready || Store.mode === 'signin' || state.view !== 'home' || !activeTasks().length;
@@ -1124,7 +1187,6 @@ function render() {
 
 function renderMain() {
   const main = $('#main');
-  $('.app').classList.toggle('wide', state.ready && Store.mode !== 'signin' && state.view === 'home' && activeTasks().length > 0);
   if (!state.ready) { main.innerHTML = '<div class="loading"><span class="pulse"></span>Loading your tasks…</div>'; return; }
   if (Store.mode === 'signin') { main.innerHTML = authHTML(); return; }
   main.innerHTML = state.view === 'archive' ? archiveHTML() : state.view === 'history' ? historyPageHTML() : homeHTML();
@@ -1178,16 +1240,13 @@ function homeHTML() {
   const list = activeTasks();
   const archived = archivedTasks().length;
   const left = list.reduce((a, t) => a + minLeft(t), 0);
-  const lay = layoutDay();
   return `<div class="brand-row"><div class="brand">${ICON.mark}Paced</div>
     <div class="row-actions"><button class="icon-btn" data-act="open-look" title="Settings" aria-label="Settings">${ICON.gear}</button>
     <button class="icon-btn" data-act="show-history" title="History" aria-label="History">${ICON.clock}</button>
     <button class="btn ghost small" data-act="show-archive" title="Completed tasks">${ICON.check}Completed${archived ? `<span class="count">${archived}</span>` : ''}</button></div></div>
-  <div class="home">
-  <div class="home-main">
   <h1>My tasks</h1>
   ${list.length ? `<p class="sub">${list.length} ${list.length === 1 ? 'task' : 'tasks'}${left ? ` · about ${fmtMin(left)} of work` : ''}</p>
-  <ul class="tasks">${list.map(t => taskHTML(t, lay)).join('')}</ul>
+  <ul class="tasks">${list.map(taskHTML).join('')}</ul>
   ${methodCardHTML()}` : `
   <p class="sub">Nothing to do yet</p>
   <section class="empty">
@@ -1199,24 +1258,34 @@ function homeHTML() {
     </ol>
     <button class="btn primary" data-act="open-add">${ICON.plus}Add your first task</button>
   </section>`}
-  ${savedLine()}
-  </div>
-  ${list.length ? dayHTML() : ''}
-  </div>`;
+  ${savedLine()}`;
 }
 
-/* ----- the timeline ----- */
+/* ----- the timeline: a thin strip in its own panel, with time running left to right ----- */
+const DAY_KEY = 'paced:day';
+const LENGTHS = [5, 10, 15, 20, 30, 45, 60], NUDGES = [-15, -5, 5, 15];
+const STRETCH_MAX_MIN = 180; // past this, a stretch you selected across is about what's in it, not the time itself
 let railView = null; // where the timeline last drew itself, for turning a position into a time
+let dayOpen = true; // open or closed is a choice for each device, so it stays out of your account
+try { dayOpen = localStorage.getItem(DAY_KEY) !== 'shut'; } catch (e) {}
+let dayFilter = 'task'; // what dragging across the timeline selects: 'task' or 'brk'
+let daySel = null; // what's selected: { kind, ids }, or { range } for a stretch with nothing in it
+
+function setDayOpen(open) {
+  dayOpen = open;
+  daySel = null;
+  try { localStorage.setItem(DAY_KEY, open ? 'open' : 'shut'); } catch (e) {}
+  renderDay('quiet');
+}
 
 function dayView() {
   const p = drag?.preview || dayPlan(), now = minuteNow(), lay = layoutDay(p, now), past = pastWork(now);
   const points = [now, ...p.windows.flatMap(w => [w.s, w.e]), ...lay.stops.flatMap(b => [b.s, b.e]), ...lay.blocks.flatMap(b => [b.start, b.end]), ...past.flatMap(b => [b.s, b.e])];
-  const wide = innerWidth >= 920;
-  let start = Math.max(0, Math.floor((Math.min(...points) - (wide ? 20 : 0)) / 60) * 60), end = Math.ceil((Math.max(...points) + (wide ? 20 : 0)) / 60) * 60, ppm;
-  if (!wide) start = Math.max(start, Math.floor((now - 60) / 60) * 60); // on a phone, what's over doesn't get to push your list off the screen
-  if (drag) { start = drag.frozen.start; end = Math.max(end, drag.frozen.end); ppm = drag.frozen.ppm; } // the timeline holds still under your finger
-  else ppm = wide ? clamp((innerHeight - 170) / (end - start), .7, 2.2) : .75;
-  return (railView = { p, now, lay, past: past.filter(b => b.e > start).map(b => ({ ...b, s: Math.max(b.s, start) })), start, end, ppm });
+  const laneW = Math.min(1040, innerWidth - 24) - 24, wide = laneW >= 600;
+  let start = Math.max(0, Math.floor((Math.min(...points) - (wide ? 20 : 0)) / 60) * 60), end = Math.ceil((Math.max(...points) + (wide ? 20 : 0)) / 60) * 60;
+  if (!wide) start = Math.max(start, Math.floor((now - 60) / 60) * 60); // on a phone, what's over doesn't get to squeeze what's left
+  if (drag) { start = drag.frozen.start; end = drag.frozen.end; } // the timeline holds still under your finger
+  return (railView = { p, now, lay, past: past.filter(b => b.e > start).map(b => ({ ...b, s: Math.max(b.s, start) })), start, end, pxPerMin: laneW / (end - start) });
 }
 
 // What you've really done today, from the session records.
@@ -1235,65 +1304,194 @@ function pastWork(now) {
   return out.filter(x => x.e - x.s >= 1);
 }
 
-const atY = (v, min) => ((min - v.start) * v.ppm).toFixed(1);
-const heightOf = (v, a, b) => Math.max(3, (b - a) * v.ppm - 1).toFixed(1);
+const atPct = (v, min) => ((min - v.start) / (v.end - v.start) * 100).toFixed(2);
+const spanStyle = (v, a, b) => `left:${atPct(v, a)}%;width:calc(${((b - a) / (v.end - v.start) * 100).toFixed(2)}% - 2px)`;
+const rangeWords = (s, e) => `${clockAt(s)} to ${clockAt(e)}`;
+
+// Everything of the chosen kind that a stretch of time touches. What's happening now can't be selected.
+const idsIn = (lay, s, e) => dayFilter === 'brk'
+  ? lay.stops.filter(b => b.item && b.s < e && b.e > s).map(b => b.item.id)
+  : lay.blocks.filter(b => !b.item.front && b.pieces.some(x => x.s < e && x.e > s)).map(b => b.item.id);
+const marquee = () => drag?.type === 'select' ? { s: Math.min(drag.from, drag.to), e: Math.max(drag.from, drag.to) } : null;
+
+function blockState(item, kind, lay) {
+  const box = marquee(), id = item?.id;
+  const picked = box ? idsIn(lay, box.s, box.e).includes(id) : !!daySel?.ids?.includes(id);
+  return [picked && 'picked', box && dayFilter !== kind && 'dim', drag?.item && drag.item.id === id && 'lifted'];
+}
 
 function pieceHTML(b, piece, i, v) {
-  const t = b.task, h = (piece.e - piece.s) * v.ppm, s = state.meta.session, item = b.item;
-  const cls = [item.live && 'live', piece.late && 'late', b.guess && !item.live && 'guess', i && 'cont', i < b.pieces.length - 1 && 'cut', drag?.item?.id === item.id && 'lifted'].filter(Boolean).join(' ');
-  const when = i ? 'continued' : `${clockAt(b.start)} · ${fmtMin(b.min)}${b.guess ? ' (a guess)' : ''}`;
-  const words = h >= 16 ? `<b>${esc(t.title)}</b>${h >= 34 ? `<span>${esc(when)}</span>` : ''}` : '';
-  const go = !i && !item.front && !s?.active && !state.meta.brk && h >= 26 && t.steps.length ? `<button class="tb-go" data-act="focus-task" data-id="${t.id}" title="Start now" aria-label="Start “${esc(t.title)}” now">${ICON.play}</button>` : '';
-  const off = !i && !item.front && h >= 26 ? `<button class="tb-x" data-act="plan-off" data-id="${item.id}" title="Take off today" aria-label="Take “${esc(t.title)}” off today">${ICON.x}</button>` : '';
-  return `<div class="tblock ${cls}"${item.front ? '' : ` data-drag="item" data-item="${item.id}"`} style="top:${atY(v, piece.s)}px;height:${heightOf(v, piece.s, piece.e)}px" title="${esc(t.title)}">
-    <button class="tb-open" data-act="open-task" data-id="${t.id}" aria-label="${esc(t.title)}, ${clockAt(b.start)} to ${clockAt(b.end)}${piece.late ? ', past the end of your day' : ''}">${words}</button>${go}${off}
+  const t = b.task, px = (piece.e - piece.s) * v.pxPerMin, item = b.item;
+  const cls = [item.live && 'live', piece.late && 'late', b.guess && !item.live && 'guess', i && 'cont', i < b.pieces.length - 1 && 'cut', ...blockState(item, 'task', v.lay)].filter(Boolean).join(' ');
+  const when = i ? 'continued' : `${clockAt(b.start)} · ${fmtMin(b.min)}`;
+  const words = px >= 24 ? `<b>${esc(t.title)}</b>${px >= 92 ? `<span>${esc(when)}</span>` : ''}` : '';
+  return `<div class="tblock ${cls}"${item.front ? '' : ` data-drag="item" data-item="${item.id}"`} style="${spanStyle(v, piece.s, piece.e)}" title="${esc(t.title)}, ${esc(when)}">
+    <button class="tb-open" data-act="day-pick" data-item="${item.id}" aria-label="${esc(t.title)}, ${rangeWords(b.start, b.end)}${piece.late ? ', past the end of your day' : ''}">${words}</button>
   </div>`;
 }
 
 function breakBlockHTML(b, v) {
-  const min = Math.round(b.e - b.s), h = (b.e - b.s) * v.ppm, item = b.item;
-  const words = h >= 16 ? `<b>Break</b>${h >= 34 ? `<span>${clockAt(b.s)} · ${fmtMin(min)}</span>` : ''}` : '';
-  return `<div class="tblock brk${b.live ? ' live' : ''}${item && drag?.item?.id === item.id ? ' lifted' : ''}"${item ? ` data-drag="item" data-item="${item.id}"` : ''} style="top:${atY(v, b.s)}px;height:${heightOf(v, b.s, b.e)}px" title="Break, ${fmtMin(min)}">
-    <div class="tb-open">${words}</div>${item && h >= 26 ? `<button class="tb-x" data-act="plan-off" data-id="${item.id}" title="Take off today" aria-label="Take this break off today">${ICON.x}</button>` : ''}
+  const min = Math.round(b.e - b.s), px = (b.e - b.s) * v.pxPerMin, item = b.item;
+  const cls = [b.live && 'live', ...blockState(item, 'brk', v.lay)].filter(Boolean).join(' ');
+  const words = px >= 24 ? `<b>Break</b>${px >= 92 ? `<span>${clockAt(b.s)} · ${fmtMin(min)}</span>` : ''}` : '';
+  const open = item ? `data-act="day-pick" data-item="${item.id}"` : 'data-act="focus-open"';
+  return `<div class="tblock brk ${cls}"${item ? ` data-drag="item" data-item="${item.id}"` : ''} style="${spanStyle(v, b.s, b.e)}" title="Break, ${clockAt(b.s)}, ${fmtMin(min)}">
+    <button class="tb-open" ${open} aria-label="Break, ${rangeWords(b.s, b.e)}">${words}</button>
   </div>`;
 }
 
+// The line of numbers at the top of the panel, and on the closed button.
+const dayWords = lay => lay.freeMin < 1 ? 'No free time left today' : `${fmtMin(lay.freeMin)} free${lay.planMin && lay.lateMin < 1 ? ` · ${fmtMin(lay.planMin)} planned` : ''}`;
+
 function dayHTML() {
-  const v = dayView(), { p, now, lay } = v, ticks = [];
-  for (let h = Math.ceil(v.start / 60); h <= v.end / 60; h++) ticks.push(`<div class="tick" style="top:${atY(v, h * 60)}px"><span>${hourName(h % 24)}</span></div>`);
-  const wins = p.windows.map((w, i) => {
-    if (w.e <= v.start) return '';
-    const s = Math.max(w.s, v.start);
-    return `<div class="win" style="top:${atY(v, s)}px;height:${((w.e - s) * v.ppm).toFixed(1)}px">
-      ${w.s >= v.start ? `<button class="win-edge top" data-edge="s" data-i="${i}" title="Drag to change when you start" aria-label="Start time, ${clockAt(w.s)}. Use the arrow keys to change it."></button>` : ''}
-      <button class="win-edge bottom" data-edge="e" data-i="${i}" title="Drag to change when you stop" aria-label="End time, ${clockAt(w.e)}. Use the arrow keys to change it."></button>
-    </div>`;
-  }).join('');
-  const first = p.windows.find(w => w.e > now), hintAt = first ? (Math.max(first.s, now) + first.e) / 2 : now + 30;
+  const v = dayView(), { p, now, lay } = v, ticks = [], box = marquee();
+  const every = v.pxPerMin * 60 < 46 ? 2 : 1;
+  for (let h = Math.ceil(v.start / 60); h * 60 < v.end; h++) ticks.push(`<div class="tick" style="left:${atPct(v, h * 60)}%">${h % every || Math.abs(h * 60 - now) * v.pxPerMin < 44 ? '' : `<span>${hourName(h % 24)}</span>`}</div>`);
+  const wins = p.windows.map((w, i) => w.e <= v.start ? '' : `<div class="win" style="left:${atPct(v, w.s)}%;width:${((w.e - w.s) / (v.end - v.start) * 100).toFixed(2)}%">
+    ${w.s >= v.start ? `<button class="win-edge opens" data-edge="s" data-i="${i}" title="Drag to change when you start" aria-label="Start time, ${clockAt(w.s)}. Use the arrow keys to change it."></button>` : ''}
+    <button class="win-edge closes" data-edge="e" data-i="${i}" title="Drag to change when you stop" aria-label="End time, ${clockAt(w.e)}. Use the arrow keys to change it."></button>
+  </div>`).join('');
+  const first = p.windows.find(w => w.e > now), hintFrom = first ? Math.max(first.s, now) : now, hintTo = first ? first.e : now + 60;
   // Something doesn't fit only because blocks are waiting at the times you dropped them.
   const gaps = lay.lateMin >= 1 && lay.planMin <= lay.freeMin && lay.blocks.some(b => b.item.at != null);
-  const sum = lay.freeMin < 1 ? 'No free time left today' : `${fmtMin(lay.freeMin)} free${lay.planMin && lay.lateMin < 1 ? ` · ${fmtMin(lay.planMin)} planned` : ''}`;
-  return `<aside class="day" id="day" aria-label="Today">
-    <div class="day-head"><h2>Today</h2><div class="day-tools">
-      <button class="btn ghost small" data-drag="brk" data-act="plan-break" title="Drag onto the timeline, or click to add one after your next task">${ICON.cup}Break</button>
-      <button class="link small" data-act="open-hours">Hours</button>
-    </div></div>
-    <p class="day-sum">${sum}${lay.lateMin >= 1 ? ` · <b>${fmtMin(lay.lateMin)} over</b>` : ''}${gaps ? ' · <button class="link small" data-act="plan-tidy">Close the gaps</button>' : ''}</p>
-    <div class="rail" id="rail" style="height:${((v.end - v.start) * v.ppm).toFixed(1)}px">
+  const fresh = !p.items.length && sameHours(p.windows, usualHours());
+  const filterBtn = (id, label) => `<button class="${dayFilter === id ? 'on' : ''}" data-act="day-filter" data-v="${id}" aria-pressed="${dayFilter === id}" title="Drag across the timeline to select ${label.toLowerCase()}">${label}</button>`;
+  return `<div class="day-head">
+      <h2>Today</h2>
+      <p class="day-sum">${dayWords(lay)}${lay.lateMin >= 1 ? ` · <b>${fmtMin(lay.lateMin)} over</b>` : ''}</p>
+      <div class="day-tools">
+        ${gaps ? '<button class="link small" data-act="plan-tidy">Close the gaps</button>' : ''}
+        <span class="day-filter" role="group" aria-label="What dragging across the timeline selects"><span>Select</span>${filterBtn('task', 'Tasks')}${filterBtn('brk', 'Breaks')}</span>
+        <button class="btn ghost small" data-drag="brk" data-act="plan-break" title="Drag onto the timeline, or click to add one after your next task">${ICON.cup}Break</button>
+        <button class="link small" data-act="open-hours">Hours</button>
+        <button class="link small" data-act="plan-reset"${fresh ? ' disabled' : ''} title="Clear today’s timeline and go back to your usual hours">Reset</button>
+      </div>
+      <button class="icon-btn day-toggle" data-act="day-toggle" title="Close the timeline" aria-label="Close the timeline">${ICON.minus}</button>
+    </div>
+    <div class="rail${dayFilter === 'brk' ? ' for-breaks' : ''}" id="rail">
       ${ticks.join('')}${wins}
-      <div class="spent" style="height:${atY(v, now)}px"></div>
-      ${v.past.map(b => `<div class="tblock ago" style="top:${atY(v, b.s)}px;height:${heightOf(v, b.s, b.e)}px" title="${esc(b.title)}"><div class="tb-open">${(b.e - b.s) * v.ppm >= 16 ? `<b>${esc(b.title)}</b>` : ''}</div></div>`).join('')}
+      <div class="spent" style="width:${atPct(v, now)}%"></div>
+      ${v.past.map(b => `<div class="tblock ago" style="${spanStyle(v, b.s, b.e)}" title="${esc(b.title)}, done"><div class="tb-open">${(b.e - b.s) * v.pxPerMin >= 24 ? `<b>${esc(b.title)}</b>` : ''}</div></div>`).join('')}
       ${lay.blocks.flatMap(b => b.pieces.map((x, i) => pieceHTML(b, x, i, v))).join('')}
       ${lay.stops.map(b => breakBlockHTML(b, v)).join('')}
-      ${lay.blocks.length ? '' : `<div class="rail-hint" style="top:${atY(v, hintAt)}px">Drag a task here</div>`}
-      <div class="now-line" style="top:${atY(v, now)}px"><span>${clockAt(now).replace(/\s?[AP]M$/i, '')}</span></div>
+      ${lay.blocks.length ? '' : `<div class="rail-hint" style="${spanStyle(v, hintFrom, hintTo)}">Drag a task here</div>`}
+      ${box ? `<div class="marquee" style="${spanStyle(v, box.s, box.e)}"></div>` : ''}
+      <div class="now-line" style="left:${atPct(v, now)}%"><span>${clockAt(now).replace(/\s?[AP]M$/i, '')}</span></div>
     </div>
     ${extraPct() ? `<p class="day-foot">Sized for your real speed, about ${extraPct()}% over your guesses</p>` : ''}
-  </aside>`;
+    ${dayMenuHTML(v)}`;
 }
 
-function renderDay() { const el = $('#day'); if (el) el.outerHTML = dayHTML(); }
-window.addEventListener('resize', () => { if (!drag) renderDay(); });
+/* ----- the menu for what's selected ----- */
+const chipRow = (list, act, label, on) => `<div class="dm-row">${list.map(n => `<button class="dm-chip${n === on ? ' on' : ''}" data-act="${act}" data-min="${n}" aria-label="${esc(label(n))}">${n > 0 && act === 'sel-move' ? '+' : ''}${n}</button>`).join('')}</div>`;
+const menuHead = title => `<div class="dm-head"><b>${esc(title)}</b><button class="icon-btn" data-act="day-close" aria-label="Close this menu">${ICON.x}</button></div>`;
+
+function taskMenuHTML(b, lay) {
+  const t = b.task, item = b.item, m = state.meta, late = b.pieces.some(x => x.late);
+  const sub = `<p class="dm-sub">${rangeWords(b.start, b.end)} · ${fmtMin(b.min)}${late ? ' · past your hours' : ''}</p>`;
+  const details = `<button class="btn ghost" data-act="sel-open" data-id="${t.id}">Details</button>`;
+  if (item.front) return menuHead(t.title) + sub + `<div class="dm-row"><button class="btn primary" data-act="sel-show">Show timer</button>${details}</div>`;
+  const others = activeTasks().filter(x => x.id !== t.id && onPlan(x) && !lay.blocks.some(y => y.item.front && y.task.id === x.id));
+  const rows = others.map(x => {
+    const on = lay.blocks.find(y => y.task.id === x.id);
+    return `<li><button data-act="sel-swap" data-id="${x.id}"><span>${esc(x.title)}</span><small>${on ? `Swaps with ${clockAt(on.start)}` : fmtMin(taskRoom(x).min)}</small></button></li>`;
+  }).join('');
+  const busy = m.session?.active || m.brk;
+  return menuHead(t.title) + sub + `<div class="dm-row">
+      ${t.steps.length && !busy ? `<button class="btn primary" data-act="sel-start" data-id="${t.id}">${ICON.play}Start now</button>` : ''}
+      ${details}
+      <button class="btn danger" data-act="sel-delete">Take off today</button>
+    </div>
+    ${rows ? `<div class="dm-label">Change to</div><ul class="dm-list">${rows}</ul>` : ''}`;
+}
+
+function breakMenuHTML(stops) {
+  const one = stops.length === 1, b = stops[0], len = stops.every(x => x.item.brk === b.item.brk) ? b.item.brk : null;
+  const title = one ? 'Break' : `${stops.length} breaks`;
+  const sub = one ? rangeWords(b.s, b.e) : `${rangeWords(stops[0].s, stops[stops.length - 1].e)}`;
+  return menuHead(title) + `<p class="dm-sub">${sub}</p>
+    <div class="dm-label">Length in minutes</div>${chipRow(LENGTHS, 'sel-len', n => `Make ${one ? 'it' : 'them'} ${n} minutes`, len)}
+    <div class="dm-label">Move by minutes</div>${chipRow(NUDGES, 'sel-move', n => `Move ${one ? 'it' : 'them'} ${Math.abs(n)} minutes ${n < 0 ? 'earlier' : 'later'}`)}
+    <div class="dm-row">
+      ${one ? '<button class="btn ghost" data-act="sel-now">Take it now</button><button class="btn ghost" data-act="sel-copy">Copy an hour later</button>' : ''}
+      <button class="btn danger" data-act="sel-delete">${one ? 'Delete' : `Delete ${stops.length}`}</button>
+    </div>`;
+}
+
+// What you can do with the stretch you dragged across, whatever is in it.
+function rangeRowHTML(r, p) {
+  const inHours = p.windows.some(w => w.s < r.e && w.e > r.s), outside = !p.windows.some(w => w.s <= r.s && w.e >= r.e);
+  return `<div class="dm-row">
+      <button class="btn ghost" data-act="sel-break">Add a break here</button>
+      ${inHours ? '<button class="btn ghost" data-act="sel-block">Block off this time</button>' : ''}
+      ${outside ? '<button class="btn ghost" data-act="sel-hours">Add to my hours</button>' : ''}
+    </div>`;
+}
+
+function dayMenuHTML(v) {
+  if (!daySel || drag) return '';
+  const { lay, p } = v, { kind, range } = daySel, ids = daySel.ids;
+  let at, body = '';
+  if (!ids.length) { if (range) { at = (range.s + range.e) / 2; body = menuHead(rangeWords(range.s, range.e)) + `<p class="dm-sub">${fmtMin(range.e - range.s)}, no ${kind === 'brk' ? 'breaks' : 'tasks'} here</p>${rangeRowHTML(range, p)}`; } }
+  else if (kind === 'brk') {
+    const stops = lay.stops.filter(b => b.item && ids.includes(b.item.id));
+    if (stops.length) { at = (stops[0].s + stops[stops.length - 1].e) / 2; body = breakMenuHTML(stops); }
+  } else {
+    const blocks = lay.blocks.filter(b => ids.includes(b.item.id));
+    if (blocks.length === 1) { at = (blocks[0].start + blocks[0].end) / 2; body = taskMenuHTML(blocks[0], lay); }
+    else if (blocks.length) {
+      at = (blocks[0].start + blocks[blocks.length - 1].end) / 2;
+      body = menuHead(`${blocks.length} tasks`) + `<p class="dm-sub">${esc(blocks.map(b => b.task.title).join(', '))}</p>
+        <div class="dm-row"><button class="btn danger" data-act="sel-delete">Take ${blocks.length} off today</button></div>`;
+    }
+  }
+  if (!body) { daySel = null; return ''; }
+  if (range && ids.length && range.e - range.s <= STRETCH_MAX_MIN) body += `<div class="dm-label">The stretch you selected, ${rangeWords(range.s, range.e)}</div>${rangeRowHTML(range, p)}`;
+  return `<section class="day-menu" role="dialog" aria-label="Change what you selected" style="left:clamp(0px, calc(${atPct(v, at)}% - 150px), calc(100% - 300px))">${body}</section>`;
+}
+
+/* ----- the colored row on each task: when the timeline says it'll be finished ----- */
+function slotInfo(t, lay) {
+  const b = lay.blocks.find(x => x.task.id === t.id);
+  if (!b) return null;
+  const over = b.pieces.reduce((a, x) => a + (x.late ? x.e - x.s : 0), 0), end = clockAt(b.end);
+  if (b.pieces[0].late) return { cls: 'late', text: 'Doesn’t fit today', side: `Would finish ${end}` };
+  if (over >= 1) return { cls: 'late', text: `Runs ${fmtMin(over)} past your hours`, side: `Would finish ${end}` };
+  if (b.item.front) return { cls: 'live', text: `Finish by ${end}`, side: `${fmtMin(b.min)} left` };
+  if (b.guess) return { cls: 'guess', text: `Finish by about ${end}`, side: 'Add minutes to be sure' };
+  return { cls: '', text: `Finish by ${end}`, side: `Starts ${clockAt(b.start)}` };
+}
+
+const slotSeen = new Map();
+// The rows follow a drag as it happens, and flash once when a change lands. The clock moving them doesn't count.
+function renderSlots(lay, quiet) {
+  document.querySelectorAll('[data-slot]').forEach(el => {
+    const id = el.dataset.slot, t = state.tasks.get(id), info = t && slotInfo(t, lay), key = info ? info.text : '';
+    el.hidden = !info;
+    el.className = `task-slot ${info ? info.cls : ''}`;
+    el.innerHTML = info ? `<b>${esc(info.text)}</b><span>${esc(info.side)}</span>` : '';
+    if (drag) return;
+    if (!quiet && info && slotSeen.has(id) && slotSeen.get(id) !== key) el.classList.add('moved');
+    slotSeen.set(id, key);
+  });
+}
+
+function renderDay(how) {
+  const el = $('#day'), show = state.ready && Store.mode !== 'signin' && state.view === 'home' && !state.focusOpen && activeTasks().length > 0;
+  document.body.classList.toggle('has-day', show);
+  el.hidden = !show;
+  if (!show) { daySel = null; document.documentElement.style.setProperty('--day-lift', '0px'); return; }
+  el.classList.toggle('shut', !dayOpen);
+  if (dayOpen) el.innerHTML = dayHTML();
+  else {
+    const lay = layoutDay();
+    el.innerHTML = `<button class="day-pill" data-act="day-toggle" title="Open the timeline" aria-label="Open the timeline">${ICON.plus}Today<span class="${lay.lateMin >= 1 ? 'over' : ''}">${lay.lateMin >= 1 ? `${fmtMin(lay.lateMin)} over` : dayWords(lay)}</span></button>`;
+  }
+  renderSlots(dayOpen ? railView.lay : layoutDay(), how === 'quiet');
+  // Whatever floats over the bottom of the window stays clear of the panel.
+  document.documentElement.style.setProperty('--day-lift', dayOpen ? `${el.offsetHeight + 8}px` : '0px');
+}
+window.addEventListener('resize', () => { if (!drag) renderDay('quiet'); });
 
 /* ----- your hours ----- */
 const hhmm = min => `${pad(Math.floor(min / 60))}:${pad(min % 60)}`;
@@ -1308,7 +1506,7 @@ function hoursHTML(enter) {
     <button class="icon-btn" data-act="hours-del" data-i="${i}" title="Remove" aria-label="Remove stretch ${i + 1}">${ICON.trash}</button>
   </div>`).join('');
   return `${sheetOpen(enter, 'Your hours today')}${sheetHead('Your hours today')}
-    <p class="help" style="margin-top:8px">The times you can work today. On the timeline you can also drag the top or bottom of a green area, or drag across it to block off time.</p>
+    <p class="help" style="margin-top:8px">The times you can work today. On the timeline you can also drag either end of a green area, or drag across an empty stretch and choose Block off this time.</p>
     ${rows || '<p class="help">No time set aside today.</p>'}
     <button class="btn ghost small" data-act="hours-add">${ICON.plus}Add more time</button>
     <div class="sheet-foot">
@@ -1318,7 +1516,7 @@ function hoursHTML(enter) {
   </section>`;
 }
 
-function taskHTML(t, lay) {
+function taskHTML(t) {
   const total = t.steps.length, done = total - stepsLeft(t).length, left = minLeft(t);
   let meta;
   if (!total) meta = 'No steps yet';
@@ -1328,18 +1526,17 @@ function taskHTML(t, lay) {
   const action = !total
     ? `<button class="btn ghost small" data-act="add-steps" data-id="${t.id}">Add steps</button>`
     : `<button class="btn soft small start" data-act="focus-task" data-id="${t.id}" aria-label="${live ? 'Show the timer for' : 'Start working on'} “${esc(t.title)}”">${live ? 'Show' : ICON.play + 'Start'}</button>`;
-  const slot = lay.blocks.find(b => b.task.id === t.id);
-  const today = !slot ? '' : slot.pieces[0].late ? ' · <span class="due late">Doesn’t fit today</span>' : ` · Today ${clockAt(slot.start)}`;
   return `<li class="task can-plan" data-drag="task" data-id="${t.id}">
     <span class="grip" title="Drag onto the timeline">${ICON.grip}</span>
     <button class="check" data-act="complete-task" data-id="${t.id}" title="Mark the whole task as done" aria-label="Mark “${esc(t.title)}” as done"><span>${ICON.check}</span></button>
     <button class="task-body" data-act="open-task" data-id="${t.id}">
       <span class="task-title">${esc(t.title)}</span>
-      <span class="task-meta">${meta}${t.due ? ' · ' + dueHTML(t) : ''}${today}</span>
+      <span class="task-meta">${meta}${t.due ? ' · ' + dueHTML(t) : ''}</span>
       ${live ? '<span class="badge"><span class="dot"></span>Working on this now</span>' : ''}
       ${total ? `<span class="bar" aria-hidden="true"><i style="width:${Math.round(done / total * 100)}%"></i></span>` : ''}
     </button>
     ${action}
+    <div class="task-slot" data-slot="${t.id}" hidden></div>
   </li>`;
 }
 
@@ -1428,6 +1625,59 @@ function renderLayer(enter) {
 }
 const sheetOpen = (enter, label) => `<section class="sheet${enter ? ' enter' : ''}" role="dialog" aria-modal="true" aria-label="${esc(label)}">`;
 const sheetHead = title => `<div class="sheet-head"><h2>${esc(title)}</h2><button class="icon-btn" data-act="close-layer" aria-label="Close">${ICON.x}</button></div>`;
+
+/* ----- the due date picker, for a new task or the one that's open ----- */
+// Paced draws this itself because a browser's date box reports half-typed dates, and its calendar closes when the sheet redraws.
+const dueValue = () => state.layer?.type === 'add' ? state.draft?.due : state.tasks.get(state.layer?.id)?.due;
+const monthKey = (month, n = 0) => { const d = keyDate(month + '-01'); d.setMonth(d.getMonth() + n); return dateKey(d).slice(0, 7); };
+
+function calHTML(due) {
+  const today = dateKey(), { month } = state.duePick, first = keyDate(month + '-01');
+  const count = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  const days = Array.from({ length: count }, (_, i) => `${month}-${pad(i + 1)}`);
+  const tabStop = days.includes(due) ? due : days.includes(today) ? today : days[0]; // arrow keys move around the rest
+  const quick = [['Today', today], ['Tomorrow', addDays(today, 1)], ['In a week', addDays(today, 7)]];
+  return `<div class="cal">
+    <div class="chips">${quick.map(([label, k]) => `<button type="button" class="chip" data-act="due-set" data-v="${k}">${label}</button>`).join('')}</div>
+    <div class="cal-head">
+      <button type="button" class="icon-btn" data-act="due-month" data-v="-1" aria-label="Previous month">${ICON.back}</button>
+      <span aria-live="polite">${first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
+      <button type="button" class="icon-btn cal-next" data-act="due-month" data-v="1" aria-label="Next month">${ICON.back}</button>
+    </div>
+    <div class="cal-grid">
+      ${Array.from({ length: 7 }, (_, i) => `<span class="cal-dow">${keyDate(addDays('2023-01-01', i)).toLocaleDateString(undefined, { weekday: 'narrow' })}</span>`).join('')}
+      ${'<span></span>'.repeat(first.getDay())}
+      ${days.map((k, i) => `<button type="button" class="cal-day${k === due ? ' on' : ''}${k === today ? ' today' : ''}${k < today ? ' past' : ''}" data-act="due-set" data-v="${k}" aria-label="${esc(fmtFullDay(k))}" aria-pressed="${k === due}" tabindex="${k === tabStop ? 0 : -1}">${i + 1}</button>`).join('')}
+    </div>
+  </div>`;
+}
+
+function dueFieldHTML() {
+  const due = dueValue(), soon = due && dueInfo({ due })?.cls;
+  return `<div class="due-row">
+      <button type="button" id="due-toggle" class="text-input due-btn${due ? '' : ' none'}" data-act="due-toggle" aria-expanded="${!!state.duePick}">${ICON.calendar}${due ? esc(fmtFullDay(due)) : 'Pick a date'}</button>
+      ${soon ? dueHTML({ due }) : ''}
+      ${due ? '<button type="button" class="btn ghost small" data-act="due-set" data-v="">Remove</button>' : ''}
+    </div>${state.duePick ? calHTML(due) : ''}`;
+}
+// Only the picker redraws, so the sheet keeps its place and anything half-typed.
+function renderDue(focus) {
+  const el = $('#due-field'); if (!el) return;
+  el.innerHTML = dueFieldHTML();
+  $(focus)?.focus();
+}
+function setDue(k) {
+  const L = state.layer, t = L.type === 'detail' && state.tasks.get(L.id);
+  if (L.type === 'add') state.draft.due = k;
+  else if (t) { t.due = k; saveTask(t); render(); }
+  state.duePick = null;
+  renderDue('#due-toggle');
+}
+function moveDueFocus(k) {
+  const month = k.slice(0, 7);
+  if (month !== state.duePick.month) { state.duePick.month = month; renderDue(); }
+  $(`.cal-day[data-v="${k}"]`)?.focus();
+}
 
 // Step names wrap onto more lines instead of getting cut off.
 function autosize(el) { el.style.height = 'auto'; el.style.height = (el.scrollHeight + 2) + 'px'; }
@@ -1644,8 +1894,8 @@ function addHTML(enter) {
     <label class="label" for="new-title">What do you need to do?</label>
     <input id="new-title" class="text-input big" placeholder="Task name" autocomplete="off" value="${esc(state.draft.title)}">
     <p class="err" id="new-err" hidden>Type a name for the task first.</p>
-    <label class="label" for="new-due">Due date <span class="muted">(optional)</span></label>
-    <input id="new-due" type="date" class="text-input date" value="${state.draft.due || ''}">
+    <label class="label" for="due-toggle">Due date <span class="muted">(optional)</span></label>
+    <div id="due-field">${dueFieldHTML()}</div>
     <h3 class="label">Steps</h3>
     <p class="help">Split the task into small pieces. For each one, guess how many minutes it will take.</p>
     <div id="draft-steps">${draftStepsHTML()}</div>
@@ -1706,8 +1956,8 @@ function detailHTML(t, enter) {
       <button class="icon-btn" data-act="close-layer" aria-label="Close">${ICON.x}</button>
     </div>
     <p class="sub" id="detail-sum">${detailSummary(t)}</p>
-    <label class="label" for="detail-due">Due date</label>
-    <div class="due-row"><input type="date" id="detail-due" class="text-input date" value="${t.due || ''}">${t.due ? `${dueHTML(t)}<button class="btn ghost small" data-act="clear-due" data-id="${t.id}">Remove due date</button>` : '<span class="muted">Optional</span>'}</div>
+    <label class="label" for="due-toggle">Due date <span class="muted">(optional)</span></label>
+    <div id="due-field">${dueFieldHTML()}</div>
     <h3 class="label">Today</h3>
     <div class="due-row">${planRowHTML(t)}</div>
     <h3 class="label">Steps</h3>
@@ -2413,11 +2663,13 @@ function watchCheckIn() {
 /* ---------- actions: tasks ---------- */
 function openAdd() {
   state.draft = { title: '', due: null, steps: [] };
+  state.duePick = null;
   state.layer = { type: 'add' };
   renderLayer(true);
   $('#new-title').focus();
 }
 function openDetail(id, focusAdd) {
+  state.duePick = null;
   state.layer = { type: 'detail', id };
   renderLayer(true);
   if (focusAdd) $('#detail-step').focus();
@@ -2865,11 +3117,19 @@ function deleteFocusStep(sid) {
 }
 
 /* ---------- actions: the timeline ---------- */
-function takeOffPlan(itemId) {
-  const p = dayPlan(), before = clone(p);
-  savePlan({ ...p, items: p.items.filter(i => i.id !== itemId) });
+// A change to the plan you can take back.
+function changePlan(msg, next) {
+  const before = clone(dayPlan());
+  savePlan(next);
   renderLayer(); render();
-  toast('Taken off today', 'Undo', () => { savePlan(before); renderLayer(); render(); });
+  toast(msg, 'Undo', () => { savePlan(before); renderLayer(); render(); });
+}
+const takeOffPlan = itemId => { const p = dayPlan(); changePlan('Taken off today', { ...p, items: p.items.filter(i => i.id !== itemId) }); };
+
+// Clear the day: nothing planned, and your usual hours back.
+function resetPlan() {
+  daySel = null;
+  changePlan('Today’s timeline is reset', { date: dateKey(), windows: clone(usualHours()), items: [] });
 }
 
 // Keyboard reordering: swap a task with its neighbor on the timeline.
@@ -2882,16 +3142,73 @@ function movePlanItem(itemId, dir) {
   render();
 }
 
-/* ----- dragging: tasks and breaks onto the timeline, and the edges of your hours ----- */
+// Click a block to select it and open its menu, click it again to close, or shift-click to add it to what's selected.
+function pickItem(id, add) {
+  const kind = dayPlan().items.find(i => i.id === id)?.brk ? 'brk' : 'task', ids = daySel?.ids || [];
+  dayFilter = kind;
+  if (add && daySel?.kind === kind && ids.length) {
+    const next = ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id];
+    daySel = next.length ? { kind, ids: next, range: null } : null;
+  } else daySel = ids.length === 1 && ids[0] === id ? null : { kind, ids: [id], range: null };
+  renderDay('quiet');
+}
+
+// Put another task in this block's place. If that task is already on the timeline, the two swap.
+function swapTask(taskId) {
+  const p = dayPlan(), id = daySel?.ids[0], item = p.items.find(i => i.id === id), other = p.items.find(i => i.taskId === taskId), t = state.tasks.get(taskId);
+  if (!item || !t) return;
+  daySel = null;
+  changePlan(`Changed to “${t.title}”`, { ...p, items: p.items.map(i => i === item ? { ...i, taskId } : i === other ? { ...i, taskId: item.taskId } : i) });
+}
+
+function deleteSelected() {
+  const p = dayPlan(), ids = daySel?.ids || [], breaks = daySel?.kind === 'brk';
+  daySel = null;
+  const what = ids.length === 1 ? (breaks ? 'Break deleted' : 'Taken off today') : `${ids.length} ${breaks ? 'breaks deleted' : 'tasks taken off today'}`;
+  changePlan(what, { ...p, items: p.items.filter(i => !ids.includes(i.id)) });
+}
+
+// Change every selected break the same way.
+function changeBreaks(fn) {
+  const p = dayPlan(), ids = daySel?.ids || [];
+  savePlan({ ...p, items: p.items.map(i => ids.includes(i.id) ? fn(i) : i) });
+  render();
+}
+const soonestBreak = () => Math.ceil(minuteNow() / PLAN_SNAP) * PLAN_SNAP;
+
+function breakNow() {
+  const p = dayPlan(), item = p.items.find(i => i.id === daySel?.ids[0]);
+  if (!item) return;
+  daySel = null;
+  savePlan({ ...p, items: [{ ...item, at: Math.floor(minuteNow()) }, ...p.items.filter(i => i !== item)] }); // so this is the one the break uses up
+  takeBreak(item.brk);
+}
+
+function rangeBreak() {
+  const p = dayPlan(), r = daySel?.range;
+  if (!r) return;
+  daySel = null;
+  changePlan('Break added', { ...p, items: [...p.items, { id: newId('i'), brk: Math.max(PLAN_SNAP, Math.round(r.e - r.s)), at: Math.max(r.s, soonestBreak()) }] });
+}
+
+function rangeHours(add) {
+  if (!daySel?.range) return;
+  const p = dayPlan(), { s, e } = daySel.range;
+  daySel = null;
+  const windows = add ? [...p.windows, { s, e }] : p.windows.flatMap(w => w.e <= s || w.s >= e ? [w] : [{ s: w.s, e: s }, { s: e, e: w.e }]);
+  changePlan(add ? 'Added to your hours today' : 'Blocked off', { ...p, windows: cleanWindows(windows) });
+}
+
+/* ----- dragging: tasks and breaks onto the timeline, the ends of your hours, and across the timeline to select ----- */
 const LONG_PRESS_MS = 280;
 let press = null, drag = null, skipClick = false;
 
-const railTime = y => railView.start + (y - $('#rail').getBoundingClientRect().top) / railView.ppm;
+const railTime = x => { const r = $('#rail').getBoundingClientRect(); return railView.start + (x - r.left) / r.width * (railView.end - railView.start); };
 const ghostShow = (text, x, y) => {
   let g = $('#drag-ghost');
   if (!g) { g = document.createElement('div'); g.id = 'drag-ghost'; g.className = 'drag-ghost'; document.body.appendChild(g); }
   g.textContent = text;
-  g.style.transform = `translate(${x + 14}px, ${y + 14}px)`;
+  g.style.transform = `translate(${Math.min(x + 14, innerWidth - 200)}px, ${y > innerHeight - 90 ? y - 44 : y + 14}px)`; // near the bottom of the window it sits above your finger
 };
 
 function liftItem(src) {
@@ -2904,55 +3221,50 @@ function liftItem(src) {
   return { type: 'plan', item, known: p.items.includes(item), preview: null, label: t ? `${t.title} · ${fmtMin(taskRoom(t).min)}` : `Break · ${fmtMin(item.brk)}` };
 }
 function liftEdge(i, side) { return { type: 'hours', list: clone(dayPlan().windows), i, side, preview: null }; }
-// Dragging across your hours blocks off time. Dragging across time outside them adds it.
-function liftPaint(y) {
-  const list = clone(dayPlan().windows), at = snapTo(railTime(y), HOURS_SNAP), inside = list.findIndex(w => at > w.s && at < w.e);
-  if (inside >= 0) {
-    list.splice(inside + 1, 0, { s: at, e: list[inside].e });
-    list[inside].e = at;
-    return { type: 'hours', list, i: inside + 1, side: 's', carve: true, preview: null };
-  }
-  const after = list.findIndex(w => w.s > at), i = after < 0 ? list.length : after;
-  list.splice(i, 0, { s: at, e: at });
-  return { type: 'hours', list, i, side: 'e', preview: null };
-}
+function liftSelect(x) { const at = railTime(x); return { type: 'select', from: at, to: at, preview: null }; }
 
 function lift(p, x, y) {
   press = null;
   clearTimeout(p.timer);
-  const d = p.src.dataset, v = railView;
-  const started = d.edge ? liftEdge(+d.i, d.edge) : d.drag ? liftItem(p.src) : liftPaint(p.y);
+  daySel = null;
+  if (!dayOpen) setDayOpen(true); // dragging a task means you're planning, so the timeline comes back
+  const d = p.src.dataset;
+  const started = d.edge ? liftEdge(+d.i, d.edge) : d.drag ? liftItem(p.src) : liftSelect(p.x);
   if (!started) return;
-  drag = { ...started, frozen: { start: v.start, end: v.end, ppm: v.ppm }, x, y };
+  drag = { ...started, frozen: { start: railView.start, end: railView.end }, x, y };
   try { document.body.setPointerCapture(p.id); } catch (e) {}
   document.body.classList.add('dragging');
   if (p.touch) { try { navigator.vibrate && navigator.vibrate(10); } catch (e) {} }
-  scrolledAt = performance.now();
-  requestAnimationFrame(autoScroll);
   dragTo(x, y);
 }
 
 function dragTo(x, y) {
   drag.x = x; drag.y = y;
   if (!$('#rail')) return;
+  if (drag.type === 'select') {
+    drag.to = clamp(railTime(x), drag.frozen.start, drag.frozen.end);
+    const s = Math.min(drag.from, drag.to), e = Math.max(drag.from, drag.to), n = idsIn(railView.lay, s, e).length;
+    ghostShow(n ? `${n} ${dayFilter === 'brk' ? (n === 1 ? 'break' : 'breaks') : (n === 1 ? 'task' : 'tasks')}` : rangeWords(snapTo(s, HOURS_SNAP), snapTo(e, HOURS_SNAP)), x, y);
+    renderDay();
+    return;
+  }
   if (drag.type === 'hours') {
     const { list, i, side } = drag;
     const lo = side === 's' ? (list[i - 1]?.e ?? 0) : list[i].s, hi = side === 's' ? list[i].e : (list[i + 1]?.s ?? 1440);
-    const at = clamp(snapTo(railTime(y), HOURS_SNAP), lo, hi);
-    ghostShow(drag.carve ? `Blocked off until ${clockAt(at)}` : `${side === 's' ? 'Start' : 'Stop'} at ${clockAt(at)}`, x, y);
+    const at = clamp(snapTo(railTime(x), HOURS_SNAP), lo, hi);
+    ghostShow(`${side === 's' ? 'Start' : 'Stop'} at ${clockAt(at)}`, x, y);
     if (at === drag.key) return;
     drag.key = at;
     const windows = clone(list);
     windows[i][side] = at;
     drag.preview = { ...dayPlan(), windows };
-    drag.frozen.end = Math.max(drag.frozen.end, Math.ceil((at + 30) / 60) * 60);
     renderDay();
     return;
   }
-  const r = $('#rail').getBoundingClientRect(), near = 36;
+  const r = $('#day').getBoundingClientRect(), near = 24;
   const inside = x >= r.left - near && x <= r.right + near && y >= r.top - near && y <= r.bottom + near;
   ghostShow(!inside && drag.known ? 'Take off today' : drag.label, x, y);
-  const key = inside ? snapTo(railTime(y), PLAN_SNAP) : 'out';
+  const key = inside ? snapTo(clamp(railTime(x), drag.frozen.start, drag.frozen.end), PLAN_SNAP) : 'out';
   if (key === drag.key) return;
   drag.key = key;
   const p = dayPlan();
@@ -2960,25 +3272,20 @@ function dragTo(x, y) {
   renderDay();
 }
 
-// On phones the list and the timeline don't fit on screen together, so the page moves when you reach an edge.
-let scrolledAt = 0;
-function autoScroll() {
-  if (!drag) return;
-  const now = performance.now(), ms = Math.min(now - scrolledAt, 500), edge = 70, y = drag.y, h = innerHeight;
-  const speed = y < edge ? (y - edge) / 100 : y > h - edge ? (y - h + edge) / 100 : 0; // pixels per millisecond
-  scrolledAt = now;
-  if (speed) { window.scrollBy(0, speed * ms); dragTo(drag.x, drag.y); }
-  requestAnimationFrame(autoScroll);
-}
-
 function endDrag(cancel) {
   const d = drag;
   if (!d) return;
+  const box = marquee(), lay = railView?.lay;
+  const ids = box && !cancel ? idsIn(lay, box.s, box.e) : [];
   drag = null;
   $('#drag-ghost')?.remove();
   document.body.classList.remove('dragging');
   skipClick = true;
   setTimeout(() => { skipClick = false; }, 60);
+  if (box && !cancel) {
+    const s = snapTo(box.s, HOURS_SNAP), e = snapTo(box.e, HOURS_SNAP);
+    daySel = ids.length || e > s ? { kind: dayFilter, ids, range: e > s ? { s, e } : null } : null;
+  }
   if (!cancel && d.preview) {
     const before = clone(dayPlan()), p = d.preview;
     if (d.type === 'hours') p.windows = cleanWindows(p.windows);
@@ -2989,13 +3296,17 @@ function endDrag(cancel) {
 }
 
 document.addEventListener('pointerdown', e => {
-  if (e.button || drag || state.layer || state.focusOpen || !$('#rail')) return;
-  const el = e.target, touch = e.pointerType === 'touch';
-  if (el.closest('.check, .start, .tb-go, .tb-x')) return;
-  const src = el.closest('[data-drag], [data-edge]') || (!touch && el.closest('#rail'));
+  const el = e.target, day = $('#day');
+  if (daySel && !el.closest('#day')) { daySel = null; renderDay('quiet'); }
+  if (e.button || drag || state.layer || state.focusOpen || day.hidden) return;
+  const touch = e.pointerType === 'touch';
+  if (el.closest('.check, .start, .day-menu')) return;
+  // In Breaks mode tasks are only background, so a drag that starts on one still selects. So does shift-dragging.
+  const onBlock = el.closest('.tblock'), select = onBlock && (e.shiftKey || (dayFilter === 'brk' && !onBlock.classList.contains('brk')));
+  const src = select ? $('#rail') : el.closest('[data-drag], [data-edge]') || el.closest('#rail');
   if (!src) return;
-  // A grip or an edge moves at once. Anywhere else a finger has to hold first, so it can still scroll the page.
-  const now = !!el.closest('.grip, .win-edge, .day-tools .btn');
+  // Anything on the timeline moves at once. In the list a finger has to hold first, so it can still scroll the page.
+  const now = !!el.closest('.grip, #day');
   press = { id: e.pointerId, x: e.clientX, y: e.clientY, src, touch, now };
   if (touch && !now) press.timer = setTimeout(() => { if (press) lift(press, press.x, press.y); }, LONG_PRESS_MS);
 });
@@ -3004,7 +3315,7 @@ window.addEventListener('pointermove', e => {
   if (!press || e.pointerId !== press.id) return;
   const moved = Math.hypot(e.clientX - press.x, e.clientY - press.y);
   if (press.touch && !press.now) { if (moved > 10) { clearTimeout(press.timer); press = null; } return; }
-  if (moved > 5) lift(press, e.clientX, e.clientY);
+  if (moved > (press.touch ? 8 : 5)) lift(press, e.clientX, e.clientY);
 });
 window.addEventListener('pointerup', () => { if (press) { clearTimeout(press.timer); press = null; } endDrag(); });
 window.addEventListener('pointercancel', () => { if (press) { clearTimeout(press.timer); press = null; } endDrag(true); });
@@ -3023,7 +3334,7 @@ document.addEventListener('click', e => {
   const min = parseInt(b.dataset.min, 10);
   const s = state.meta.session;
   Alert.unlock();
-  if (['focus-task', 'start-step', 'pick-task', 'history'].includes(act)) Alert.askPermission();
+  if (['focus-task', 'sel-start', 'start-step', 'pick-task', 'history'].includes(act)) Alert.askPermission();
   switch (act) {
     case 'open-add': openAdd(); break;
     case 'auth-switch': state.auth.mode = state.auth.mode === 'signup' ? 'signin' : 'signup'; render(); break;
@@ -3053,7 +3364,9 @@ document.addEventListener('click', e => {
     case 'toggle-step': toggleStep(id, step); break;
     case 'delete-step': deleteStep(id, step); break;
     case 'delete-task': deleteTask(id); break;
-    case 'clear-due': { const t = state.tasks.get(id); if (t) { t.due = null; saveTask(t); renderLayer(); render(); } break; }
+    case 'due-toggle': state.duePick = state.duePick ? null : { month: (dueValue() || dateKey()).slice(0, 7) }; renderDue('#due-toggle'); break;
+    case 'due-month': state.duePick.month = monthKey(state.duePick.month, +v); renderDue(`[data-act="due-month"][data-v="${v}"]`); break;
+    case 'due-set': setDue(v || null); break;
     case 'restore': {
       const t = state.tasks.get(id); if (!t) break;
       t.archived = false; t.completedAt = null; saveTask(t); render();
@@ -3135,6 +3448,23 @@ document.addEventListener('click', e => {
       renderLayer(); render(); break;
     }
     case 'plan-off': takeOffPlan(id); break;
+    case 'plan-reset': resetPlan(); break;
+    case 'day-toggle': setDayOpen(!dayOpen); break;
+    case 'day-filter': dayFilter = v; daySel = null; renderDay('quiet'); break;
+    case 'day-close': daySel = null; renderDay('quiet'); break;
+    case 'day-pick': pickItem(b.dataset.item, e.shiftKey || e.metaKey || e.ctrlKey); break;
+    case 'sel-start': daySel = null; startFocus(id); break;
+    case 'sel-show': daySel = null; state.focusOpen = true; render(); break;
+    case 'sel-open': daySel = null; renderDay('quiet'); openDetail(id); break;
+    case 'sel-swap': swapTask(id); break;
+    case 'sel-delete': deleteSelected(); break;
+    case 'sel-len': changeBreaks(i => ({ ...i, brk: min })); break;
+    case 'sel-move': changeBreaks(i => ({ ...i, at: Math.max(soonestBreak(), i.at + min) })); break;
+    case 'sel-copy': { const p = dayPlan(), i = p.items.find(x => x.id === daySel?.ids[0]); if (i) { savePlan({ ...p, items: [...p.items, { ...i, id: newId('i'), at: i.at + 60 }] }); render(); } break; }
+    case 'sel-now': breakNow(); break;
+    case 'sel-break': rangeBreak(); break;
+    case 'sel-block': rangeHours(false); break;
+    case 'sel-hours': rangeHours(true); break;
     case 'plan-tidy': {
       const p = dayPlan(), before = clone(p);
       savePlan({ ...p, items: p.items.map(i => i.brk ? i : { ...i, at: null }) });
@@ -3194,7 +3524,6 @@ document.addEventListener('input', e => {
   }
   if (el.id === 'auth-email') state.auth.email = el.value;
   else if (el.id === 'new-title') { state.draft.title = el.value; if (el.value.trim()) $('#new-err').hidden = true; }
-  else if (el.id === 'new-due') state.draft.due = el.value || null;
   else if (el.id === 'split-name' && state.ask) state.ask.name = el.value;
   else if ((el.id === 'split-min' || el.id === 'forgot-min') && state.ask) state.ask.min = parseMin(el.value);
   else if (el.dataset.draft) {
@@ -3206,7 +3535,6 @@ document.addEventListener('input', e => {
 
 document.addEventListener('change', e => {
   const el = e.target;
-  if (el.id === 'new-due' && state.draft) { state.draft.due = el.value || null; return; }
   if (el.dataset.hour) {
     const p = dayPlan(), list = clone(p.windows), w = list[+el.dataset.i], v = parseHHMM(el.value);
     if (w && v != null) w[el.dataset.hour] = v;
@@ -3234,7 +3562,6 @@ document.addEventListener('change', e => {
     if (v) { t.title = v; saveTask(t); render(); } else el.value = t.title;
     return;
   }
-  if (el.id === 'detail-due') { t.due = isKey(el.value) ? el.value : null; saveTask(t); renderLayer(); render(); return; }
   const st = el.dataset.field && t.steps.find(s => s.id === el.dataset.step);
   if (!st) return;
   if (el.dataset.field === 'title') {
@@ -3270,8 +3597,10 @@ document.addEventListener('keydown', e => {
     if (el.dataset && el.dataset.draft) { e.preventDefault(); $('#draft-step').focus(); return; }
     if (el.dataset && (el.dataset.field || el.dataset.fedit)) { e.preventDefault(); el.blur(); return; }
   }
-  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-    const dir = e.key === 'ArrowUp' ? -1 : 1, edge = el.closest?.('[data-edge]'), block = el.closest?.('.tblock[data-item]');
+  const calStep = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
+  if (calStep && el.matches?.('.cal-day')) { e.preventDefault(); moveDueFocus(addDays(el.dataset.v, calStep)); return; }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    const dir = e.key === 'ArrowLeft' ? -1 : 1, edge = el.closest?.('[data-edge]'), block = el.closest?.('.tblock[data-item]');
     if (edge) {
       e.preventDefault();
       const p = dayPlan(), list = clone(p.windows), w = list[+edge.dataset.i];
@@ -3287,6 +3616,8 @@ document.addEventListener('keydown', e => {
   }
   if (e.key === 'Escape') {
     if (drag) { endDrag(true); return; }
+    if (daySel) { daySel = null; renderDay('quiet'); return; }
+    if (state.layer && state.duePick) { state.duePick = null; renderDue('#due-toggle'); return; }
     if (state.layer) closeLayer();
     else if (state.focusOpen) minimizeFocus();
   }
@@ -3452,7 +3783,7 @@ function tick() {
     if (expireIdleSession()) { render(); return; }
     if (m.session?.active && !m.session.active.pausedAt) checkBreakDue(m.session);
     tickPlan(m);
-    if (!drag) renderDay();
+    if (!drag && !daySel) renderDay('quiet'); // an open menu keeps its place until you're done with it
     if (state.focusOpen && (m.session || m.brk)) renderFocus();
   }
 }
