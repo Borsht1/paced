@@ -280,6 +280,15 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .pencil { flex: none; width: 28px; height: 28px; display: grid; place-items: center; }
 .err { color: var(--stop); font-size: 14px; margin: 8px 0 0; }
 .sheet-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
+.gt-foot { position: sticky; bottom: calc(-20px - env(safe-area-inset-bottom, 0px)); background: var(--surface); padding: 12px 0 20px; margin-bottom: -20px; }
+.gt-intro { margin-top: 10px; }
+.gt-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.gt-row { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; border-radius: 10px; background: transparent; color: inherit; font: inherit; text-align: left; padding: 2px 6px 2px 0; }
+.gt-row:hover:not(:disabled) { background: var(--bg); }
+.gt-row:disabled { opacity: .6; }
+.gt-text { display: grid; gap: 1px; min-width: 0; padding: 7px 0; overflow-wrap: anywhere; }
+.gt-text b { font-weight: 600; }
+.gt-text .muted { font-size: 13px; }
 .tip { margin: 14px 0; padding: 12px 14px; border-radius: 12px; background: var(--accent-soft); font-size: 14px; }
 .total { margin: 10px 0 0; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .due-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -902,6 +911,7 @@ const Account = {
   clearScreen() {
     state.tasks = new Map(); state.events = new Map(); state.records = new Map(); state.meta = defaultMeta(); speedCache = null;
     state.view = 'home'; state.layer = null; state.focusOpen = false; state.ask = null; state.fEdit = false;
+    state.gt = null; GoogleTasks.forget(); // the next person on this browser shouldn't get your Google tasks
   },
 
   async signOut() {
@@ -1251,6 +1261,201 @@ async function submitAuth() {
 
 const savedLine = () => `<p class="saved">${Store.mode === 'cloud' ? 'Saved to your account' : 'Saved in this browser'}${Account.fb && !Account.user ? ' · <button class="link small" data-act="auth-show">Sign in to use it on other devices</button>' : ''}</p>`;
 
+/* ---------- Google Tasks (website only): pick tasks to copy into Paced ----------
+   This only reads from Google. The sign-in lasts about an hour and stays in memory, so it's never saved. */
+const GOOGLE_SCRIPT = 'https://accounts.google.com/gsi/client';
+const GOOGLE_TASKS_API = 'https://tasks.googleapis.com/tasks/v1';
+const GOOGLE_TASKS_SCOPE = 'https://www.googleapis.com/auth/tasks.readonly';
+const GoogleTasks = {
+  token: null, expires: 0, client: null, script: null,
+
+  available: () => !!window.PACED_GOOGLE_CLIENT_ID,
+  signedIn() { return !!this.token && Date.now() < this.expires; },
+  forget() { this.token = null; this.expires = 0; },
+  loaded: () => !!window.google?.accounts?.oauth2,
+
+  load() {
+    if (this.loaded()) return Promise.resolve();
+    return this.script || (this.script = new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = GOOGLE_SCRIPT;
+      el.onload = resolve;
+      el.onerror = () => { el.remove(); this.script = null; reject(new Error('blocked')); };
+      document.head.appendChild(el);
+    }));
+  },
+
+  // Call this straight from a click, or the browser blocks Google's popup.
+  signIn() {
+    return new Promise((resolve, reject) => {
+      const oauth = window.google.accounts.oauth2;
+      this.settle = { resolve, reject };
+      this.client = this.client || oauth.initTokenClient({
+        client_id: window.PACED_GOOGLE_CLIENT_ID,
+        scope: GOOGLE_TASKS_SCOPE,
+        callback: r => {
+          if (r.error || !oauth.hasGrantedAllScopes(r, GOOGLE_TASKS_SCOPE)) { this.settle.reject(new Error('denied')); return; }
+          this.token = r.access_token;
+          this.expires = Date.now() + (r.expires_in - 60) * 1000;
+          this.settle.resolve();
+        },
+        error_callback: e => this.settle.reject(new Error(e.type === 'popup_closed' ? 'closed' : e.type === 'popup_failed_to_open' ? 'popup' : 'denied'))
+      });
+      this.client.requestAccessToken({ prompt: '' });
+    });
+  },
+
+  async pages(path, query) {
+    const items = [];
+    let pageToken = '';
+    do {
+      const q = new URLSearchParams({ maxResults: 100, ...query });
+      if (pageToken) q.set('pageToken', pageToken);
+      const res = await fetch(`${GOOGLE_TASKS_API}/${path}?${q}`, { headers: { Authorization: `Bearer ${this.token}` } });
+      if (!res.ok) throw Object.assign(new Error('google'), { status: res.status });
+      const d = await res.json();
+      items.push(...(d.items || []));
+      pageToken = d.nextPageToken;
+    } while (pageToken);
+    return items;
+  },
+
+  // Every list that has open tasks, with each task's subtasks folded into it.
+  async lists() {
+    const lists = await this.pages('users/@me/lists');
+    const full = await Promise.all(lists.map(async l => ({
+      id: l.id, title: String(l.title || 'Untitled list'),
+      tasks: gtShape(await this.pages(`lists/${encodeURIComponent(l.id)}/tasks`, { showCompleted: false, showHidden: false }))
+    })));
+    return full.filter(l => l.tasks.length);
+  }
+};
+
+function gtShape(items) {
+  const named = items.filter(i => String(i.title || '').trim());
+  const ids = new Set(named.map(i => i.id));
+  const byPosition = (a, b) => String(a.position || '').localeCompare(String(b.position || ''));
+  // A subtask whose parent is finished has nothing to sit under, so it stands on its own.
+  return named.filter(i => !ids.has(i.parent)).sort(byPosition).map(i => {
+    const due = String(i.due || '').slice(0, 10); // Google keeps only the date here, written as midnight UTC, so it must not shift with your time zone
+    return { id: i.id, title: i.title.trim(), due: isKey(due) ? due : null, subs: named.filter(s => s.parent === i.id).sort(byPosition).map(s => s.title.trim()) };
+  });
+}
+
+const gtAdded = () => new Set([...state.tasks.values()].map(t => t.googleTaskId).filter(Boolean));
+const gtFree = l => { const added = gtAdded(); return l.tasks.filter(t => !added.has(t.id)); };
+const GT_ERRORS = {
+  blocked: 'Paced couldn’t reach Google. A content blocker may be stopping it, or you may be offline.',
+  denied: 'Google didn’t give Paced access to your tasks.',
+  popup: 'Your browser blocked Google’s window. Allow popups for this site, then try again.',
+  load: 'Paced couldn’t get your tasks from Google. Check your connection and try again.'
+};
+
+function gtShow(run) { if (state.gt === run && state.layer?.type === 'gtasks') renderLayer(); }
+
+async function openGoogleTasks() {
+  const run = state.gt = { status: 'loading', err: '', lists: [], picked: new Set() };
+  state.layer = { type: 'gtasks' };
+  renderLayer(true);
+  if (GoogleTasks.signedIn()) return fetchGoogleTasks(run);
+  try { await GoogleTasks.load(); run.status = 'connect'; }
+  catch (e) { run.status = 'connect'; run.err = GT_ERRORS.blocked; }
+  gtShow(run);
+}
+
+async function fetchGoogleTasks(run) {
+  run.status = 'loading'; run.err = '';
+  gtShow(run);
+  try {
+    run.lists = await GoogleTasks.lists();
+    run.status = 'ready';
+  } catch (e) {
+    if (e.status === 401) GoogleTasks.forget(); // the hour ran out, so connecting again fixes it
+    run.status = 'connect';
+    run.err = e.status === 401 ? 'Your Google sign-in ran out. Connect again to carry on.' : e.status === 403 ? GT_ERRORS.denied : GT_ERRORS.load;
+  }
+  gtShow(run);
+}
+
+function connectGoogle() {
+  const run = state.gt;
+  if (GoogleTasks.signedIn()) { fetchGoogleTasks(run); return; }
+  if (!GoogleTasks.loaded()) { openGoogleTasks(); return; }
+  run.err = '';
+  GoogleTasks.signIn().then(() => fetchGoogleTasks(run), e => {
+    run.err = GT_ERRORS[e.message] || ''; // closing Google's window just means not now
+    gtShow(run);
+  });
+}
+
+function gtPick(id) {
+  const { picked } = state.gt;
+  if (picked.has(id)) picked.delete(id); else picked.add(id);
+  gtSync();
+}
+function gtPickList(id) {
+  const g = state.gt, free = gtFree(g.lists.find(l => l.id === id));
+  const all = free.every(t => g.picked.has(t.id));
+  free.forEach(t => { if (all) g.picked.delete(t.id); else g.picked.add(t.id); });
+  gtSync();
+}
+const gtAddLabel = n => n ? `Add ${n} ${n === 1 ? 'task' : 'tasks'}` : 'Add tasks';
+// Ticks change in place, because redrawing the sheet would throw away your scroll position and keyboard focus.
+function gtSync() {
+  const g = state.gt, el = $('#layer');
+  el.querySelectorAll('.gt-row:not(:disabled)').forEach(r => {
+    const on = g.picked.has(r.dataset.id);
+    r.setAttribute('aria-checked', on);
+    r.querySelector('.check').classList.toggle('on', on);
+  });
+  el.querySelectorAll('[data-act="gt-all"]').forEach(b => {
+    const free = gtFree(g.lists.find(l => l.id === b.dataset.id));
+    b.textContent = free.every(t => g.picked.has(t.id)) ? 'Clear' : 'Select all';
+  });
+  const add = el.querySelector('[data-act="gt-add"]');
+  add.textContent = gtAddLabel(g.picked.size);
+  add.disabled = !g.picked.size;
+}
+
+function addGoogleTasks() {
+  const g = state.gt, added = gtAdded(), now = Date.now();
+  const picks = g.lists.flatMap(l => l.tasks).filter(t => g.picked.has(t.id) && !added.has(t.id));
+  const made = picks.map((p, i) => ({
+    id: newId('t'), title: p.title, due: p.due, createdAt: now + i, archived: false, completedAt: null, googleTaskId: p.id,
+    steps: p.subs.map(title => ({ id: newId('s'), title, est: null, done: false, actual: null, doneAt: null }))
+  }));
+  made.forEach(saveTask);
+  state.gt = null; state.layer = null; renderLayer(); render();
+  toast(`Added ${made.length} ${made.length === 1 ? 'task' : 'tasks'} from Google Tasks`, 'Undo', () => {
+    made.forEach(t => { clearActiveIf(a => a.taskId === t.id); removeTask(t.id); });
+    render();
+  });
+}
+
+function gtRowHTML(t, on, added) {
+  const about = [added ? 'Already added' : t.due ? `Due ${fmtFullDay(t.due)}` : '', t.subs.length ? `Steps: ${t.subs.join(', ')}` : ''].filter(Boolean).join(' · ');
+  return `<button class="gt-row" role="checkbox" aria-checked="${on || added}" data-act="gt-pick" data-id="${esc(t.id)}"${added ? ' disabled' : ''}>
+    <span class="check sm${on || added ? ' on' : ''}" aria-hidden="true"><span>${ICON.check}</span></span>
+    <span class="gt-text"><b>${esc(t.title)}</b>${about ? `<span class="muted">${esc(about)}</span>` : ''}</span>
+  </button>`;
+}
+function gtListHTML(l, g, added) {
+  const free = gtFree(l), all = free.every(t => g.picked.has(t.id));
+  return `<div class="gt-head"><h3 class="label">${esc(l.title)}</h3>${free.length ? `<button class="link small" data-act="gt-all" data-id="${esc(l.id)}">${all ? 'Clear' : 'Select all'}</button>` : ''}</div>
+    ${l.tasks.map(t => gtRowHTML(t, g.picked.has(t.id), added.has(t.id))).join('')}`;
+}
+function gtHTML(enter) {
+  const g = state.gt, added = gtAdded();
+  const err = g.err ? `<p class="err" role="alert">${esc(g.err)}</p>` : '';
+  const body = g.status === 'loading' ? '<p class="sub" role="status">Loading…</p>'
+    : g.status === 'connect' ? `<p class="help gt-intro">Connect your Google account, then choose which tasks to copy into Paced. Paced only reads them, so nothing changes in Google Tasks.</p>${err}
+      <div class="sheet-foot"><button class="btn ghost" data-act="close-layer">Cancel</button><button class="btn primary" data-act="gt-connect">Connect Google</button></div>`
+    : !g.lists.length ? `<p class="sub">You have no open tasks in Google Tasks.</p><div class="sheet-foot"><button class="btn ghost" data-act="close-layer">Close</button></div>`
+    : `<p class="sub">Tick the tasks you want. Subtasks become steps.</p>${g.lists.map(l => gtListHTML(l, g, added)).join('')}
+      <div class="sheet-foot gt-foot"><button class="btn ghost" data-act="close-layer">Cancel</button><button class="btn primary" data-act="gt-add"${g.picked.size ? '' : ' disabled'}>${gtAddLabel(g.picked.size)}</button></div>`;
+  return `${sheetOpen(enter, 'Import from Google Tasks')}${sheetHead('Import from Google Tasks')}${body}</section>`;
+}
+
 function homeHTML() {
   const list = activeTasks();
   const archived = archivedTasks().length;
@@ -1271,7 +1476,8 @@ function homeHTML() {
       <li>Guess how many minutes each step will take.</li>
       <li>Press <b>Start</b>. Paced times each step and tells you when it’s time for a break.</li>
     </ol>
-    <button class="btn primary" data-act="open-add">${ICON.plus}Add your first task</button>
+    <div class="row"><button class="btn primary" data-act="open-add">${ICON.plus}Add your first task</button>
+    ${GoogleTasks.available() ? '<button class="btn ghost" data-act="open-gtasks">Import from Google Tasks</button>' : ''}</div>
   </section>`}
   ${savedLine()}`;
 }
@@ -1677,7 +1883,7 @@ function renderLayer(enter) {
   }
   el.hidden = false;
   document.body.classList.add('locked');
-  el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'hours' ? hoursHTML(enter) : L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : L.type === 'record' ? recordHTML(rec, enter) : detailHTML(t, enter));
+  el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'hours' ? hoursHTML(enter) : L.type === 'gtasks' ? gtHTML(enter) : L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : L.type === 'record' ? recordHTML(rec, enter) : detailHTML(t, enter));
   autosizeAll(el);
 }
 const sheetOpen = (enter, label) => `<section class="sheet${enter ? ' enter' : ''}" role="dialog" aria-modal="true" aria-label="${esc(label)}">`;
@@ -1948,6 +2154,7 @@ function renderDraftSteps() {
 
 function addHTML(enter) {
   return `${sheetOpen(enter, 'New task')}${sheetHead('New task')}
+    ${GoogleTasks.available() ? '<button class="link small" data-act="open-gtasks">Import from Google Tasks instead</button>' : ''}
     <label class="label" for="new-title">What do you need to do?</label>
     <input id="new-title" class="text-input big" placeholder="Task name" autocomplete="off" value="${esc(state.draft.title)}">
     <p class="err" id="new-err" hidden>Type a name for the task first.</p>
@@ -3430,6 +3637,11 @@ document.addEventListener('click', e => {
   if (['focus-task', 'sel-start', 'start-step', 'pick-task', 'history'].includes(act)) Alert.askPermission();
   switch (act) {
     case 'open-add': openAdd(); break;
+    case 'open-gtasks': openGoogleTasks(); break;
+    case 'gt-connect': connectGoogle(); break;
+    case 'gt-pick': gtPick(id); break;
+    case 'gt-all': gtPickList(id); break;
+    case 'gt-add': addGoogleTasks(); break;
     case 'auth-switch': state.auth.mode = state.auth.mode === 'signup' ? 'signin' : 'signup'; render(); break;
     case 'auth-guest': Account.continueAsGuest(); render(); break;
     case 'auth-show': state.auth.mode = 'signin'; Account.showSignIn(); renderLayer(); render(); break;

@@ -9,3 +9,7 @@ window.PACED_FIREBASE_CONFIG = {
   messagingSenderId: '1053581199692',
   appId: '1:1053581199692:web:21943f71a3407e8ec2a7e9'
 };
+
+// Google's client ID for importing from Google Tasks. This isn't secret either.
+// Set this to null to hide the import.
+window.PACED_GOOGLE_CLIENT_ID = '1053581199692-n3i9mm3uvin0ciqfdse1bnfkuuj4rmb4.apps.googleusercontent.com';
