@@ -163,7 +163,10 @@ body.has-mini .day.shut { bottom: calc(96px + env(safe-area-inset-bottom, 0px));
 .day-filter button:last-of-type { border-radius: 0 999px 999px 0; margin-left: -1px; }
 .day-filter button.on { position: relative; background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .day-toggle { width: 30px; height: 30px; }
-.rail { position: relative; isolation: isolate; height: 60px; margin-top: 4px; overflow: hidden; cursor: crosshair; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.day-grip { position: absolute; top: 0; left: 50%; width: 72px; height: 12px; margin-left: -36px; padding: 0; border: none; background: none; cursor: ns-resize; touch-action: none; }
+.day-grip::after { content: ""; position: absolute; top: 4px; left: 18px; right: 18px; height: 4px; border-radius: 2px; background: var(--line); transition: background .15s; }
+.day-grip:hover::after, .day-grip:focus-visible::after { background: var(--accent); }
+.rail { position: relative; isolation: isolate; height: min(var(--rail-h, 60px), calc(100vh - 220px)); margin-top: 4px; overflow: hidden; cursor: crosshair; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); }
 .tick span { position: absolute; left: 3px; top: 1px; font: 500 10px/1 var(--font-mono); color: var(--muted); white-space: nowrap; }
 .win { position: absolute; top: 15px; bottom: 0; background: var(--zone-soft); border-radius: 6px; }
@@ -182,6 +185,10 @@ body.has-mini .day.shut { bottom: calc(96px + env(safe-area-inset-bottom, 0px));
 .tb-open { flex: 1; min-width: 0; display: grid; align-content: center; padding: 0 6px; border: none; background: none; color: inherit; text-align: left; font-size: 12px; line-height: 1.2; cursor: inherit; overflow: hidden; }
 .tb-open b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tb-open span { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.tb-edge { position: absolute; top: 0; bottom: 0; right: 0; width: min(10px, 40%); padding: 0; border: none; background: none; cursor: ew-resize; touch-action: none; }
+.tb-edge::after { content: ""; position: absolute; top: 50%; right: 2px; width: 3px; height: 16px; margin-top: -8px; border-radius: 2px; background: var(--muted); opacity: 0; transition: opacity .15s; }
+.tblock:hover .tb-edge::after, .tb-edge:focus-visible::after, .tblock.lifted .tb-edge::after { opacity: .7; }
+@media (pointer: coarse) { .tb-edge { width: min(18px, 40%); } .tb-edge::after { opacity: .7; } }
 .tblock.live { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
 .tblock.live .tb-open span { color: inherit; opacity: .8; }
 .tblock.late { background: var(--stop-soft); box-shadow: 0 0 0 1px var(--stop); }
@@ -1079,6 +1086,14 @@ function taskRoom(t) {
   }
   return { min: Math.max(1, Math.ceil(min)), guess };
 }
+// The room a task takes on the timeline, with any time you dragged on or off it. What's running goes by its timer.
+function planRoom(item, t) {
+  const room = taskRoom(t);
+  return item.front ? room : { ...room, min: Math.max(PLAN_SNAP, room.min + (item.extra || 0)) };
+}
+const withExtra = (item, extra) => { const { extra: old, ...rest } = item; return extra ? { ...rest, extra } : rest; };
+// A plan with this task taking up this many minutes today. Its steps and timers stay as they are.
+const sizedPlan = (p, id, min) => ({ ...p, items: p.items.map(i => i.id === id ? withExtra(i, min - taskRoom(state.tasks.get(i.taskId)).min) : i) });
 const onPlan = t => !!t && !t.archived && (!t.steps.length || stepsLeft(t).length > 0);
 
 // Where everything lands right now. Blocks are the tasks, each in one or more pieces; stops are the breaks.
@@ -1107,7 +1122,7 @@ function layoutDay(p = dayPlan(), now = minuteNow()) {
   const blocks = [];
   let at = now;
   for (const item of tasks) {
-    const t = state.tasks.get(item.taskId), { min, guess } = taskRoom(t), pieces = [];
+    const t = state.tasks.get(item.taskId), { min, guess } = planRoom(item, t), pieces = [];
     if (item.at != null) at = Math.max(at, item.at);
     let need = min;
     while (need > 0) {
@@ -1268,6 +1283,14 @@ const STRETCH_MAX_MIN = 180; // past this, a stretch you selected across is abou
 let railView = null; // where the timeline last drew itself, for turning a position into a time
 let dayOpen = true; // open or closed is a choice for each device, so it stays out of your account
 try { dayOpen = localStorage.getItem(DAY_KEY) !== 'shut'; } catch (e) {}
+const RAIL_KEY = 'paced:rail', RAIL_MIN = 60, RAIL_MAX = 400, RAIL_STEP = 20; // pixels
+let railH = RAIL_MIN; // like open or closed, how tall it is suits the screen, so it's for each device too
+try { railH = clamp(+localStorage.getItem(RAIL_KEY) || RAIL_MIN, RAIL_MIN, RAIL_MAX); } catch (e) {}
+function setRailH(h) {
+  railH = clamp(h, RAIL_MIN, Math.max(RAIL_MIN, Math.min(RAIL_MAX, innerHeight - 220)));
+  renderDay('quiet');
+}
+const saveRailH = () => { try { localStorage.setItem(RAIL_KEY, railH); } catch (e) {} };
 let dayFilter = 'task'; // what dragging across the timeline selects: 'task' or 'brk'
 let daySel = null; // what's selected: { kind, ids }, or { range } for a stretch with nothing in it
 
@@ -1327,6 +1350,7 @@ function pieceHTML(b, piece, i, v) {
   const words = px >= 24 ? `<b>${esc(t.title)}</b>${px >= 92 ? `<span>${esc(when)}</span>` : ''}` : '';
   return `<div class="tblock ${cls}"${item.front ? '' : ` data-drag="item" data-item="${item.id}"`} style="${spanStyle(v, piece.s, piece.e)}" title="${esc(t.title)}, ${esc(when)}">
     <button class="tb-open" data-act="day-pick" data-item="${item.id}" aria-label="${esc(t.title)}, ${rangeWords(b.start, b.end)}${piece.late ? ', past the end of your day' : ''}">${words}</button>
+    ${item.front || i < b.pieces.length - 1 ? '' : `<button class="tb-edge" data-grow="${item.id}" title="Drag to change how long this takes" aria-label="Length of ${esc(t.title)}, ${fmtMin(b.min)}. Use the arrow keys to change it."></button>`}
   </div>`;
 }
 
@@ -1356,7 +1380,8 @@ function dayHTML() {
   const gaps = lay.lateMin >= 1 && lay.planMin <= lay.freeMin && lay.blocks.some(b => b.item.at != null);
   const fresh = !p.items.length && sameHours(p.windows, usualHours());
   const filterBtn = (id, label) => `<button class="${dayFilter === id ? 'on' : ''}" data-act="day-filter" data-v="${id}" aria-pressed="${dayFilter === id}" title="Drag across the timeline to select ${label.toLowerCase()}">${label}</button>`;
-  return `<div class="day-head">
+  return `<button class="day-grip" data-size="1" title="Drag to make the timeline taller or shorter" aria-label="Timeline height. Use the arrow keys to change it."></button>
+    <div class="day-head">
       <h2>Today</h2>
       <p class="day-sum">${dayWords(lay)}${lay.lateMin >= 1 ? ` · <b>${fmtMin(lay.lateMin)} over</b>` : ''}</p>
       <div class="day-tools">
@@ -1482,6 +1507,7 @@ function renderDay(how) {
   el.hidden = !show;
   if (!show) { daySel = null; document.documentElement.style.setProperty('--day-lift', '0px'); return; }
   el.classList.toggle('shut', !dayOpen);
+  el.style.setProperty('--rail-h', `${railH}px`);
   if (dayOpen) el.innerHTML = dayHTML();
   else {
     const lay = layoutDay();
@@ -3158,7 +3184,7 @@ function swapTask(taskId) {
   const p = dayPlan(), id = daySel?.ids[0], item = p.items.find(i => i.id === id), other = p.items.find(i => i.taskId === taskId), t = state.tasks.get(taskId);
   if (!item || !t) return;
   daySel = null;
-  changePlan(`Changed to “${t.title}”`, { ...p, items: p.items.map(i => i === item ? { ...i, taskId } : i === other ? { ...i, taskId: item.taskId } : i) });
+  changePlan(`Changed to “${t.title}”`, { ...p, items: p.items.map(i => i === item ? withExtra({ ...i, taskId }, other?.extra) : i === other ? withExtra({ ...i, taskId: item.taskId }, item.extra) : i) });
 }
 
 function deleteSelected() {
@@ -3218,8 +3244,13 @@ function liftItem(src) {
     : p.items.find(i => i.id === src.dataset.item);
   if (!item) return null;
   const t = item.taskId && state.tasks.get(item.taskId);
-  return { type: 'plan', item, known: p.items.includes(item), preview: null, label: t ? `${t.title} · ${fmtMin(taskRoom(t).min)}` : `Break · ${fmtMin(item.brk)}` };
+  return { type: 'plan', item, known: p.items.includes(item), preview: null, label: t ? `${t.title} · ${fmtMin(planRoom(item, t).min)}` : `Break · ${fmtMin(item.brk)}` };
 }
+function liftGrow(id, x) {
+  const b = railView.lay.blocks.find(y => y.item.id === id);
+  return b && { type: 'grow', item: b.item, title: b.task.title, min: b.min, from: railTime(x), preview: null };
+}
+function liftSize(y) { return { type: 'size', h: railH, from: y, preview: null }; }
 function liftEdge(i, side) { return { type: 'hours', list: clone(dayPlan().windows), i, side, preview: null }; }
 function liftSelect(x) { const at = railTime(x); return { type: 'select', from: at, to: at, preview: null }; }
 
@@ -3229,7 +3260,7 @@ function lift(p, x, y) {
   daySel = null;
   if (!dayOpen) setDayOpen(true); // dragging a task means you're planning, so the timeline comes back
   const d = p.src.dataset;
-  const started = d.edge ? liftEdge(+d.i, d.edge) : d.drag ? liftItem(p.src) : liftSelect(p.x);
+  const started = d.grow ? liftGrow(d.grow, p.x) : d.size ? liftSize(p.y) : d.edge ? liftEdge(+d.i, d.edge) : d.drag ? liftItem(p.src) : liftSelect(p.x);
   if (!started) return;
   drag = { ...started, frozen: { start: railView.start, end: railView.end }, x, y };
   try { document.body.setPointerCapture(p.id); } catch (e) {}
@@ -3245,6 +3276,16 @@ function dragTo(x, y) {
     drag.to = clamp(railTime(x), drag.frozen.start, drag.frozen.end);
     const s = Math.min(drag.from, drag.to), e = Math.max(drag.from, drag.to), n = idsIn(railView.lay, s, e).length;
     ghostShow(n ? `${n} ${dayFilter === 'brk' ? (n === 1 ? 'break' : 'breaks') : (n === 1 ? 'task' : 'tasks')}` : rangeWords(snapTo(s, HOURS_SNAP), snapTo(e, HOURS_SNAP)), x, y);
+    renderDay();
+    return;
+  }
+  if (drag.type === 'size') { setRailH(drag.h + drag.from - y); return; }
+  if (drag.type === 'grow') {
+    const min = Math.max(PLAN_SNAP, snapTo(drag.min + railTime(x) - drag.from, PLAN_SNAP));
+    ghostShow(`${drag.title} · ${fmtMin(min)}`, x, y);
+    if (min === drag.key) return;
+    drag.key = min;
+    drag.preview = sizedPlan(dayPlan(), drag.item.id, min);
     renderDay();
     return;
   }
@@ -3282,6 +3323,7 @@ function endDrag(cancel) {
   document.body.classList.remove('dragging');
   skipClick = true;
   setTimeout(() => { skipClick = false; }, 60);
+  if (d.type === 'size') { if (cancel) railH = d.h; else saveRailH(); }
   if (box && !cancel) {
     const s = snapTo(box.s, HOURS_SNAP), e = snapTo(box.e, HOURS_SNAP);
     daySel = ids.length || e > s ? { kind: dayFilter, ids, range: e > s ? { s, e } : null } : null;
@@ -3303,7 +3345,7 @@ document.addEventListener('pointerdown', e => {
   if (el.closest('.check, .start, .day-menu')) return;
   // In Breaks mode tasks are only background, so a drag that starts on one still selects. So does shift-dragging.
   const onBlock = el.closest('.tblock'), select = onBlock && (e.shiftKey || (dayFilter === 'brk' && !onBlock.classList.contains('brk')));
-  const src = select ? $('#rail') : el.closest('[data-drag], [data-edge]') || el.closest('#rail');
+  const src = select ? $('#rail') : el.closest('[data-grow], [data-size], [data-drag], [data-edge]') || el.closest('#rail');
   if (!src) return;
   // Anything on the timeline moves at once. In the list a finger has to hold first, so it can still scroll the page.
   const now = !!el.closest('.grip, #day');
@@ -3599,6 +3641,20 @@ document.addEventListener('keydown', e => {
   }
   const calStep = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
   if (calStep && el.matches?.('.cal-day')) { e.preventDefault(); moveDueFocus(addDays(el.dataset.v, calStep)); return; }
+  if (el.dataset?.size && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    e.preventDefault();
+    setRailH(railH + (e.key === 'ArrowUp' ? RAIL_STEP : -RAIL_STEP));
+    saveRailH();
+    $('.day-grip')?.focus();
+    return;
+  }
+  if (el.dataset?.grow && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    e.preventDefault();
+    const id = el.dataset.grow, b = layoutDay().blocks.find(y => y.item.id === id);
+    if (b) { savePlan(sizedPlan(dayPlan(), id, Math.max(PLAN_SNAP, b.min + (e.key === 'ArrowLeft' ? -PLAN_SNAP : PLAN_SNAP)))); render(); }
+    $(`[data-grow="${id}"]`)?.focus();
+    return;
+  }
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     const dir = e.key === 'ArrowLeft' ? -1 : 1, edge = el.closest?.('[data-edge]'), block = el.closest?.('.tblock[data-item]');
     if (edge) {
