@@ -199,6 +199,14 @@ body.dragging .tblock, body.dragging .task { cursor: grabbing; }
 .mini .btn { background: var(--bg); color: var(--ink); }
 .mini.over .mini-in { background: var(--stop); color: var(--surface); }
 .mini.over .mini-dot { color: var(--surface); }
+.pip { margin: 0; height: 100vh; box-sizing: border-box; padding: 10px 12px; display: flex; flex-direction: column; justify-content: center; gap: 6px; overflow: hidden; background: var(--surface); color: var(--ink); }
+.pip-top, .pip-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pip-time { flex: 1; font: 500 24px var(--font-mono); font-variant-numeric: tabular-nums; }
+.pip-acts { display: flex; gap: 6px; }
+.pip .btn.small { padding: 6px 12px; }
+.pip.over { background: var(--stop); color: var(--surface); }
+.pip.over .mini-dot { color: var(--surface); }
+.pip.over .btn { background: var(--surface); color: var(--ink); }
 
 /* Sheets */
 .layer { position: fixed; inset: 0; z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
@@ -260,6 +268,7 @@ body.dragging .tblock, body.dragging .task { cursor: grabbing; }
 @keyframes fade { from { opacity: 0; } }
 .focus-in { max-width: 560px; margin: 0 auto; padding-block: 14px 56px; display: grid; gap: 18px; }
 .fbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 40px; }
+.fbar-end { display: flex; gap: 8px; }
 .fbar-title { text-align: center; font-weight: 600; color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .step-name { font: 700 clamp(24px, 6.5vw, 32px)/1.15 var(--font-display); letter-spacing: -.01em; margin: 0; text-wrap: balance; overflow-wrap: anywhere; }
@@ -1106,6 +1115,7 @@ function render() {
   renderMain();
   renderMini();
   renderFocus();
+  showPip();
   const fab = $('#fab');
   fab.hidden = !state.ready || Store.mode === 'signin' || state.view !== 'home' || !activeTasks().length;
   fab.innerHTML = ICON.plus + 'New task';
@@ -1378,7 +1388,7 @@ function renderMini() {
   const dot = `<span class="mini-dot${m.brk || (c && c.paused) ? ' still' : ''}"></span>`;
   const title = c ? esc(c.label) + (c.paused ? ' (paused)' : '') : 'Ready for your next step';
   const time = c ? `<span class="mini-time" data-tick="mini">${fmtClock(c.left)}</span>` : '';
-  el.innerHTML = `<div class="mini-in">${dot}<span class="mini-title">${title}</span>${time}<button class="btn small" data-act="focus-open">Show</button></div>`;
+  el.innerHTML = `<div class="mini-in">${dot}<span class="mini-title">${title}</span>${time}${popOutButton()}<button class="btn small" data-act="focus-open">Show</button></div>`;
 }
 
 // The one clock that matters right now, for the tab title and the bar at the bottom. A negative "left" is time past the end.
@@ -1737,7 +1747,7 @@ function fbar(title, withStop) {
   return `<div class="fbar">
     <button class="btn ghost small" data-act="focus-min">${ICON.back}Back</button>
     <span class="fbar-title">${esc(title || '')}</span>
-    ${withStop ? '<button class="btn ghost small" data-act="end-session">Stop working</button>' : '<span></span>'}
+    <span class="fbar-end">${popOutButton('ghost')}${withStop ? '<button class="btn ghost small" data-act="end-session">Stop working</button>' : ''}</span>
   </div>`;
 }
 
@@ -2220,6 +2230,47 @@ function dueAlert(holder, minutesOver, steps) {
   while (n < steps.length && minutesOver >= steps[n]) n++;
   holder.alerts = n;
   return n > before;
+}
+
+/* ---------- the mini timer: a small window that stays on top of your other apps ---------- */
+// Browsers only open it from a click, and it closes with this tab. It can't open inside another page, as on claude.ai.
+const canPopOut = () => 'documentPictureInPicture' in window && window.top === window;
+const popOutButton = (style = '') => canPopOut() && !pip ? `<button class="btn small ${style}" data-act="pop-out">Pop out</button>` : '';
+let pip = null, pipActs = null;
+
+async function popOut() {
+  if (pip || !canPopOut()) return;
+  try { pip = await documentPictureInPicture.requestWindow({ width: 300, height: 104 }); }
+  catch (e) { toast('Paced couldn’t open the mini timer.'); return; }
+  const d = pip.document;
+  if (document.documentElement.dataset.theme) d.documentElement.dataset.theme = document.documentElement.dataset.theme;
+  document.querySelectorAll('style, link[rel="stylesheet"]').forEach(n => d.head.appendChild(n.cloneNode(true)));
+  d.title = 'Paced';
+  d.body.className = 'pip';
+  d.body.innerHTML = '<div class="pip-top"><span class="mini-dot"></span><span class="mini-title"></span></div><div class="pip-row"><span class="pip-time"></span><span class="pip-acts"></span></div>';
+  d.addEventListener('click', e => {
+    const act = e.target.closest('[data-pip]')?.dataset.pip;
+    if (act === 'done') finishStep();
+    else if (act === 'pause') togglePause();
+    else if (act === 'back') endBreak();
+    else if (act === 'show') { state.focusOpen = !!(state.meta.session || state.meta.brk); render(); window.focus(); }
+  });
+  pip.addEventListener('pagehide', () => { pip = null; pipActs = null; render(); });
+  pip.setInterval(tick, 1000); // browsers slow down a hidden tab's timers, but this window stays visible
+  render();
+}
+
+function showPip() {
+  if (!pip) return;
+  const m = state.meta, a = m.session?.active, c = liveClock(), d = pip.document;
+  d.body.classList.toggle('over', !!(c && c.over));
+  d.querySelector('.mini-dot').classList.toggle('still', !c || !!m.brk || !!c.paused);
+  d.querySelector('.mini-title').textContent = !c ? 'Nothing running' : c.label + (c.paused ? ' (paused)' : '');
+  d.querySelector('.pip-time').textContent = c ? fmtClock(c.left) : '';
+  const btn = (act, label) => `<button class="btn small" data-pip="${act}">${label}</button>`;
+  const acts = a ? btn('done', 'Done') + (a.autoStopped ? '' : btn('pause', a.pausedAt ? 'Resume' : 'Pause'))
+    : m.brk && c.over ? btn('back', 'Back to work') : btn('show', 'Open Paced');
+  if (acts !== pipActs) { pipActs = acts; d.querySelector('.pip-acts').innerHTML = acts; } // only when they change, or a click can land on a replaced button
 }
 
 /* ---------- the browser extension: keeps the clock on the toolbar, and alerts you after this tab closes ---------- */
@@ -3014,6 +3065,7 @@ document.addEventListener('click', e => {
     }
     case 'focus-min': minimizeFocus(); break;
     case 'focus-open': state.focusOpen = true; render(); break;
+    case 'pop-out': popOut(); break;
     case 'end-session': endSession(); break;
     case 'history': {
       const ask = state.ask || {};
@@ -3355,6 +3407,7 @@ function showClocks() {
     box.querySelector('.gap-text').textContent = gapText(gapPlan(s), left);
     box.querySelector('.gap-time').textContent = fmtClock(left);
   }
+  showPip();
 }
 
 // With nothing running there's no clock to run out, so the timeline is what gets you started.
