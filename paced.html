@@ -738,7 +738,7 @@ const Store = {
       } catch (e) {
         const code = e && e.code;
         if (code === 'unavailable' && !job.retried) { job.retried = true; await sleep(400 + Math.random() * 600); if (!q.next) q.next = job; continue; }
-        if (code === 'quota_exceeded') toast('Your storage is full. Empty some tasks from the Trash to make room.');
+        if (code === 'quota_exceeded') toast('Your storage is full. Delete some completed tasks to make room.');
         else if (['invalid_argument', 'not_granted', 'revoked', 'capability_disabled', 'capability_removed', 'transform_error'].includes(code)) { this.toLocal('Couldn’t save to your account, so changes are saved in this browser for now.'); break; }
         else toast('Couldn’t save that change. Check your connection and try again.');
       }
@@ -1181,7 +1181,7 @@ function homeHTML() {
   return `<div class="brand-row"><div class="brand">${ICON.mark}Paced</div>
     <div class="row-actions"><button class="icon-btn" data-act="open-look" title="Settings" aria-label="Settings">${ICON.gear}</button>
     <button class="icon-btn" data-act="show-history" title="History" aria-label="History">${ICON.clock}</button>
-    <button class="btn ghost small" data-act="show-archive">${ICON.trash}Trash${archived ? `<span class="count">${archived}</span>` : ''}</button></div></div>
+    <button class="btn ghost small" data-act="show-archive" title="Completed tasks">${ICON.check}Completed${archived ? `<span class="count">${archived}</span>` : ''}</button></div></div>
   <div class="home">
   <div class="home-main">
   <h1>My tasks</h1>
@@ -1359,7 +1359,7 @@ function methodCardHTML() {
 function archiveHTML() {
   const list = archivedTasks();
   return `<div class="brand-row"><button class="btn ghost small" data-act="show-home">${ICON.back}My tasks</button></div>
-  <h1>Trash</h1>
+  <h1>Completed tasks</h1>
   <p class="sub">${list.length ? 'Tasks you’ve finished' : 'Nothing here yet'}</p>
   ${list.length ? `<ul class="tasks">${list.map(t => {
     const took = t.steps.reduce((a, s) => a + (s.actual || 0), 0);
@@ -2124,7 +2124,7 @@ function pickHTML(t, noSession) {
   const planned = layoutDay().blocks.map(b => b.task);
   const others = [...planned, ...activeTasks().filter(x => !planned.includes(x))].filter(x => x.steps.some(s => !s.done));
   const head = t && t.archived
-    ? `<div class="eyebrow">Task complete</div><h2 class="step-name">You finished “${esc(t.title)}”!</h2><p class="muted" style="margin:0">It’s been moved to the Trash.</p>`
+    ? `<div class="eyebrow">Task complete</div><h2 class="step-name">You finished “${esc(t.title)}”!</h2><p class="muted" style="margin:0">It’s been moved to Completed tasks.</p>`
     : '';
   const body = others.length
     ? `<h3 class="pick-q">What do you want to work on next?</h3><ul class="picklist">${others.map(x => {
@@ -2449,7 +2449,7 @@ function saveNew() {
 }
 
 function archiveToast(t, before) {
-  toast(`Nice! “${t.title}” is done and moved to the Trash.`, 'Undo', () => { saveTask(before); render(); if (state.layer) renderLayer(); });
+  toast(`Nice! “${t.title}” is done and moved to Completed tasks.`, 'Undo', () => { saveTask(before); render(); if (state.layer) renderLayer(); });
 }
 function maybeArchive(t, before) {
   if (t.archived || !t.steps.length || !t.steps.every(s => s.done)) return false;
