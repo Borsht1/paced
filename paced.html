@@ -2007,10 +2007,10 @@ function awayHTML(st) {
   return `<section class="ask-card warn">
       <div class="eyebrow">Welcome back</div>
       <h2>You were away for ${fmtDur(state.ask.sec)}</h2>
-      <p>The timer kept running while Paced was closed or this device was asleep. Were you working on “${esc(st.title)}” that whole time?</p>
+      <p>Paced stopped the timer when you left, so this time isn’t counted. Were you working on “${esc(st.title)}” that whole time?</p>
       <div class="chips">
-        <button class="chip" data-act="away-keep">Yes, keep the time</button>
-        <button class="chip" data-act="away-drop">No, take it off</button>
+        <button class="chip" data-act="away-keep">Yes, add it back</button>
+        <button class="chip" data-act="away-drop">No, leave it off</button>
       </div>
     </section>`;
 }
@@ -2287,7 +2287,7 @@ const seesOwnInput = window.matchMedia('(pointer: fine)').matches;
 // "at" is when you stopped, so the idle minutes come off the step too.
 function goIdle(at) {
   const a = state.meta.session?.active;
-  if (!idleMin() || !a || a.pausedAt || Date.now() < syncUntil || state.ask?.type === 'away' || state.ask?.type === 'forgot') return;
+  if (!idleMin() || !a || a.pausedAt || Date.now() < syncUntil || state.ask?.type === 'forgot') return;
   a.pausedAt = clamp(at, a.startedAt + (a.pausedMs || 0), Date.now());
   a.idlePaused = true;
   a.alerts = 0; a.okSec = 0;
@@ -2595,6 +2595,7 @@ function togglePause() {
   const a = state.meta.session?.active; if (!a) return;
   if (a.pausedAt) resumeStep(a);
   else a.pausedAt = Date.now();
+  if (state.ask?.type === 'away') state.ask = null; // the extension can get here while Paced is asking
   saveMeta(); render();
 }
 
@@ -3042,9 +3043,9 @@ document.addEventListener('click', e => {
     case 'timeup-forgot': state.ask = { type: 'forgot' }; renderFocus(); break;
     case 'timeup-back': state.ask = { type: 'timeup' }; renderFocus(); break;
     case 'forgot-go': correctTime(parseMin($('#forgot-min').value), true); break;
-    case 'away-keep': if (s && s.active) s.active.okSec = elapsedSec(s.active); state.ask = null; saveMeta(); render(); break;
+    case 'away-keep': if (s && s.active) { s.active.pausedAt = null; s.active.okSec = elapsedSec(s.active); } state.ask = null; saveMeta(); render(); break;
     case 'away-drop': {
-      if (s && s.active && state.ask) shortenStep(s.active, elapsedSec(s.active) - state.ask.sec);
+      if (s && s.active) { const left = elapsedSec(s.active); s.active.pausedAt = null; shortenStep(s.active, left); }
       state.ask = null; saveMeta(); render(); break;
     }
     case 'gap-wait': if (s && s.gap) { s.gap.until = Math.max(s.gap.until, Date.now()) + 5 * 60e3; s.gap.alerts = 0; saveMeta(); render(); } break;
@@ -3242,24 +3243,26 @@ document.addEventListener('keydown', e => {
 let lastMinute = -1, breakWasOver = null, lastSeen = null, seenSaved = 0;
 const BASE_TITLE = document.title, SEEN_KEY = 'paced:seen';
 
-// The timer keeps counting while Paced is closed or the device sleeps, so ask about that time on the way back.
+// Nothing runs while Paced is closed or the device sleeps, so the auto-stop can't either.
+// On the way back the step stops at the moment you left, and that time only counts if you say so.
 function checkAway(now = Date.now()) {
   if (lastSeen === null) { try { lastSeen = +localStorage.getItem(SEEN_KEY) || now; } catch (e) { lastSeen = now; } }
   const a = state.meta.session?.active, gone = now - Math.max(lastSeen, a ? a.startedAt : 0);
   lastSeen = now;
   if (now - seenSaved > 15e3) { seenSaved = now; try { localStorage.setItem(SEEN_KEY, now); } catch (e) {} }
   if (!a || a.pausedAt || gone < AWAY_MIN * 60e3) return;
+  a.pausedAt = clamp(now - gone, a.startedAt + (a.pausedMs || 0), now);
   state.ask = { type: 'away', sec: gone / 1000 };
   state.focusOpen = true;
-  render();
+  saveMeta(); render();
 }
 
 function tickStep(s) {
   const a = s.active, st = findStep(a.taskId, a.stepId), target = targetSec(a, st);
   if (target == null) return;
   let el = elapsedSec(a);
-  // Nobody answered: stop the timer so a forgotten step can't run for hours. Time you haven't been asked about yet doesn't count.
-  const stopAt = Math.max(target, a.okSec || 0) + AUTO_STOP_MIN * 60 + (state.ask?.type === 'away' ? state.ask.sec : 0);
+  // Nobody answered: stop the timer so a forgotten step can't run for hours.
+  const stopAt = Math.max(target, a.okSec || 0) + AUTO_STOP_MIN * 60;
   if (!a.pausedAt && el > stopAt) {
     a.pausedAt = Date.now() - (el - stopAt) * 1000;
     a.autoStopped = true;
