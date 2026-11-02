@@ -3614,6 +3614,11 @@ document.addEventListener('keydown', e => {
       $(`.tblock[data-item="${block.dataset.item}"] .tb-open`)?.focus();
     }
   }
+  // Whatever the menu for the selection can delete. What's running has no delete button there, so it's safe.
+  if ((e.key === 'Backspace' || e.key === 'Delete') && !state.layer && !state.focusOpen && !el.closest?.('input, textarea, select, [contenteditable]')) {
+    const del = $('.day-menu [data-act="sel-delete"]');
+    if (del) { e.preventDefault(); del.click(); return; }
+  }
   if (e.key === 'Escape') {
     if (drag) { endDrag(true); return; }
     if (daySel) { daySel = null; renderDay('quiet'); return; }
