@@ -448,10 +448,8 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .method-opt.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .method-card { margin-top: 24px; }
 .method-card h2 { font: 700 20px/1.2 var(--font-display); margin: 0; }
-.method-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.method-rows li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 14px; flex-wrap: wrap; }
-.method-rows li b { font-weight: 600; }
-.method-rows .best { color: var(--zone); font-weight: 700; }
+.method-opt .method-tally { margin-top: 4px; font-weight: 600; }
+.method-opt .best { color: var(--zone); font-weight: 700; }
 .seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .seg.two { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 10px; }
 .seg.four { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 10px; }
@@ -665,10 +663,10 @@ const switchTarget = currentId => nextPlanned(currentId)?.task || activeTasks().
 
 /* Ways of working you can try. "work" is minutes of work before a break (or, for task rotation, a switch). */
 const METHODS = [
-  { id: 'paced', name: 'Paced breaks', short: 'Breaks when your speed drops', work: null, brk: null },
-  { id: 'pomodoro', name: 'Pomodoro', short: '25 min of work, then a 5-minute break (15 after every fourth)', work: 25, brk: 5 },
+  { id: 'paced', name: 'Break when you slow down', short: 'No set times. Paced tells you when your speed drops', work: null, brk: null },
+  { id: 'pomodoro', name: 'Pomodoro', short: '25 min of work, then a 5-minute break. Every fourth break is 15 minutes', work: 25, brk: 5 },
   { id: 'long', name: 'Long focus', short: '50 min of work, then a 10-minute break', work: 50, brk: 10 },
-  { id: 'rotate', name: 'Task rotation', short: 'Switch to another task every 25 min instead of taking a break', work: 25, brk: 5 }
+  { id: 'rotate', name: 'Switch tasks', short: 'Every 25 min, change to another task instead of taking a break', work: 25, brk: 5 }
 ];
 const methodById = id => METHODS.find(x => x.id === id) || METHODS[0];
 const methodOf = s => methodById(s && s.method);
@@ -1803,18 +1801,21 @@ function taskHTML(t) {
   </li>`;
 }
 
-// "What works for you": compares your speed with each way of working once there's enough to go on.
+// Finds out which way of working gets you through steps fastest, once there's enough to go on. Picking one here starts using it.
+const vsGuess = speed => speed === 100 ? 'as fast as you guessed' : `${Math.abs(speed - 100)}% ${speed > 100 ? 'faster' : 'slower'} than you guessed`;
 function methodCardHTML() {
   const stats = methodStats(), ready = stats.filter(x => x.sessions >= 3 && x.steps >= 3);
   const best = ready.length >= 2 ? ready.reduce((a, b) => (b.speed > a.speed ? b : a)) : null;
   const current = methodById(state.meta.method);
   const intro = best
-    ? `<p class="why"><b>You work fastest with ${esc(best.name)}.</b> You get through steps at ${best.speed}% of the speed you planned, compared with ${ready.filter(x => x !== best).map(x => `${x.speed}% with ${esc(x.name)}`).join(' and ')}.</p>`
-    : '<p class="help" style="margin:0">Try a few ways of working and Paced will compare how fast you go with each. Change the method from the working screen. After 3 sessions with at least two methods, you’ll see which suits you.</p>';
-  const rows = stats.map(x => `<li><span><b>${esc(x.name)}</b>${x.id === current.id ? ' <span class="muted">(using now)</span>' : ''}</span>
-    <span class="${best && x.id === best.id ? 'best' : 'muted'}">${x.sessions >= 3 && x.speed != null ? `${x.speed}% speed · ${x.sessions} sessions` : `${Math.min(x.sessions, 3)} of 3 sessions`}</span></li>`).join('');
-  return `<section class="panel method-card"><div class="eyebrow">What works for you</div>${intro}<ul class="method-rows">${rows}</ul>
-    <p class="help" style="margin:0">100% means steps take exactly as long as you guessed. Higher is faster.</p></section>`;
+    ? `<p class="why"><b>${esc(best.name)} works best for you.</b> With it you finish ${vsGuess(best.speed)}.</p>`
+    : '<p class="help">Pick one and use it 3 times, then try another. Paced will show you which one got you through your tasks fastest. Working until a break, or until you stop, counts as one time.</p>';
+  const tally = x => x.sessions >= 3 && x.speed != null ? `You finish ${vsGuess(x.speed)}` : x.sessions ? `Used ${x.sessions} of 3 times` : 'Not tried yet';
+  const opts = stats.map(x => `<button class="method-opt${x.id === current.id ? ' on' : ''}" data-act="method-pick" data-v="${x.id}" aria-pressed="${x.id === current.id}">
+      <b>${esc(x.name)}</b><span>${esc(x.short)}</span>
+      <span class="method-tally${best && x.id === best.id ? ' best' : ''}">${tally(x)}${x.id === current.id ? ' · Using this now' : ''}</span>
+    </button>`).join('');
+  return `<section class="panel method-card"><div class="eyebrow">Find your best way to work</div>${intro}<div class="methods">${opts}</div></section>`;
 }
 
 function archiveHTML() {
@@ -2285,7 +2286,7 @@ function methodPickHTML(s) {
     <h2>Pick a method</h2>
     <p>Try each one for a few sessions. Paced compares how fast you work with each, so you can see what suits you.</p>
     <div class="methods">${METHODS.map(x => `<button class="method-opt${x.id === cur ? ' on' : ''}" data-act="method-pick" data-v="${x.id}" aria-pressed="${x.id === cur}"><b>${esc(x.name)}</b><span>${esc(x.short)}</span></button>`).join('')}</div>
-    <div class="row"><button class="btn ghost" data-act="method-cancel">Keep ${esc(methodOf(s).name)}</button></div>
+    <div class="row"><button class="btn ghost" data-act="method-cancel">Keep the one I’m using</button></div>
   </section>`;
 }
 
@@ -2324,7 +2325,7 @@ function planLine(el, target, paused) {
   return `Planned: ${fmtMin(target / 60)}${paused ? '' : ` · done by ${fmtTime(Date.now() + (target - el) * 1000)}`}`;
 }
 
-// What to suggest once a break is due. With Paced breaks: a normal break, or, when a deadline is close, switching
+// What to suggest once a break is due. When Paced picks the moment: a normal break, or, when a deadline is close, switching
 // to the urgent task (or a short break if you're already on it). With a timed method: its break or switch.
 function breakPlan(as, s, ignoreSnooze) {
   if (!ignoreSnooze && Date.now() < (s.snoozeUntil || 0)) return null;
@@ -2355,11 +2356,11 @@ function statusHTML(as, s) {
   } else if (method.work && !bp) {
     const left = Math.max(1, Math.ceil(method.work - sinceMark(as, s)));
     kind = as.kind === 'learning' ? 'learning' : 'go'; title = 'Keep going';
-    why = `${method.name}: ${method.id === 'rotate' ? 'switch tasks' : 'break'} in ${fmtMin(left)}.${as.from === 'pace' ? ` You’re at ${as.eff}% of your starting speed.` : ''}`;
+    why = `${method.id === 'rotate' ? 'Switch tasks' : `${method.name}: break`} in ${fmtMin(left)}.${as.from === 'pace' ? ` You’re at ${as.eff}% of your starting speed.` : ''}`;
   }
   if (bp && bp.type === 'switch') {
     kind = 'switch'; title = 'Switch tasks for a bit';
-    if (bp.rotate) why = `You’ve done ${fmtMin(method.work)} on this. Task rotation says switch to “${bp.other.title}” now, then come back.`;
+    if (bp.rotate) why = `You’ve done ${fmtMin(method.work)} on this. Time to switch to “${bp.other.title}”, then come back.`;
     else why += ` ${bp.tight.title} ${dueWords(bp.tight)}, so instead of a full break, switch over to it for a change of pace.`;
     buttons = `<button class="btn primary" data-act="switch-task" data-id="${bp.other.id}">${ICON.swap}Switch to ${esc(bp.other.title)}</button>
       <button class="btn ghost" data-act="take-break" data-min="5" data-force="1">5-minute break instead</button>`;
@@ -2370,7 +2371,7 @@ function statusHTML(as, s) {
     const min = bp.min || as.breakMin;
     kind = 'now';
     if (bp.planned) { title = 'Break time'; why = `You planned a ${min}-minute break for now.`; }
-    else if (method.work) { title = 'Break time'; why = `You’ve done ${fmtMin(method.work)} of focused work. ${method.name} says take a ${min}-minute break now.`; }
+    else if (method.work) { title = 'Break time'; why = `You’ve done ${fmtMin(method.work)} of focused work. Time for a ${min}-minute break.`; }
     else why += ' A short rest will help you get back up to speed.';
     buttons = `<button class="btn primary" data-act="take-break" data-min="${min}" data-force="1">${ICON.cup}Start a ${min}-minute break</button>`;
   }
@@ -2387,7 +2388,7 @@ function statusHTML(as, s) {
     <p class="worked">Method: <b>${esc(method.name)}</b> · <button class="link small" data-act="method-open">Change</button></p>
     <details class="how"${state.howOpen ? ' open' : ''}>
       <summary>How does Paced decide?</summary>
-      <p>Paced compares how long each step really takes with the minutes you planned. Your first two steps after a break set your starting speed. With Paced breaks, if you slow down below 90% of that speed, or work for 90 minutes straight, Paced suggests a break of about a fifth of the time you’ve worked (5 to 20 minutes). When something is due today or tomorrow, it suggests switching to that task instead, since a change of task can refresh you without losing time. If you’re already on it, it suggests a short break. The other methods use fixed times instead.</p>
+      <p>Paced compares how long each step really takes with the minutes you planned. Your first two steps after a break set your starting speed. With “Break when you slow down”, if you drop below 90% of that speed, or work for 90 minutes straight, Paced suggests a break of about a fifth of the time you’ve worked (5 to 20 minutes). When something is due today or tomorrow, it suggests switching to that task instead, since a change of task can refresh you without losing time. If you’re already on it, it suggests a short break. The other methods use fixed times instead.</p>
     </details>
   </section>`;
 }
@@ -2401,7 +2402,7 @@ function breakArea(as, s) {
     return `<section class="ask-card warn">
       <div class="eyebrow">Are you sure?</div>
       <h2>You don’t need a break yet</h2>
-      <p>${esc(facts.join(' and '))}. Stopping now usually costs more focus than it gives back${tight ? `, and ${esc(tight.title)} ${dueWords(tight)}` : ''}. ${methodOf(s).work ? `Your ${esc(methodOf(s).name)} break comes in ${fmtMin(Math.max(1, Math.ceil(methodOf(s).work - sinceMark(as, s))))}.` : s.active ? 'Try finishing this step first.' : 'Try one more step first.'}</p>
+      <p>${esc(facts.join(' and '))}. Stopping now usually costs more focus than it gives back${tight ? `, and ${esc(tight.title)} ${dueWords(tight)}` : ''}. ${methodOf(s).work ? `Your next break comes in ${fmtMin(Math.max(1, Math.ceil(methodOf(s).work - sinceMark(as, s))))}.` : s.active ? 'Try finishing this step first.' : 'Try one more step first.'}</p>
       <div class="row"><button class="btn primary big" data-act="break-no">Keep going</button></div>
       <button class="link small" data-act="break-yes" data-min="${state.ask.min}">Take the break anyway</button>
     </section>`;
@@ -3734,8 +3735,9 @@ document.addEventListener('click', e => {
       const x = methodById(v);
       state.meta.method = x.id;
       if (s) { s.method = x.id; s.markAt = assess(state.meta).workMin; s.snoozeUntil = 0; }
-      state.ask = null; saveMeta(); renderFocus();
-      toast(`Using ${x.name}. ${x.short}.`);
+      if (state.ask?.type === 'method') state.ask = null;
+      saveMeta(); render();
+      toast(`Switched to ${x.name}.`);
       break;
     }
     case 'open-look': state.layer = { type: 'look' }; renderLayer(true); break;

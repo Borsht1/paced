@@ -17,7 +17,7 @@ A to-do list that helps you work at a steady pace and balance work with free tim
 - When you stop using your computer, the step pauses from the moment you stopped and carries on when you're back. It's on by default, and you can change it in Settings. It needs the browser extension to see activity in other apps. Without the extension, Paced sends a "Still working?" notification every 15 minutes while you're in another app, and pauses if you don't click it within 3 minutes.
 - When you stop, Paced shows a summary of the session: what you worked on, your breaks and pauses, and how long each took, with room for a note. Each session is saved, breaks included.
 - History shows your past sessions and when you work best: by time of day, by day of the week, and by how long it's been since a break.
-- Try different ways of working (Paced breaks, Pomodoro, Long focus, Task rotation) and see which suits you.
+- Try different ways of working (Break when you slow down, Pomodoro, Long focus, Switch tasks) and see which suits you.
 
 ## Running it
 
