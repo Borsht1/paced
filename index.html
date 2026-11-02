@@ -223,6 +223,34 @@ body.dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; 
 body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbing; }
 .hours-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; flex-wrap: wrap; }
 .hours-row .text-input { width: auto; }
+/* On the left, time runs down the panel, as a column beside your list */
+.day.left { left: 12px; top: 12px; bottom: 12px; transform: none; width: var(--rail-w, 300px); display: flex; flex-direction: column; }
+body.has-mini .day.left { bottom: 84px; }
+body.day-left .app { margin-left: max(calc(var(--rail-w, 300px) + 36px), calc(50vw - 300px)); }
+.day.left .day-grip { top: 50%; left: auto; right: 0; width: 12px; height: 72px; margin: -36px 0 0; cursor: ew-resize; }
+.day.left .day-grip::after { top: 18px; bottom: 18px; left: 4px; right: auto; width: 4px; height: auto; }
+.day.left .day-tools { order: 3; flex-basis: 100%; flex-wrap: wrap; gap: 8px 12px; }
+.day.left .day-toggle { order: 2; }
+.day.left .rail-scroll { flex: 1; min-height: 0; height: auto; overflow: hidden auto; overscroll-behavior: contain; touch-action: pan-y; }
+.day.left .rail { height: auto; }
+.day.left .tick { left: 0; right: 0; bottom: auto; border-left: none; border-top: 1px solid var(--line); }
+.day.left .tick span { left: 0; top: 3px; }
+.day.left .win { top: auto; left: 46px; right: 0; bottom: auto; }
+.day.left .win-edge { left: 0; right: 0; top: auto; bottom: auto; width: auto; height: 14px; cursor: ns-resize; }
+.day.left .win-edge.opens { top: -7px; }
+.day.left .win-edge.closes { bottom: -7px; }
+.day.left .win-edge::after { top: 5px; left: 50%; width: 34px; height: 4px; margin: 0 0 0 -17px; }
+.day.left .spent { top: 0; left: 46px; right: 0; bottom: auto; }
+.day.left .now-line { left: 0; right: 0; bottom: auto; border-left: none; border-top: 2px solid var(--stop); }
+.day.left .now-line span { left: 0; top: -9px; border-radius: 3px; }
+.day.left .rail-hint { left: 46px; right: 0; bottom: auto; }
+.day.left .tblock { left: 52px; right: 6px; bottom: auto; }
+.day.left .tblock.cont { border-radius: 1px 1px 5px 5px; }
+.day.left .tblock.cut { border-radius: 5px 5px 1px 1px; }
+.day.left .tb-edge { top: auto; left: 0; bottom: 0; width: auto; height: min(10px, 40%); cursor: ns-resize; }
+.day.left .tb-edge::after { top: auto; right: 50%; bottom: 2px; width: 16px; height: 3px; margin: 0 -8px 0 0; }
+.day.left .marquee { left: 46px; right: 0; bottom: auto; border: 0 solid var(--accent); border-width: 1px 0; }
+.day.left .day-menu { left: calc(100% + 8px); bottom: auto; max-height: calc(100vh - 40px); }
 @media (max-width: 760px) {
   .day-tools { order: 3; flex-basis: 100%; justify-content: space-between; gap: 8px; }
   .day-toggle { order: 2; }
@@ -1287,11 +1315,22 @@ try { dayOpen = localStorage.getItem(DAY_KEY) !== 'shut'; } catch (e) {}
 const RAIL_KEY = 'paced:rail', RAIL_MIN = 60, RAIL_MAX = 400, RAIL_STEP = 20; // pixels
 let railH = RAIL_MIN; // like open or closed, how tall it is suits the screen, so it's for each device too
 try { railH = clamp(+localStorage.getItem(RAIL_KEY) || RAIL_MIN, RAIL_MIN, RAIL_MAX); } catch (e) {}
-function setRailH(h) {
-  railH = clamp(h, RAIL_MIN, Math.max(RAIL_MIN, Math.min(RAIL_MAX, innerHeight - 220)));
+const DOCK_KEY = 'paced:dock', DOCK_MIN_W = 960, RAIL_W_KEY = 'paced:railw', RAIL_W_MIN = 240, RAIL_W_MAX = 480, RAIL_W_STEP = 20, RAIL_LEFT_CHROME = 170; // pixels
+let dayDock = 'bottom', railW = 300; // where the timeline sits, and how wide it is there: for each device too, since it depends on the screen
+try { dayDock = localStorage.getItem(DOCK_KEY) === 'left' ? 'left' : 'bottom'; railW = clamp(+localStorage.getItem(RAIL_W_KEY) || railW, RAIL_W_MIN, RAIL_W_MAX); } catch (e) {}
+const dayLeft = () => dayDock === 'left' && innerWidth >= DOCK_MIN_W; // a small window has no room for a column beside your list
+function setDayDock(side) {
+  dayDock = side;
+  daySel = null;
+  try { localStorage.setItem(DOCK_KEY, side); } catch (e) {}
   renderDay('quiet');
 }
-const saveRailH = () => { try { localStorage.setItem(RAIL_KEY, railH); } catch (e) {} };
+function setRailSize(n) {
+  if (dayLeft()) railW = clamp(n, RAIL_W_MIN, Math.max(RAIL_W_MIN, Math.min(RAIL_W_MAX, innerWidth - 620)));
+  else railH = clamp(n, RAIL_MIN, Math.max(RAIL_MIN, Math.min(RAIL_MAX, innerHeight - 220)));
+  renderDay('quiet');
+}
+const saveRailSize = () => { try { localStorage.setItem(RAIL_KEY, railH); localStorage.setItem(RAIL_W_KEY, railW); } catch (e) {} };
 const RAIL_ZOOM = { min: 1, max: 3 }, RAIL_PEEK = 32, RAIL_EDGE = 40; // pixels: per minute, of the next hour left showing, and where a drag starts scrolling
 let railAt = null, railPx = 0; // the time at the left edge once you've scrolled; until then it follows your hours
 let dayFilter = 'task'; // what dragging across the timeline selects: 'task' or 'brk'
@@ -1307,28 +1346,28 @@ function setDayOpen(open) {
 function dayView() {
   const p = drag?.preview || dayPlan(), now = minuteNow(), lay = layoutDay(p, now), past = pastWork(now);
   const points = [now, ...p.windows.flatMap(w => [w.s, w.e])];
-  const laneW = Math.min(1040, innerWidth - 24) - 24, wide = laneW >= 600;
+  const down = dayLeft(), laneW = down ? innerHeight - RAIL_LEFT_CHROME : Math.min(1040, innerWidth - 24) - 24, wide = down || laneW >= 600;
   // The whole day is always there to scroll through. Your hours set the zoom and where it opens, so what's on it never changes the scale.
   let home = Math.max(0, Math.floor((Math.min(...points) - (wide ? 20 : 0)) / 60) * 60), last = Math.ceil((Math.max(...points) + (wide ? 20 : 0)) / 60) * 60;
   if (!wide) home = Math.max(home, Math.floor((now - 60) / 60) * 60); // on a phone, what's over doesn't get to squeeze what's left
   let end = Math.max(1440, ...lay.blocks.map(b => Math.ceil(b.end / 60) * 60)), pxPerMin = clamp((laneW - RAIL_PEEK) / (last - home), RAIL_ZOOM.min, RAIL_ZOOM.max);
   if (drag) ({ home, end, pxPerMin } = drag.frozen); // the timeline holds still under your finger
-  return (railView = { p, now, lay, past, start: 0, end, home, pxPerMin });
+  return (railView = { p, now, lay, past, start: 0, end, home, pxPerMin, down, scroll: down ? 'scrollTop' : 'scrollLeft' });
 }
 
 // Scrolling replaces nothing on screen, so a redraw has to put the timeline back where it was.
 function placeRail(v) {
   const s = $('.rail-scroll');
-  s.scrollLeft = ((railAt ?? v.home) - v.start) * v.pxPerMin;
-  railPx = s.scrollLeft;
+  s[v.scroll] = ((railAt ?? v.home) - v.start) * v.pxPerMin;
+  railPx = s[v.scroll];
 }
 function railScrolled(s) {
-  if (!railView || Math.abs(s.scrollLeft - railPx) < 1) return; // that was us putting it back
-  railPx = s.scrollLeft;
+  if (!railView || Math.abs(s[railView.scroll] - railPx) < 1) return; // that was us putting it back
+  railPx = s[railView.scroll];
   railAt = railView.start + railPx / railView.pxPerMin;
   $('#day-now').hidden = false;
   const menu = $('.day-menu');
-  if (menu) menu.style.left = menuLeft(railView, railView.menuAt);
+  if (menu) menu.style.cssText = menuPlace(railView, railView.menuAt);
 }
 
 // What you've really done today, from the session records.
@@ -1348,8 +1387,14 @@ function pastWork(now) {
 }
 
 const atPct = (v, min) => ((min - v.start) / (v.end - v.start) * 100).toFixed(2);
-const spanStyle = (v, a, b) => `left:${atPct(v, a)}%;width:calc(${((b - a) / (v.end - v.start) * 100).toFixed(2)}% - 2px)`;
-const menuLeft = (v, at) => `clamp(0px, calc(${Math.round((at - (railAt ?? v.home)) * v.pxPerMin)}px - 138px), calc(100% - 300px))`;
+const atStyle = (v, min) => `${v.down ? 'top' : 'left'}:${atPct(v, min)}%`;
+const lenStyle = (v, a, b, gap = 2) => `${v.down ? 'height' : 'width'}:calc(${((b - a) / (v.end - v.start) * 100).toFixed(2)}% - ${gap}px)`;
+const spanStyle = (v, a, b, gap) => `${atStyle(v, a)};${lenStyle(v, a, b, gap)}`;
+const nameFits = (v, px) => px >= (v.down ? 15 : 24), whenFits = (v, px) => px >= (v.down ? 32 : 92);
+const menuPlace = (v, at) => {
+  const px = Math.round((at - (railAt ?? v.home)) * v.pxPerMin);
+  return v.down ? `top:clamp(8px, ${px}px, calc(100% - 340px))` : `left:clamp(0px, calc(${px}px - 138px), calc(100% - 300px))`;
+};
 const rangeWords = (s, e) => `${clockAt(s)} to ${clockAt(e)}`;
 
 // Everything of the chosen kind that a stretch of time touches. What's happening now can't be selected.
@@ -1368,7 +1413,7 @@ function pieceHTML(b, piece, i, v) {
   const t = b.task, px = (piece.e - piece.s) * v.pxPerMin, item = b.item;
   const cls = [item.live && 'live', piece.late && 'late', b.guess && !item.live && 'guess', i && 'cont', i < b.pieces.length - 1 && 'cut', ...blockState(item, 'task', v.lay)].filter(Boolean).join(' ');
   const when = i ? 'continued' : `${clockAt(b.start)} · ${fmtMin(b.min)}`;
-  const words = px >= 24 ? `<b>${esc(t.title)}</b>${px >= 92 ? `<span>${esc(when)}</span>` : ''}` : '';
+  const words = nameFits(v, px) ? `<b>${esc(t.title)}</b>${whenFits(v, px) ? `<span>${esc(when)}</span>` : ''}` : '';
   return `<div class="tblock ${cls}"${item.front ? '' : ` data-drag="item" data-item="${item.id}"`} style="${spanStyle(v, piece.s, piece.e)}" title="${esc(t.title)}, ${esc(when)}">
     <button class="tb-open" data-act="day-pick" data-item="${item.id}" aria-label="${esc(t.title)}, ${rangeWords(b.start, b.end)}${piece.late ? ', past the end of your day' : ''}">${words}</button>
     ${item.front || i < b.pieces.length - 1 ? '' : `<button class="tb-edge" data-grow="${item.id}" title="Drag to change how long this takes" aria-label="Length of ${esc(t.title)}, ${fmtMin(b.min)}. Use the arrow keys to change it."></button>`}
@@ -1378,7 +1423,7 @@ function pieceHTML(b, piece, i, v) {
 function breakBlockHTML(b, v) {
   const min = Math.round(b.e - b.s), px = (b.e - b.s) * v.pxPerMin, item = b.item;
   const cls = [b.live && 'live', ...blockState(item, 'brk', v.lay)].filter(Boolean).join(' ');
-  const words = px >= 24 ? `<b>Break</b>${px >= 92 ? `<span>${clockAt(b.s)} · ${fmtMin(min)}</span>` : ''}` : '';
+  const words = nameFits(v, px) ? `<b>Break</b>${whenFits(v, px) ? `<span>${clockAt(b.s)} · ${fmtMin(min)}</span>` : ''}` : '';
   const open = item ? `data-act="day-pick" data-item="${item.id}"` : 'data-act="focus-open"';
   return `<div class="tblock brk ${cls}"${item ? ` data-drag="item" data-item="${item.id}"` : ''} style="${spanStyle(v, b.s, b.e)}" title="Break, ${clockAt(b.s)}, ${fmtMin(min)}">
     <button class="tb-open" ${open} aria-label="Break, ${rangeWords(b.s, b.e)}">${words}</button>
@@ -1390,8 +1435,8 @@ const dayWords = lay => lay.freeMin < 1 ? 'No free time left today' : `${fmtMin(
 
 function dayHTML() {
   const v = dayView(), { p, now, lay } = v, ticks = [], box = marquee();
-  for (let h = Math.ceil(v.start / 60); h * 60 < v.end; h++) ticks.push(`<div class="tick" style="left:${atPct(v, h * 60)}%">${Math.abs(h * 60 - now) * v.pxPerMin < 44 ? '' : `<span>${hourName(h % 24)}</span>`}</div>`);
-  const wins = p.windows.map((w, i) => `<div class="win" style="left:${atPct(v, w.s)}%;width:${((w.e - w.s) / (v.end - v.start) * 100).toFixed(2)}%">
+  for (let h = Math.ceil(v.start / 60); h * 60 < v.end; h++) ticks.push(`<div class="tick" style="${atStyle(v, h * 60)}">${Math.abs(h * 60 - now) * v.pxPerMin < (v.down ? 14 : 44) ? '' : `<span>${hourName(h % 24)}</span>`}</div>`);
+  const wins = p.windows.map((w, i) => `<div class="win" style="${spanStyle(v, w.s, w.e, 0)}">
     <button class="win-edge opens" data-edge="s" data-i="${i}" title="Drag to change when you start" aria-label="Start time, ${clockAt(w.s)}. Use the arrow keys to change it."></button>
     <button class="win-edge closes" data-edge="e" data-i="${i}" title="Drag to change when you stop" aria-label="End time, ${clockAt(w.e)}. Use the arrow keys to change it."></button>
   </div>`).join('');
@@ -1400,7 +1445,7 @@ function dayHTML() {
   const gaps = lay.lateMin >= 1 && lay.planMin <= lay.freeMin && lay.blocks.some(b => b.item.at != null);
   const fresh = !p.items.length && sameHours(p.windows, usualHours());
   const filterBtn = (id, label) => `<button class="${dayFilter === id ? 'on' : ''}" data-act="day-filter" data-v="${id}" aria-pressed="${dayFilter === id}" title="Drag across the timeline to select ${label.toLowerCase()}">${label}</button>`;
-  return `<button class="day-grip" data-size="1" title="Drag to make the timeline taller or shorter" aria-label="Timeline height. Use the arrow keys to change it."></button>
+  return `<button class="day-grip" data-size="1" title="Drag to make the timeline ${v.down ? 'wider or narrower' : 'taller or shorter'}" aria-label="Timeline ${v.down ? 'width' : 'height'}. Use the arrow keys to change it."></button>
     <div class="day-head">
       <h2>Today</h2>
       <p class="day-sum">${dayWords(lay)}${lay.lateMin >= 1 ? ` · <b>${fmtMin(lay.lateMin)} over</b>` : ''}</p>
@@ -1414,15 +1459,15 @@ function dayHTML() {
       </div>
       <button class="icon-btn day-toggle" data-act="day-toggle" title="Close the timeline" aria-label="Close the timeline">${ICON.minus}</button>
     </div>
-    <div class="rail-scroll"><div class="rail${dayFilter === 'brk' ? ' for-breaks' : ''}" id="rail" style="width:${Math.round((v.end - v.start) * v.pxPerMin)}px">
+    <div class="rail-scroll"><div class="rail${dayFilter === 'brk' ? ' for-breaks' : ''}" id="rail" style="${v.down ? 'height' : 'width'}:${Math.round((v.end - v.start) * v.pxPerMin)}px">
       ${ticks.join('')}${wins}
-      <div class="spent" style="width:${atPct(v, now)}%"></div>
-      ${v.past.map(b => `<div class="tblock ago" style="${spanStyle(v, b.s, b.e)}" title="${esc(b.title)}, done"><div class="tb-open">${(b.e - b.s) * v.pxPerMin >= 24 ? `<b>${esc(b.title)}</b>` : ''}</div></div>`).join('')}
+      <div class="spent" style="${v.down ? 'height' : 'width'}:${atPct(v, now)}%"></div>
+      ${v.past.map(b => `<div class="tblock ago" style="${spanStyle(v, b.s, b.e)}" title="${esc(b.title)}, done"><div class="tb-open">${nameFits(v, (b.e - b.s) * v.pxPerMin) ? `<b>${esc(b.title)}</b>` : ''}</div></div>`).join('')}
       ${lay.blocks.flatMap(b => b.pieces.map((x, i) => pieceHTML(b, x, i, v))).join('')}
       ${lay.stops.map(b => breakBlockHTML(b, v)).join('')}
       ${lay.blocks.length ? '' : `<div class="rail-hint" style="${spanStyle(v, hintFrom, hintTo)}">Drag a task here</div>`}
       ${box ? `<div class="marquee" style="${spanStyle(v, box.s, box.e)}"></div>` : ''}
-      <div class="now-line" style="left:${atPct(v, now)}%"><span>${clockAt(now).replace(/\s?[AP]M$/i, '')}</span></div>
+      <div class="now-line" style="${atStyle(v, now)}"><span>${clockAt(now).replace(/\s?[AP]M$/i, '')}</span></div>
     </div></div>
     ${extraPct() ? `<p class="day-foot">Sized for your real speed, about ${extraPct()}% over your guesses</p>` : ''}
     ${dayMenuHTML(v)}`;
@@ -1494,7 +1539,7 @@ function dayMenuHTML(v) {
   if (!body) { daySel = null; return ''; }
   if (range && ids.length && range.e - range.s <= STRETCH_MAX_MIN) body += `<div class="dm-label">The stretch you selected, ${rangeWords(range.s, range.e)}</div>${rangeRowHTML(range, p)}`;
   v.menuAt = at;
-  return `<section class="day-menu" role="dialog" aria-label="Change what you selected" style="left:${menuLeft(v, at)}">${body}</section>`;
+  return `<section class="day-menu" role="dialog" aria-label="Change what you selected" style="${menuPlace(v, at)}">${body}</section>`;
 }
 
 /* ----- the colored row on each task: when the timeline says it'll be finished ----- */
@@ -1525,11 +1570,15 @@ function renderSlots(lay, quiet) {
 
 function renderDay(how) {
   const el = $('#day'), show = state.ready && Store.mode !== 'signin' && state.view === 'home' && !state.focusOpen && activeTasks().length > 0;
+  const left = show && dayOpen && dayLeft(), root = document.documentElement.style;
   document.body.classList.toggle('has-day', show);
+  document.body.classList.toggle('day-left', left);
   el.hidden = !show;
-  if (!show) { daySel = null; document.documentElement.style.setProperty('--day-lift', '0px'); return; }
+  if (!show) { daySel = null; root.setProperty('--day-lift', '0px'); return; }
   el.classList.toggle('shut', !dayOpen);
+  el.classList.toggle('left', left);
   el.style.setProperty('--rail-h', `${railH}px`);
+  root.setProperty('--rail-w', `${railW}px`);
   const scroller = $('.rail-scroll');
   if (scroller) railScrolled(scroller); // the browser may not have told us about the latest scroll yet
   if (dayOpen) { el.innerHTML = dayHTML(); placeRail(railView); }
@@ -1539,14 +1588,14 @@ function renderDay(how) {
   }
   renderSlots(dayOpen ? railView.lay : layoutDay(), how === 'quiet');
   // Whatever floats over the bottom of the window stays clear of the panel.
-  document.documentElement.style.setProperty('--day-lift', dayOpen ? `${el.offsetHeight + 8}px` : '0px');
+  root.setProperty('--day-lift', dayOpen && !left ? `${el.offsetHeight + 8}px` : '0px');
 }
 window.addEventListener('resize', () => { if (!drag) renderDay('quiet'); });
 document.addEventListener('scroll', e => { if (e.target.classList?.contains('rail-scroll')) railScrolled(e.target); }, true);
 // A mouse wheel only goes up and down, so over the timeline that moves it through the day.
 document.addEventListener('wheel', e => {
   const s = e.target.closest?.('.rail-scroll');
-  if (!s || e.ctrlKey || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+  if (!s || railView.down || e.ctrlKey || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
   e.preventDefault();
   s.scrollLeft += e.deltaY * (e.deltaMode === 1 ? 16 : 1);
 }, { passive: false });
@@ -1757,6 +1806,13 @@ function alertsHTML() {
     ${n === 'ask' ? '<button class="btn ghost" data-act="alert-notify">Turn on notifications</button>' : `<p class="help">${note}</p>`}`;
 }
 
+function dockHTML() {
+  const btn = (v, label) => `<button class="seg-btn${dayDock === v ? ' on' : ''}" data-act="day-dock" data-v="${v}" aria-pressed="${dayDock === v}">${label}</button>`;
+  return `<h3 class="label">Timeline position</h3>
+    <div class="seg two">${btn('bottom', 'Bottom')}${btn('left', 'Left')}</div>
+    <p class="help">On the left, time runs down a column beside your list. A small window or phone always shows it at the bottom. This is saved for this device.</p>`;
+}
+
 function idleHTML() {
   const cur = idleMin();
   const btn = (v, label) => `<button class="seg-btn${cur === v ? ' on' : ''}" data-act="idle-min" data-v="${v}" aria-pressed="${cur === v}">${label}</button>`;
@@ -1786,6 +1842,7 @@ function lookHTML(enter) {
     <h3 class="label">Color</h3>
     <div class="swatches">${Object.entries(COLORS).map(([id, c]) => `<button class="swatch${color === id ? ' on' : ''}" data-act="look-color" data-v="${id}" aria-pressed="${color === id}"><i style="background:${c.light[0]}">${color === id ? ICON.check : ''}</i>${c.name}</button>`).join('')}</div>
     ${alertsHTML()}
+    ${dockHTML()}
     ${idleHTML()}
     ${Account.fb ? `<h3 class="label">Account</h3>
     ${Account.user
@@ -3261,7 +3318,10 @@ function rangeHours(add) {
 const LONG_PRESS_MS = 280;
 let press = null, drag = null, skipClick = false;
 
-const railTime = x => { const r = $('#rail').getBoundingClientRect(); return railView.start + (x - r.left) / r.width * (railView.end - railView.start); };
+const railTime = (x, y) => {
+  const r = $('#rail').getBoundingClientRect(), along = railView.down ? (y - r.top) / r.height : (x - r.left) / r.width;
+  return railView.start + along * (railView.end - railView.start);
+};
 const ghostShow = (text, x, y) => {
   let g = $('#drag-ghost');
   if (!g) { g = document.createElement('div'); g.id = 'drag-ghost'; g.className = 'drag-ghost'; document.body.appendChild(g); }
@@ -3278,13 +3338,13 @@ function liftItem(src) {
   const t = item.taskId && state.tasks.get(item.taskId);
   return { type: 'plan', item, known: p.items.includes(item), preview: null, label: t ? `${t.title} · ${fmtMin(planRoom(item, t).min)}` : `Break · ${fmtMin(item.brk)}` };
 }
-function liftGrow(id, x) {
+function liftGrow(id, x, y) {
   const b = railView.lay.blocks.find(y => y.item.id === id);
-  return b && { type: 'grow', item: b.item, title: b.task.title, min: b.min, from: railTime(x), preview: null };
+  return b && { type: 'grow', item: b.item, title: b.task.title, min: b.min, from: railTime(x, y), preview: null };
 }
-function liftSize(y) { return { type: 'size', h: railH, from: y, preview: null }; }
+function liftSize(x, y) { const left = dayLeft(); return { type: 'size', size: left ? railW : railH, from: left ? x : y, preview: null }; }
 function liftEdge(i, side) { return { type: 'hours', list: clone(dayPlan().windows), i, side, preview: null }; }
-function liftSelect(x) { const at = railTime(x); return { type: 'select', from: at, to: at, preview: null }; }
+function liftSelect(x, y) { const at = railTime(x, y); return { type: 'select', from: at, to: at, preview: null }; }
 
 function lift(p, x, y) {
   press = null;
@@ -3292,7 +3352,7 @@ function lift(p, x, y) {
   daySel = null;
   if (!dayOpen) setDayOpen(true); // dragging a task means you're planning, so the timeline comes back
   const d = p.src.dataset;
-  const started = d.grow ? liftGrow(d.grow, p.x) : d.size ? liftSize(p.y) : d.edge ? liftEdge(+d.i, d.edge) : d.drag ? liftItem(p.src) : liftSelect(p.x);
+  const started = d.grow ? liftGrow(d.grow, p.x, p.y) : d.size ? liftSize(p.x, p.y) : d.edge ? liftEdge(+d.i, d.edge) : d.drag ? liftItem(p.src) : liftSelect(p.x, p.y);
   if (!started) return;
   const { home, end, pxPerMin } = railView;
   drag = { ...started, frozen: { start: railView.start, end, home, pxPerMin }, armed: !!p.src.closest('.rail-scroll'), x, y };
@@ -3308,11 +3368,13 @@ function lift(p, x, y) {
 function edgeScroll() {
   if (!drag) return;
   const s = $('.rail-scroll'), r = s?.getBoundingClientRect(), d = $('#day').getBoundingClientRect(), { x, y } = drag;
-  if (s && drag.type !== 'size' && (drag.type !== 'plan' || (y >= d.top - 24 && y <= d.bottom + 24))) {
-    const over = x < r.left + RAIL_EDGE ? x - r.left - RAIL_EDGE : x > r.right - RAIL_EDGE ? x - r.right + RAIL_EDGE : 0;
+  const down = railView.down, reached = down ? x >= d.left - 24 && x <= d.right + 24 : y >= d.top - 24 && y <= d.bottom + 24;
+  if (s && drag.type !== 'size' && (drag.type !== 'plan' || reached)) {
+    const [at, lo, hi] = down ? [y, r.top, r.bottom] : [x, r.left, r.right];
+    const over = at < lo + RAIL_EDGE ? at - lo - RAIL_EDGE : at > hi - RAIL_EDGE ? at - hi + RAIL_EDGE : 0;
     if (!over) drag.armed = true;
     else if (drag.armed) {
-      s.scrollLeft += Math.sign(over) * Math.ceil(Math.min(Math.abs(over), RAIL_EDGE) / 8);
+      s[railView.scroll] += Math.sign(over) * Math.ceil(Math.min(Math.abs(over), RAIL_EDGE) / 8);
       railScrolled(s);
       dragTo(x, y);
     }
@@ -3324,15 +3386,15 @@ function dragTo(x, y) {
   drag.x = x; drag.y = y;
   if (!$('#rail')) return;
   if (drag.type === 'select') {
-    drag.to = clamp(railTime(x), drag.frozen.start, drag.frozen.end);
+    drag.to = clamp(railTime(x, y), drag.frozen.start, drag.frozen.end);
     const s = Math.min(drag.from, drag.to), e = Math.max(drag.from, drag.to), n = idsIn(railView.lay, s, e).length;
     ghostShow(n ? `${n} ${dayFilter === 'brk' ? (n === 1 ? 'break' : 'breaks') : (n === 1 ? 'task' : 'tasks')}` : rangeWords(snapTo(s, HOURS_SNAP), snapTo(e, HOURS_SNAP)), x, y);
     renderDay();
     return;
   }
-  if (drag.type === 'size') { setRailH(drag.h + drag.from - y); return; }
+  if (drag.type === 'size') { setRailSize(drag.size + (dayLeft() ? x - drag.from : drag.from - y)); return; }
   if (drag.type === 'grow') {
-    const min = Math.max(PLAN_SNAP, snapTo(drag.min + railTime(x) - drag.from, PLAN_SNAP));
+    const min = Math.max(PLAN_SNAP, snapTo(drag.min + railTime(x, y) - drag.from, PLAN_SNAP));
     ghostShow(`${drag.title} · ${fmtMin(min)}`, x, y);
     if (min === drag.key) return;
     drag.key = min;
@@ -3343,7 +3405,7 @@ function dragTo(x, y) {
   if (drag.type === 'hours') {
     const { list, i, side } = drag;
     const lo = side === 's' ? (list[i - 1]?.e ?? 0) : list[i].s, hi = side === 's' ? list[i].e : (list[i + 1]?.s ?? 1440);
-    const at = clamp(snapTo(railTime(x), HOURS_SNAP), lo, hi);
+    const at = clamp(snapTo(railTime(x, y), HOURS_SNAP), lo, hi);
     ghostShow(`${side === 's' ? 'Start' : 'Stop'} at ${clockAt(at)}`, x, y);
     if (at === drag.key) return;
     drag.key = at;
@@ -3356,7 +3418,7 @@ function dragTo(x, y) {
   const r = $('#day').getBoundingClientRect(), near = 24;
   const inside = x >= r.left - near && x <= r.right + near && y >= r.top - near && y <= r.bottom + near;
   ghostShow(!inside && drag.known ? 'Take off today' : drag.label, x, y);
-  const key = inside ? snapTo(clamp(railTime(x), drag.frozen.start, drag.frozen.end), PLAN_SNAP) : 'out';
+  const key = inside ? snapTo(clamp(railTime(x, y), drag.frozen.start, drag.frozen.end), PLAN_SNAP) : 'out';
   if (key === drag.key) return;
   drag.key = key;
   const p = dayPlan();
@@ -3374,7 +3436,7 @@ function endDrag(cancel) {
   document.body.classList.remove('dragging');
   skipClick = true;
   setTimeout(() => { skipClick = false; }, 60);
-  if (d.type === 'size') { if (cancel) railH = d.h; else saveRailH(); }
+  if (d.type === 'size') { if (!cancel) saveRailSize(); else if (dayLeft()) railW = d.size; else railH = d.size; }
   if (box && !cancel) {
     const s = snapTo(box.s, HOURS_SNAP), e = snapTo(box.e, HOURS_SNAP);
     daySel = ids.length || e > s ? { kind: dayFilter, ids, range: e > s ? { s, e } : null } : null;
@@ -3579,6 +3641,7 @@ document.addEventListener('click', e => {
       break;
     }
     case 'alert-sound': state.meta.sound = v === 'on'; saveMeta(); renderLayer(); if (state.meta.sound) Alert.chime(); break;
+    case 'day-dock': setDayDock(v); renderLayer(); break;
     case 'idle-min': state.meta.idleMin = +v; saveMeta(); renderLayer(); break;
     case 'check-min': state.meta.checkMin = +v; saveMeta(); renderLayer(); break;
     case 'alert-notify': Promise.resolve(Alert.askPermission()).then(() => renderLayer()); break;
@@ -3694,22 +3757,25 @@ document.addEventListener('keydown', e => {
   }
   const calStep = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
   if (calStep && el.matches?.('.cal-day')) { e.preventDefault(); moveDueFocus(addDays(el.dataset.v, calStep)); return; }
-  if (el.dataset?.size && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+  const left = dayLeft(), bigger = left ? 'ArrowRight' : 'ArrowUp', smaller = left ? 'ArrowLeft' : 'ArrowDown';
+  if (el.dataset?.size && (e.key === bigger || e.key === smaller)) {
     e.preventDefault();
-    setRailH(railH + (e.key === 'ArrowUp' ? RAIL_STEP : -RAIL_STEP));
-    saveRailH();
+    setRailSize(left ? railW + (e.key === bigger ? RAIL_W_STEP : -RAIL_W_STEP) : railH + (e.key === bigger ? RAIL_STEP : -RAIL_STEP));
+    saveRailSize();
     $('.day-grip')?.focus();
     return;
   }
-  if (el.dataset?.grow && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+  // Earlier and later follow the way time runs on the timeline.
+  const earlier = left ? 'ArrowUp' : 'ArrowLeft', later = left ? 'ArrowDown' : 'ArrowRight';
+  if (el.dataset?.grow && (e.key === earlier || e.key === later)) {
     e.preventDefault();
     const id = el.dataset.grow, b = layoutDay().blocks.find(y => y.item.id === id);
-    if (b) { savePlan(sizedPlan(dayPlan(), id, Math.max(PLAN_SNAP, b.min + (e.key === 'ArrowLeft' ? -PLAN_SNAP : PLAN_SNAP)))); render(); }
+    if (b) { savePlan(sizedPlan(dayPlan(), id, Math.max(PLAN_SNAP, b.min + (e.key === earlier ? -PLAN_SNAP : PLAN_SNAP)))); render(); }
     $(`[data-grow="${id}"]`)?.focus();
     return;
   }
-  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-    const dir = e.key === 'ArrowLeft' ? -1 : 1, edge = el.closest?.('[data-edge]'), block = el.closest?.('.tblock[data-item]');
+  if (e.key === earlier || e.key === later) {
+    const dir = e.key === earlier ? -1 : 1, edge = el.closest?.('[data-edge]'), block = el.closest?.('.tblock[data-item]');
     if (edge) {
       e.preventDefault();
       const p = dayPlan(), list = clone(p.windows), w = list[+edge.dataset.i];
