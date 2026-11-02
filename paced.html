@@ -195,6 +195,8 @@ body.has-mini .day.shut { bottom: calc(96px + env(safe-area-inset-bottom, 0px));
 .tblock.guess { box-shadow: none; outline: 1px dashed var(--muted); outline-offset: -1px; }
 .tblock.brk { background: repeating-linear-gradient(135deg, var(--surface-2) 0 6px, var(--surface) 6px 12px); box-shadow: 0 0 0 1px var(--line); }
 .tblock.brk.live { color: var(--ink); box-shadow: 0 0 0 1px var(--accent); }
+.tblock.evt { background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); cursor: pointer; }
+.tblock.evt.done { opacity: .55; }
 .tblock.ago { background: var(--surface-2); box-shadow: none; color: var(--muted); cursor: crosshair; }
 .tblock.lifted, .tblock.picked { box-shadow: 0 0 0 2px var(--accent); z-index: 3; }
 .tblock.dim { opacity: .35; }
@@ -223,7 +225,7 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .hours-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; flex-wrap: wrap; }
 .hours-row .text-input { width: auto; }
 @media (max-width: 760px) {
-  .day-tools { order: 3; flex-basis: 100%; justify-content: space-between; gap: 8px; }
+  .day-tools { order: 3; flex-basis: 100%; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; }
   .day-toggle { order: 2; }
   .day-filter > span { display: none; }
   .day-menu { left: 0 !important; right: 0; width: auto; }
@@ -282,6 +284,11 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .sheet-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
 .gt-foot { position: sticky; bottom: calc(-20px - env(safe-area-inset-bottom, 0px)); background: var(--surface); padding: 12px 0 20px; margin-bottom: -20px; }
 .gt-intro { margin-top: 10px; }
+.src-list { display: grid; gap: 8px; margin-bottom: 8px; }
+.paste-box { width: 100%; min-height: 170px; resize: vertical; }
+.app-row { display: flex; align-items: center; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; padding: 4px 0; }
+.app-row .row { gap: 6px; }
+.title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .gt-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .gt-row { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; border-radius: 10px; background: transparent; color: inherit; font: inherit; text-align: left; padding: 2px 6px 2px 0; }
 .gt-row:hover:not(:disabled) { background: var(--bg); }
@@ -909,7 +916,7 @@ const Account = {
   clearScreen() {
     state.tasks = new Map(); state.events = new Map(); state.records = new Map(); state.meta = defaultMeta(); speedCache = null;
     state.view = 'home'; state.layer = null; state.focusOpen = false; state.ask = null; state.fEdit = false;
-    state.gt = null; GoogleTasks.forget(); // the next person on this browser shouldn't get your Google tasks
+    state.gt = null; Google.forget(); // the next person on this browser shouldn't get your Google tasks
   },
 
   async signOut() {
@@ -1112,11 +1119,21 @@ function layoutDay(p = dayPlan(), now = minuteNow()) {
   if (m.brk) { cur = now + Math.max(0, (m.brk.until - Date.now()) / 60e3); stops.push({ s: now, e: cur, live: true }); }
   // A break whose time has come waits at "now" until you take it or an hour has gone by.
   const breaks = p.items.filter(i => i.brk && i.at + i.brk + BREAK_GIVE_UP_MIN > now).sort((a, b) => a.at - b.at);
-  for (const item of breaks) { const start = Math.max(item.at, cur); stops.push({ item, s: start, e: start + item.brk }); cur = start + item.brk; }
+  const events = todayEvents();
+  for (const item of breaks) {
+    let start = Math.max(item.at, cur);
+    for (const ev of events) if (ev.s < start + item.brk && ev.e > start) start = ev.e; // your calendar can't move, so the break waits
+    stops.push({ item, s: start, e: start + item.brk });
+    cur = start + item.brk;
+  }
+  stops.push(...events.map(ev => ({ ev, s: ev.s, e: ev.e })));
+  stops.sort((a, b) => a.s - b.s);
+  // If you're timing a step during an event, you're doing that instead, so the event doesn't push it along.
+  const busy = stops.filter(b => !(b.ev && s?.active && b.s <= now && b.e > now));
   const free = [];
   for (const w of p.windows) {
     let from = w.s;
-    for (const b of stops) {
+    for (const b of busy) {
       if (b.e <= from || b.s >= w.e) continue;
       if (b.s > from) free.push({ s: from, e: b.s });
       from = Math.max(from, b.e);
@@ -1137,7 +1154,7 @@ function layoutDay(p = dayPlan(), now = minuteNow()) {
       const w = free.find(f => f.e > at);
       if (!w) {
         // Past the end of your hours there's nothing left but breaks to work around.
-        const stop = stops.find(b => b.e > at && b.s < at + need);
+        const stop = busy.find(b => b.e > at && b.s < at + need);
         if (stop && stop.s <= at) { at = stop.e; continue; }
         const len = stop ? stop.s - at : need;
         pieces.push({ s: at, e: at + len, late: true });
@@ -1259,17 +1276,19 @@ async function submitAuth() {
 
 const savedLine = () => `<p class="saved">${Store.mode === 'cloud' ? 'Saved to your account' : 'Saved in this browser'}${Account.fb && !Account.user ? ' · <button class="link small" data-act="auth-show">Sign in to use it on other devices</button>' : ''}</p>`;
 
-/* ---------- Google Tasks (website only): pick tasks to copy into Paced ----------
-   This only reads from Google. The sign-in lasts about an hour and stays in memory, so it's never saved. */
+/* ---------- Google (website only): your tasks and your calendar ----------
+   Paced only reads from Google. Each sign-in lasts about an hour and stays in memory, so it's never saved. */
 const GOOGLE_SCRIPT = 'https://accounts.google.com/gsi/client';
 const GOOGLE_TASKS_API = 'https://tasks.googleapis.com/tasks/v1';
-const GOOGLE_TASKS_SCOPE = 'https://www.googleapis.com/auth/tasks.readonly';
-const GoogleTasks = {
-  token: null, expires: 0, client: null, script: null,
+const GOOGLE_CAL_API = 'https://www.googleapis.com/calendar/v3';
+const TASKS_SCOPE = 'https://www.googleapis.com/auth/tasks.readonly';
+const CAL_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+const Google = {
+  access: {}, client: null, script: null, settle: null,
 
   available: () => !!window.PACED_GOOGLE_CLIENT_ID,
-  signedIn() { return !!this.token && Date.now() < this.expires; },
-  forget() { this.token = null; this.expires = 0; },
+  signedIn(scope) { const a = this.access[scope]; return !!a && Date.now() < a.expires; },
+  forget(scope) { if (scope) delete this.access[scope]; else this.access = {}; },
   loaded: () => !!window.google?.accounts?.oauth2,
 
   load() {
@@ -1284,50 +1303,50 @@ const GoogleTasks = {
   },
 
   // Call this straight from a click, or the browser blocks Google's popup.
-  signIn() {
+  signIn(scope) {
     return new Promise((resolve, reject) => {
       const oauth = window.google.accounts.oauth2;
-      this.settle = { resolve, reject };
+      this.settle = { scope, resolve, reject };
       this.client = this.client || oauth.initTokenClient({
         client_id: window.PACED_GOOGLE_CLIENT_ID,
-        scope: GOOGLE_TASKS_SCOPE,
+        scope,
         callback: r => {
-          if (r.error || !oauth.hasGrantedAllScopes(r, GOOGLE_TASKS_SCOPE)) { this.settle.reject(new Error('denied')); return; }
-          this.token = r.access_token;
-          this.expires = Date.now() + (r.expires_in - 60) * 1000;
-          this.settle.resolve();
+          const w = this.settle;
+          if (r.error || !oauth.hasGrantedAllScopes(r, w.scope)) { w.reject(new Error('denied')); return; }
+          this.access[w.scope] = { token: r.access_token, expires: Date.now() + (r.expires_in - 60) * 1000 };
+          w.resolve();
         },
         error_callback: e => this.settle.reject(new Error(e.type === 'popup_closed' ? 'closed' : e.type === 'popup_failed_to_open' ? 'popup' : 'denied'))
       });
-      this.client.requestAccessToken({ prompt: '' });
+      this.client.requestAccessToken({ prompt: '', scope });
     });
   },
 
-  async pages(path, query) {
+  async pages(scope, url, query) {
     const items = [];
     let pageToken = '';
     do {
       const q = new URLSearchParams({ maxResults: 100, ...query });
       if (pageToken) q.set('pageToken', pageToken);
-      const res = await fetch(`${GOOGLE_TASKS_API}/${path}?${q}`, { headers: { Authorization: `Bearer ${this.token}` } });
+      const res = await fetch(`${url}?${q}`, { headers: { Authorization: `Bearer ${this.access[scope]?.token}` } });
       if (!res.ok) throw Object.assign(new Error('google'), { status: res.status });
       const d = await res.json();
       items.push(...(d.items || []));
       pageToken = d.nextPageToken;
     } while (pageToken);
     return items;
-  },
-
-  // Every list that has open tasks, with each task's subtasks folded into it.
-  async lists() {
-    const lists = await this.pages('users/@me/lists');
-    const full = await Promise.all(lists.map(async l => ({
-      id: l.id, title: String(l.title || 'Untitled list'),
-      tasks: gtShape(await this.pages(`lists/${encodeURIComponent(l.id)}/tasks`, { showCompleted: false, showHidden: false }))
-    })));
-    return full.filter(l => l.tasks.length);
   }
 };
+
+// Every list that has open tasks, with each task's subtasks folded into it.
+async function gtLists() {
+  const lists = await Google.pages(TASKS_SCOPE, `${GOOGLE_TASKS_API}/users/@me/lists`);
+  const full = await Promise.all(lists.map(async l => ({
+    id: l.id, title: String(l.title || 'Untitled list'),
+    tasks: gtShape(await Google.pages(TASKS_SCOPE, `${GOOGLE_TASKS_API}/lists/${encodeURIComponent(l.id)}/tasks`, { showCompleted: false, showHidden: false }))
+  })));
+  return full.filter(l => l.tasks.length);
+}
 
 function gtShape(items) {
   const named = items.filter(i => String(i.title || '').trim());
@@ -1340,48 +1359,193 @@ function gtShape(items) {
   });
 }
 
-const gtAdded = () => new Set([...state.tasks.values()].map(t => t.googleTaskId).filter(Boolean));
-const gtFree = l => { const added = gtAdded(); return l.tasks.filter(t => !added.has(t.id)); };
-const GT_ERRORS = {
-  blocked: 'Paced couldn’t reach Google. A content blocker may be stopping it, or you may be offline.',
-  denied: 'Google didn’t give Paced access to your tasks.',
-  popup: 'Your browser blocked Google’s window. Allow popups for this site, then try again.',
-  load: 'Paced couldn’t get your tasks from Google. Check your connection and try again.'
+/* ----- your calendar: time that's already taken -----
+   Events stay apart from the day's plan, so Reset leaves your meetings alone and a new fetch can replace them all. */
+const CAL_WARN_MIN = 5; // how long before an event Paced warns you
+const calConnected = () => !!state.meta.calIds?.length;
+const calStale = () => calConnected() && state.meta.cal?.date !== dateKey();
+const todayEvents = () => {
+  const c = state.meta.cal;
+  return c?.date === dateKey() ? c.events.filter(e => !c.hidden.includes(e.id)) : [];
 };
 
-function gtShow(run) { if (state.gt === run && state.layer?.type === 'gtasks') renderLayer(); }
+// Only timed events that really take up your time count, so all-day events, ones marked Free and ones you declined are left out.
+function calEvent(i, day) {
+  if (!i.start?.dateTime || i.status === 'cancelled' || i.transparency === 'transparent') return null;
+  if (i.attendees?.find(a => a.self)?.responseStatus === 'declined') return null;
+  const at = d => { const k = dateKey(d); return k < day ? 0 : k > day ? 1440 : d.getHours() * 60 + d.getMinutes(); };
+  const s = at(new Date(i.start.dateTime)), e = at(new Date(i.end?.dateTime || i.start.dateTime));
+  return { id: `${i.iCalUID || i.id}@${s}`, title: String(i.summary || 'Busy'), s, e: Math.max(e, s + PLAN_SNAP) };
+}
 
-async function openGoogleTasks() {
-  const run = state.gt = { status: 'loading', err: '', lists: [], picked: new Set() };
-  state.layer = { type: 'gtasks' };
+async function calEvents(ids) {
+  const day = dateKey(), from = keyDate(day), to = keyDate(addDays(day, 1)), found = new Map();
+  const query = { timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: true, orderBy: 'startTime' };
+  const lists = await Promise.all(ids.map(id => Google.pages(CAL_SCOPE, `${GOOGLE_CAL_API}/calendars/${encodeURIComponent(id)}/events`, query)
+    .catch(e => { if (e.status === 404) return []; throw e; }))); // a calendar you've since removed
+  for (const item of lists.flat()) { const ev = calEvent(item, day); if (ev) found.set(ev.id, ev); } // the same meeting can be on two calendars
+  return [...found.values()].sort((a, b) => a.s - b.s);
+}
+
+async function refreshCalendar(ids = state.meta.calIds) {
+  const events = await calEvents(ids), old = state.meta.cal;
+  state.meta.calIds = ids;
+  state.meta.cal = { date: dateKey(), at: Date.now(), events, hidden: old?.date === dateKey() ? old.hidden : [] };
+  saveMeta();
+  render();
+  const n = todayEvents().length;
+  toast(n ? `${n} ${n === 1 ? 'event' : 'events'} on today’s timeline` : 'Nothing on your calendar today', 'Change calendars', () => openGoogle('gcal'));
+}
+
+function calFailed(e) {
+  if (e.status === 401) Google.forget(CAL_SCOPE);
+  const msg = e.status === 401 ? 'Your Google sign-in ran out. Press Calendar again.' : googleError(e.message, 'calendar') || (e.status ? googleError('load', 'calendar') : '');
+  if (msg) toast(msg);
+}
+
+// Once your calendars are chosen, the button just gets today's events.
+function openCalendar() {
+  if (!calConnected()) { openGoogle('gcal'); return; }
+  if (Google.signedIn(CAL_SCOPE)) { refreshCalendar().catch(calFailed); return; }
+  if (!Google.loaded()) { openGoogle('gcal'); return; }
+  Google.signIn(CAL_SCOPE).then(() => refreshCalendar()).catch(calFailed);
+}
+
+function turnOffCalendar() {
+  state.meta.calIds = null;
+  state.meta.cal = null;
+  saveMeta();
+  Google.forget(CAL_SCOPE);
+  renderLayer(); render();
+  toast('Google Calendar is turned off.');
+}
+
+function hideEvent(id) {
+  const c = state.meta.cal, ev = c?.events.find(e => e.id === id);
+  if (!ev) return;
+  c.hidden.push(id);
+  saveMeta();
+  daySel = null;
+  render();
+  toast(`Hid “${ev.title}” for today`, 'Undo', () => {
+    const now = state.meta.cal;
+    if (now) { now.hidden = now.hidden.filter(x => x !== id); saveMeta(); render(); }
+  });
+}
+
+const calWarned = new Set();
+let calPreloaded = false;
+function tickCalendar() {
+  // Loading Google's script early lets the Calendar button open its popup on the first click.
+  if (!calPreloaded && calConnected() && Google.available()) { calPreloaded = true; Google.load().catch(() => {}); }
+  const now = minuteNow();
+  for (const ev of todayEvents()) {
+    if (ev.s <= now || ev.s > now + CAL_WARN_MIN || calWarned.has(ev.id)) continue;
+    calWarned.add(ev.id);
+    Alert.send(`${ev.title} at ${clockAt(ev.s)}`, 'Time to wrap up what you’re doing.');
+  }
+}
+
+/* ----- the sheets for importing tasks and choosing calendars ----- */
+const GOOGLE_SOURCES = {
+  gtasks: {
+    scope: TASKS_SCOPE, what: 'tasks', title: 'Import from Google Tasks', empty: 'You have no open tasks in Google Tasks.', hint: 'Tick the tasks you want. Subtasks become steps.',
+    intro: 'Connect your Google account, then choose which tasks to copy into Paced. Paced only reads them, so nothing changes in Google Tasks.',
+    load: async run => { run.lists = await gtLists(); }
+  },
+  gcal: {
+    scope: CAL_SCOPE, what: 'calendar', title: 'Google Calendar', empty: 'You have no calendars in Google Calendar.', hint: 'Tick the calendars to show. Events take up time on today’s timeline, and tasks fit around them.',
+    intro: 'Connect your Google account to show today’s events on the timeline, with your tasks fitting around them. Paced only reads them, so nothing changes in Google Calendar.',
+    load: async run => {
+      const items = await Google.pages(CAL_SCOPE, `${GOOGLE_CAL_API}/users/me/calendarList`);
+      const tasks = items.map(c => ({ id: c.id, title: String(c.summaryOverride || c.summary || 'Untitled calendar'), due: null, subs: [] }));
+      run.lists = tasks.length ? [{ id: 'calendars', title: 'Your calendars', tasks }] : [];
+      run.picked = new Set(calConnected() ? state.meta.calIds : items.filter(c => c.primary).map(c => c.id));
+    }
+  }
+};
+const GOOGLE_ERRORS = {
+  blocked: () => 'Paced couldn’t reach Google. A content blocker may be stopping it, or you may be offline.',
+  denied: what => `Google didn’t give Paced access to your ${what}.`,
+  popup: () => 'Your browser blocked Google’s window. Allow popups for this site, then try again.',
+  load: what => `Paced couldn’t get your ${what} from Google. Check your connection and try again.`
+};
+const googleError = (code, what) => GOOGLE_ERRORS[code]?.(what) || ''; // closing Google's window just means not now
+
+const gtAdded = () => new Set([...state.tasks.values()].map(t => t.googleTaskId).filter(Boolean));
+const gtFree = l => { const added = gtAdded(); return l.tasks.filter(t => !added.has(t.id)); };
+function gtShow(run) { if (state.gt === run && state.layer?.type === run.type) renderLayer(); }
+
+function openImport() {
+  if (!Google.available()) { openPaste(); return; }
+  state.layer = { type: 'import' };
   renderLayer(true);
-  if (GoogleTasks.signedIn()) return fetchGoogleTasks(run);
-  try { await GoogleTasks.load(); run.status = 'connect'; }
-  catch (e) { run.status = 'connect'; run.err = GT_ERRORS.blocked; }
+}
+
+function openPaste() {
+  state.gt = { type: 'paste', status: 'edit', text: '', err: '', lists: [], picked: new Set() };
+  state.layer = { type: 'paste' };
+  renderLayer(true);
+  $('#paste-text').focus();
+}
+
+// One task for each line, without the bullets or numbers that lists come with.
+function pasteLines(text) {
+  const mark = /^\s*(?:[-*+•‣◦·–—▪☐☑✓✔]|\d+[.)]|\[[ xX]?\])\s+/, seen = new Set();
+  return text.split(/\r?\n/).map(line => { while (mark.test(line)) line = line.replace(mark, ''); return line.trim(); })
+    .filter(line => line && !seen.has(line.toLowerCase()) && seen.add(line.toLowerCase()));
+}
+
+function pasteNext() {
+  const run = state.gt, lines = pasteLines(run.text);
+  if (!lines.length) { run.err = 'Paste at least one line first.'; renderLayer(); $('#paste-text').focus(); return; }
+  const tasks = lines.map((title, i) => ({ id: `line${i}`, title, due: null, subs: [] }));
+  run.lists = [{ id: 'pasted', title: 'Your list', tasks }];
+  run.picked = new Set(tasks.map(t => t.id));
+  run.err = '';
+  run.status = 'ready';
+  renderLayer();
+}
+function pasteBack() {
+  const run = state.gt;
+  run.status = 'edit';
+  renderLayer();
+  $('#paste-text').focus();
+}
+
+async function openGoogle(type) {
+  const src = GOOGLE_SOURCES[type], run = state.gt = { type, status: 'loading', err: '', lists: [], picked: new Set() };
+  state.layer = { type };
+  renderLayer(true);
+  if (Google.signedIn(src.scope)) return fetchGoogle(run);
+  try { await Google.load(); }
+  catch (e) { run.err = googleError('blocked', src.what); }
+  run.status = 'connect';
   gtShow(run);
 }
 
-async function fetchGoogleTasks(run) {
+async function fetchGoogle(run) {
+  const src = GOOGLE_SOURCES[run.type];
   run.status = 'loading'; run.err = '';
   gtShow(run);
   try {
-    run.lists = await GoogleTasks.lists();
+    await src.load(run);
     run.status = 'ready';
   } catch (e) {
-    if (e.status === 401) GoogleTasks.forget(); // the hour ran out, so connecting again fixes it
+    if (e.status === 401) Google.forget(src.scope); // the hour ran out, so connecting again fixes it
     run.status = 'connect';
-    run.err = e.status === 401 ? 'Your Google sign-in ran out. Connect again to carry on.' : e.status === 403 ? GT_ERRORS.denied : GT_ERRORS.load;
+    run.err = e.status === 401 ? 'Your Google sign-in ran out. Connect again to carry on.' : googleError(e.status === 403 ? 'denied' : 'load', src.what);
   }
   gtShow(run);
 }
 
 function connectGoogle() {
-  const run = state.gt;
-  if (GoogleTasks.signedIn()) { fetchGoogleTasks(run); return; }
-  if (!GoogleTasks.loaded()) { openGoogleTasks(); return; }
+  const run = state.gt, src = GOOGLE_SOURCES[run.type];
+  if (Google.signedIn(src.scope)) { fetchGoogle(run); return; }
+  if (!Google.loaded()) { openGoogle(run.type); return; }
   run.err = '';
-  GoogleTasks.signIn().then(() => fetchGoogleTasks(run), e => {
-    run.err = GT_ERRORS[e.message] || ''; // closing Google's window just means not now
+  Google.signIn(src.scope).then(() => fetchGoogle(run), e => {
+    run.err = googleError(e.message, src.what);
     gtShow(run);
   });
 }
@@ -1397,7 +1561,7 @@ function gtPickList(id) {
   free.forEach(t => { if (all) g.picked.delete(t.id); else g.picked.add(t.id); });
   gtSync();
 }
-const gtAddLabel = n => n ? `Add ${n} ${n === 1 ? 'task' : 'tasks'}` : 'Add tasks';
+const gtAddLabel = g => g.type === 'gcal' ? 'Show on timeline' : g.picked.size ? `Add ${g.picked.size} ${g.picked.size === 1 ? 'task' : 'tasks'}` : 'Add tasks';
 // Ticks change in place, because redrawing the sheet would throw away your scroll position and keyboard focus.
 function gtSync() {
   const g = state.gt, el = $('#layer');
@@ -1411,23 +1575,39 @@ function gtSync() {
     b.textContent = free.every(t => g.picked.has(t.id)) ? 'Clear' : 'Select all';
   });
   const add = el.querySelector('[data-act="gt-add"]');
-  add.textContent = gtAddLabel(g.picked.size);
+  add.textContent = gtAddLabel(g);
   add.disabled = !g.picked.size;
 }
 
-function addGoogleTasks() {
-  const g = state.gt, added = gtAdded(), now = Date.now();
+function gtAdd() {
+  if (state.gt.type === 'gcal') { useCalendars(); return; }
+  const g = state.gt, added = gtAdded(), now = Date.now(), fromGoogle = g.type === 'gtasks';
   const picks = g.lists.flatMap(l => l.tasks).filter(t => g.picked.has(t.id) && !added.has(t.id));
   const made = picks.map((p, i) => ({
-    id: newId('t'), title: p.title, due: p.due, createdAt: now + i, archived: false, completedAt: null, googleTaskId: p.id,
+    id: newId('t'), title: p.title, due: p.due, createdAt: now + i, archived: false, completedAt: null, ...(fromGoogle ? { googleTaskId: p.id } : {}),
     steps: p.subs.map(title => ({ id: newId('s'), title, est: null, done: false, actual: null, doneAt: null }))
   }));
   made.forEach(saveTask);
   state.gt = null; state.layer = null; renderLayer(); render();
-  toast(`Added ${made.length} ${made.length === 1 ? 'task' : 'tasks'} from Google Tasks`, 'Undo', () => {
+  toast(`Added ${made.length} ${made.length === 1 ? 'task' : 'tasks'}${fromGoogle ? ' from Google Tasks' : ''}`, 'Undo', () => {
     made.forEach(t => { clearActiveIf(a => a.taskId === t.id); removeTask(t.id); });
     render();
   });
+}
+
+async function useCalendars() {
+  const run = state.gt, ids = [...run.picked];
+  run.status = 'loading'; run.err = '';
+  gtShow(run);
+  try {
+    await refreshCalendar(ids);
+    if (state.gt === run) { state.gt = null; state.layer = null; renderLayer(); }
+  } catch (e) {
+    if (e.status === 401) Google.forget(CAL_SCOPE);
+    run.status = e.status === 401 ? 'connect' : 'ready';
+    run.err = e.status === 401 ? 'Your Google sign-in ran out. Connect again to carry on.' : googleError(e.status === 403 ? 'denied' : 'load', 'calendar');
+    gtShow(run);
+  }
 }
 
 function gtRowHTML(t, on, added) {
@@ -1443,15 +1623,40 @@ function gtListHTML(l, g, added) {
     ${l.tasks.map(t => gtRowHTML(t, g.picked.has(t.id), added.has(t.id))).join('')}`;
 }
 function gtHTML(enter) {
-  const g = state.gt, added = gtAdded();
+  const g = state.gt, src = GOOGLE_SOURCES[g.type], added = gtAdded(), title = src ? src.title : 'Paste a list';
   const err = g.err ? `<p class="err" role="alert">${esc(g.err)}</p>` : '';
-  const body = g.status === 'loading' ? '<p class="sub" role="status">Loading…</p>'
-    : g.status === 'connect' ? `<p class="help gt-intro">Connect your Google account, then choose which tasks to copy into Paced. Paced only reads them, so nothing changes in Google Tasks.</p>${err}
+  const back = g.type === 'paste' ? '<button class="btn ghost" data-act="paste-back">Back</button>' : '<button class="btn ghost" data-act="close-layer">Cancel</button>';
+  const body = g.status === 'edit' ? `<label class="label" for="paste-text">Your list</label>
+      <p class="help">Copy a list from Notes, Reminders, an email or anywhere else. Each line becomes a task.</p>
+      <textarea id="paste-text" class="text-input paste-box" rows="8" placeholder="Book the dentist&#10;Finish the report&#10;Call the bank">${esc(g.text)}</textarea>${err}
+      <div class="sheet-foot"><button class="btn ghost" data-act="close-layer">Cancel</button><button class="btn primary" data-act="paste-next">Next</button></div>`
+    : g.status === 'loading' ? '<p class="sub" role="status">Loading…</p>'
+    : g.status === 'connect' ? `<p class="help gt-intro">${esc(src.intro)}</p>${err}
       <div class="sheet-foot"><button class="btn ghost" data-act="close-layer">Cancel</button><button class="btn primary" data-act="gt-connect">Connect Google</button></div>`
-    : !g.lists.length ? `<p class="sub">You have no open tasks in Google Tasks.</p><div class="sheet-foot"><button class="btn ghost" data-act="close-layer">Close</button></div>`
-    : `<p class="sub">Tick the tasks you want. Subtasks become steps.</p>${g.lists.map(l => gtListHTML(l, g, added)).join('')}
-      <div class="sheet-foot gt-foot"><button class="btn ghost" data-act="close-layer">Cancel</button><button class="btn primary" data-act="gt-add"${g.picked.size ? '' : ' disabled'}>${gtAddLabel(g.picked.size)}</button></div>`;
-  return `${sheetOpen(enter, 'Import from Google Tasks')}${sheetHead('Import from Google Tasks')}${body}</section>`;
+    : !g.lists.length ? `<p class="sub">${esc(src.empty)}</p><div class="sheet-foot"><button class="btn ghost" data-act="close-layer">Close</button></div>`
+    : `<p class="sub">${esc(src ? src.hint : 'Untick any you don’t want.')}</p>${err}${g.lists.map(l => gtListHTML(l, g, added)).join('')}
+      <div class="sheet-foot gt-foot">${back}<button class="btn primary" data-act="gt-add"${g.picked.size ? '' : ' disabled'}>${gtAddLabel(g)}</button></div>`;
+  return `${sheetOpen(enter, title)}${sheetHead(title)}${body}</section>`;
+}
+function importHTML(enter) {
+  return `${sheetOpen(enter, 'Import tasks')}${sheetHead('Import tasks')}
+    <p class="sub">Where are your tasks?</p>
+    <div class="src-list">
+      <button class="pick" data-act="open-gtasks"><span><b>Google Tasks</b><span class="muted">Choose from your Google lists</span></span></button>
+      <button class="pick" data-act="open-paste"><span><b>Paste a list</b><span class="muted">From Notes, Reminders, an email or anywhere else</span></span></button>
+    </div>
+  </section>`;
+}
+function connectedHTML() {
+  if (!Google.available()) return '';
+  const c = state.meta.cal, n = todayEvents().length, on = calConnected();
+  const words = !on ? 'Shows your events on the timeline' : c?.date !== dateKey() ? 'Not updated today' : `${n} ${n === 1 ? 'event' : 'events'} today, updated ${fmtTime(c.at)}`;
+  return `<h3 class="label">Connected apps</h3>
+    <div class="app-row"><span class="gt-text"><b>Google Calendar</b><span class="muted">${esc(words)}</span></span>
+      <span class="row">${on ? '<button class="btn ghost small" data-act="cal-choose">Choose calendars</button><button class="btn ghost small" data-act="cal-off">Turn off</button>' : '<button class="btn ghost small" data-act="cal-choose">Connect</button>'}</span></div>
+    <div class="app-row"><span class="gt-text"><b>Google Tasks</b><span class="muted">Copies the tasks you choose</span></span>
+      <span class="row"><button class="btn ghost small" data-act="open-gtasks">Import</button></span></div>
+    <p class="help" style="margin-top:8px">Paced only reads these, and only when you press a button. To remove its access completely, go to <a href="https://myaccount.google.com/connections" target="_blank" rel="noopener">your Google Account</a>.</p>`;
 }
 
 function homeHTML() {
@@ -1462,7 +1667,7 @@ function homeHTML() {
     <div class="row-actions"><button class="icon-btn" data-act="open-look" title="Settings" aria-label="Settings">${ICON.gear}</button>
     <button class="icon-btn" data-act="show-history" title="History" aria-label="History">${ICON.clock}</button>
     <button class="btn ghost small" data-act="show-archive" title="Completed tasks">${ICON.check}Completed${archived ? `<span class="count">${archived}</span>` : ''}</button></div></div>
-  <h1>My tasks</h1>
+  <div class="title-row"><h1>My tasks</h1><button class="btn ghost small" data-act="open-import">Import</button></div>
   ${list.length ? `<p class="sub">${list.length} ${list.length === 1 ? 'task' : 'tasks'}${left ? ` · about ${fmtMin(left)} of work` : ''}</p>
   <ul class="tasks">${list.map(taskHTML).join('')}</ul>
   ${methodCardHTML()}` : `
@@ -1475,7 +1680,7 @@ function homeHTML() {
       <li>Press <b>Start</b>. Paced times each step and tells you when it’s time for a break.</li>
     </ol>
     <div class="row"><button class="btn primary" data-act="open-add">${ICON.plus}Add your first task</button>
-    ${GoogleTasks.available() ? '<button class="btn ghost" data-act="open-gtasks">Import from Google Tasks</button>' : ''}</div>
+    <button class="btn ghost" data-act="open-import">Import tasks</button></div>
   </section>`}
   ${savedLine()}`;
 }
@@ -1588,6 +1793,18 @@ function breakBlockHTML(b, v) {
   </div>`;
 }
 
+function eventBlockHTML(b, v) {
+  const ev = b.ev, px = (b.e - b.s) * v.pxPerMin, picked = daySel?.kind === 'evt' && daySel.ids.includes(ev.id);
+  const words = px >= 24 ? `<b>${esc(ev.title)}</b>${px >= 92 ? `<span>${rangeWords(b.s, b.e)}</span>` : ''}` : '';
+  return `<div class="tblock evt${picked ? ' picked' : ''}${b.e <= v.now ? ' done' : ''}" style="${spanStyle(v, b.s, b.e)}" title="${esc(ev.title)}, ${rangeWords(b.s, b.e)}">
+    <button class="tb-open" data-act="cal-pick" data-id="${esc(ev.id)}" aria-label="${esc(ev.title)}, ${rangeWords(b.s, b.e)}">${words}</button>
+  </div>`;
+}
+function pickEvent(id) {
+  daySel = daySel?.kind === 'evt' && daySel.ids[0] === id ? null : { kind: 'evt', ids: [id], range: null };
+  renderDay('quiet');
+}
+
 // The line of numbers at the top of the panel, and on the closed button.
 const dayWords = lay => lay.freeMin < 1 ? 'No free time left today' : `${fmtMin(lay.freeMin)} free${lay.planMin && lay.lateMin < 1 ? ` · ${fmtMin(lay.planMin)} planned` : ''}`;
 
@@ -1612,6 +1829,7 @@ function dayHTML() {
         <span class="day-filter" role="group" aria-label="What dragging across the timeline selects"><span>Select</span>${filterBtn('task', 'Tasks')}${filterBtn('brk', 'Breaks')}</span>
         <button class="btn ghost small" data-drag="brk" data-act="plan-break" title="Drag onto the timeline, or click to add one after your next task">${ICON.cup}Break</button>
         <button class="link small" id="day-now" data-act="day-now" title="Back to today’s hours"${railAt == null ? ' hidden' : ''}>Back</button>
+        ${Google.available() ? `<button class="link small" data-act="cal-open" title="Show today’s events from Google Calendar">${calStale() ? 'Update calendar' : 'Calendar'}</button>` : ''}
         <button class="link small" data-act="open-hours">Hours</button>
         <button class="link small" data-act="plan-reset"${fresh ? ' disabled' : ''} title="Clear today’s timeline and go back to your usual hours">Reset</button>
       </div>
@@ -1622,7 +1840,7 @@ function dayHTML() {
       <div class="spent" style="width:${atPct(v, now)}%"></div>
       ${v.past.map(b => `<div class="tblock ago" style="${spanStyle(v, b.s, b.e)}" title="${esc(b.title)}, done"><div class="tb-open">${(b.e - b.s) * v.pxPerMin >= 24 ? `<b>${esc(b.title)}</b>` : ''}</div></div>`).join('')}
       ${lay.blocks.flatMap(b => b.pieces.map((x, i) => pieceHTML(b, x, i, v))).join('')}
-      ${lay.stops.map(b => breakBlockHTML(b, v)).join('')}
+      ${lay.stops.map(b => b.ev ? eventBlockHTML(b, v) : breakBlockHTML(b, v)).join('')}
       ${lay.blocks.length ? '' : `<div class="rail-hint" style="${spanStyle(v, hintFrom, hintTo)}">Drag a task here</div>`}
       ${box ? `<div class="marquee" style="${spanStyle(v, box.s, box.e)}"></div>` : ''}
       <div class="now-line" style="left:${atPct(v, now)}%"><span>${clockAt(now).replace(/\s?[AP]M$/i, '')}</span></div>
@@ -1682,7 +1900,14 @@ function dayMenuHTML(v) {
   const { lay, p } = v, { kind, range } = daySel, ids = daySel.ids;
   let at, body = '';
   if (!ids.length) { if (range) { at = (range.s + range.e) / 2; body = menuHead(rangeWords(range.s, range.e)) + `<p class="dm-sub">${fmtMin(range.e - range.s)}, no ${kind === 'brk' ? 'breaks' : 'tasks'} here</p>${rangeRowHTML(range, p)}`; } }
-  else if (kind === 'brk') {
+  else if (kind === 'evt') {
+    const b = lay.stops.find(x => x.ev?.id === ids[0]);
+    if (b) {
+      at = (b.s + b.e) / 2;
+      body = menuHead(b.ev.title) + `<p class="dm-sub">${rangeWords(b.s, b.e)}, from your calendar</p>
+        <div class="dm-row"><button class="btn ghost" data-act="sel-delete">Hide for today</button></div>`;
+    }
+  } else if (kind === 'brk') {
     const stops = lay.stops.filter(b => b.item && ids.includes(b.item.id));
     if (stops.length) { at = (stops[0].s + stops[stops.length - 1].e) / 2; body = breakMenuHTML(stops); }
   } else {
@@ -1884,7 +2109,7 @@ function renderLayer(enter) {
   }
   el.hidden = false;
   document.body.classList.add('locked');
-  el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'hours' ? hoursHTML(enter) : L.type === 'gtasks' ? gtHTML(enter) : L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : L.type === 'record' ? recordHTML(rec, enter) : detailHTML(t, enter));
+  el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'hours' ? hoursHTML(enter) : L.type === 'import' ? importHTML(enter) : ['gtasks', 'gcal', 'paste'].includes(L.type) ? gtHTML(enter) : L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : L.type === 'record' ? recordHTML(rec, enter) : detailHTML(t, enter));
   autosizeAll(el);
 }
 const sheetOpen = (enter, label) => `<section class="sheet${enter ? ' enter' : ''}" role="dialog" aria-modal="true" aria-label="${esc(label)}">`;
@@ -1993,6 +2218,7 @@ function lookHTML(enter) {
     <div class="swatches">${Object.entries(COLORS).map(([id, c]) => `<button class="swatch${color === id ? ' on' : ''}" data-act="look-color" data-v="${id}" aria-pressed="${color === id}"><i style="background:${c.light[0]}">${color === id ? ICON.check : ''}</i>${c.name}</button>`).join('')}</div>
     ${alertsHTML()}
     ${idleHTML()}
+    ${connectedHTML()}
     ${Account.fb ? `<h3 class="label">Account</h3>
     ${Account.user
       ? `<p class="help">Signed in as ${esc(Account.user.email)}</p><button class="btn ghost" data-act="auth-signout">Sign out</button>`
@@ -2155,7 +2381,6 @@ function renderDraftSteps() {
 
 function addHTML(enter) {
   return `${sheetOpen(enter, 'New task')}${sheetHead('New task')}
-    ${GoogleTasks.available() ? '<button class="link small" data-act="open-gtasks">Import from Google Tasks instead</button>' : ''}
     <label class="label" for="new-title">What do you need to do?</label>
     <input id="new-title" class="text-input big" placeholder="Task name" autocomplete="off" value="${esc(state.draft.title)}">
     <p class="err" id="new-err" hidden>Type a name for the task first.</p>
@@ -3427,6 +3652,7 @@ function swapTask(taskId) {
 }
 
 function deleteSelected() {
+  if (daySel?.kind === 'evt') { hideEvent(daySel.ids[0]); return; }
   const p = dayPlan(), ids = daySel?.ids || [], breaks = daySel?.kind === 'brk';
   daySel = null;
   const what = ids.length === 1 ? (breaks ? 'Break deleted' : 'Taken off today') : `${ids.length} ${breaks ? 'breaks deleted' : 'tasks taken off today'}`;
@@ -3638,11 +3864,19 @@ document.addEventListener('click', e => {
   if (['focus-task', 'sel-start', 'start-step', 'pick-task', 'history'].includes(act)) Alert.askPermission();
   switch (act) {
     case 'open-add': openAdd(); break;
-    case 'open-gtasks': openGoogleTasks(); break;
+    case 'open-import': openImport(); break;
+    case 'open-gtasks': openGoogle('gtasks'); break;
+    case 'open-paste': openPaste(); break;
+    case 'paste-next': pasteNext(); break;
+    case 'paste-back': pasteBack(); break;
     case 'gt-connect': connectGoogle(); break;
     case 'gt-pick': gtPick(id); break;
     case 'gt-all': gtPickList(id); break;
-    case 'gt-add': addGoogleTasks(); break;
+    case 'gt-add': gtAdd(); break;
+    case 'cal-open': openCalendar(); break;
+    case 'cal-choose': openGoogle('gcal'); break;
+    case 'cal-off': turnOffCalendar(); break;
+    case 'cal-pick': pickEvent(id); break;
     case 'auth-switch': state.auth.mode = state.auth.mode === 'signup' ? 'signin' : 'signup'; render(); break;
     case 'auth-guest': Account.continueAsGuest(); render(); break;
     case 'auth-show': state.auth.mode = 'signin'; Account.showSignIn(); renderLayer(); render(); break;
@@ -3831,6 +4065,7 @@ document.addEventListener('input', e => {
     autosize(el);
   }
   if (el.id === 'auth-email') state.auth.email = el.value;
+  else if (el.id === 'paste-text') state.gt.text = el.value;
   else if (el.id === 'new-title') { state.draft.title = el.value; if (el.value.trim()) $('#new-err').hidden = true; }
   else if (el.id === 'split-name' && state.ask) state.ask.name = el.value;
   else if ((el.id === 'split-min' || el.id === 'forgot-min') && state.ask) state.ask.min = parseMin(el.value);
@@ -4091,6 +4326,7 @@ function tick() {
   if (now < syncUntil) { showClocks(); return; }
   dropFinishedStep();
   checkAway();
+  tickCalendar();
   if (backWaiting) { backWaiting = false; backFromIdle(); }
   watchIdle();
   watchCheckIn();

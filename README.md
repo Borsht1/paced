@@ -3,13 +3,14 @@
 A to-do list that helps you work at a steady pace and balance work with free time.
 
 - Add a task and split it into small steps, with a guess of how many minutes each will take.
-- **Import from Google Tasks** lists your open tasks with a checkbox beside each. Tick the ones you want and they become Paced tasks, with due dates kept and subtasks as steps. Paced only reads from Google, so finishing a task here doesn't check it off there. Tasks you've already imported are marked so you don't add them twice. This works on the website only.
+- **Import**, next to the My tasks heading, brings in tasks from elsewhere. **Paste a list** turns each line of any list into a task, and works everywhere. **Google Tasks** shows your open tasks with a checkbox beside each. Tick the ones you want and they become Paced tasks, with due dates kept and subtasks as steps. Paced only reads from Google, so finishing a task here doesn't check it off there. Tasks you've already imported are marked so you don't add them twice. Google Tasks works on the website only.
 - Press **Start**. Paced counts down each step and stops you at the planned end to decide what's next.
 - Between steps a one-minute clock runs, then the next step starts by itself, so nothing is left un-timed.
 - The Today timeline is a thin strip at the bottom of the window showing the hours you can work. Press **−** to close it and **+** to bring it back. Drag the grip on top of the panel to make it taller or shorter. Scroll sideways to see the rest of the day, and **Back** returns to your hours. Drag tasks onto it and each takes up room for the time it needs. Tasks flow through your free time in order and never start sooner than where you dropped them, so changing a task, your hours or running over moves everything after it, and anything that no longer fits turns red. Drag either end of your hours, or use **Hours**. Your changes last for the day, unless you choose to use them every day. **Reset** clears the day.
 - Each scheduled task gets a colored row in your list saying when it should be finished: green when it's on track, blue while you're working on it, amber when the time is a guess because it has no minutes, and red when it runs past your hours.
 - Click a task on the timeline to start it, take it off or change it to another task. Click a break to change its length, move it, copy it, take it now or delete it. Backspace or Delete removes what's selected, and you can undo it. Drag the right edge of a task to save more or less time for it today. Its steps and timers stay as they are.
 - Drag across the timeline to select. **Select: Tasks** or **Breaks** picks which kind, so you can delete or change many at once. Drag along the hour labels to start anywhere, shift-click to add to what's selected, and drag across an empty stretch to block it off or add a break there.
+- **Calendar** on the timeline shows today's events from Google Calendar as fixed blocks, and tasks flow around them. Pick which calendars to use the first time, and press it again to update. All-day events, ones marked Free and ones you declined are left out. Click an event to hide it for today. While Paced is open, it warns you 5 minutes before an event. Paced can't update by itself, so press **Calendar** each day, and Google may ask you to approve it again. **Settings** shows what's connected and turns it off. This works on the website only.
 - Drag **Break** onto the timeline to plan one. Tasks flow around it, and a break you planned comes before any Paced would suggest. When a task ends, the next one on the timeline starts by itself, and Paced alerts you when the first thing on it is due.
 - It tells you when to take a break once you slow down, or to switch tasks when something is due soon.
 - Sound, notifications and the tab title reach you when you're not looking at Paced. Notifications need the page open in a desktop browser; on most phones you get sound and vibration only.
@@ -40,13 +41,13 @@ Sign-in and saving across devices use Firebase, on the website only.
 - `firebase-config.js` holds the project's settings. Set it to `null` to run the site without accounts.
 - `firestore.rules` holds the privacy rules. Each person can read and change only their own tasks.
 
-## Google Tasks on the website
+## Google on the website
 
-`PACED_GOOGLE_CLIENT_ID` in `firebase-config.js` turns the import on. While it's `null`, the import is hidden.
+`PACED_GOOGLE_CLIENT_ID` in `firebase-config.js` turns on Google Tasks and Google Calendar. While it's `null`, both are hidden.
 
-The client ID comes from the `paced-5dbc5` project in the [Google Cloud console](https://console.cloud.google.com/). The project needs the Google Tasks API turned on, the `tasks.readonly` scope on its sign-in screen, and a web client that allows `https://borsht1.github.io`.
+The client ID comes from the `paced-5dbc5` project in the [Google Cloud console](https://console.cloud.google.com/). The project needs the Google Tasks API and Google Calendar API turned on, the `tasks.readonly` and `calendar.readonly` scopes on its sign-in screen, and a web client that allows `https://borsht1.github.io`.
 
-While the sign-in screen is in Testing, only the people added as test users can connect, up to 100, and they see an "unverified app" warning. Removing the warning for everyone takes Google's verification.
+While the sign-in screen is in Testing, only the people added as test users can connect, up to 100, and they see an "unverified app" warning. Removing the warning for everyone takes Google's verification, which can take months. Publishing without verification lets anyone connect, but only 100 people ever can, and that limit can't be reset.
 
 ## Browser extension
 
