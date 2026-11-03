@@ -281,6 +281,17 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .gt-intro { margin-top: 10px; }
 .src-list { display: grid; gap: 8px; margin-bottom: 8px; }
 .paste-box { width: 100%; min-height: 170px; resize: vertical; }
+.brand-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+@media (max-width: 480px) { .brand-name { display: none; } } /* the Notes button and the top buttons need the room on a phone */
+.notes-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+.notes-top .help { margin: 0; flex: 1 1 180px; }
+.notes { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px; }
+.note { background: var(--bg); border-radius: 12px; padding: 10px 8px 6px 12px; }
+.note:focus-within { box-shadow: 0 0 0 1px var(--accent); }
+.note-text { display: block; border: 0; background: transparent; box-shadow: none; padding: 0; min-height: 0; resize: none; overflow: hidden; line-height: 1.45; }
+.note-text:focus { outline: none; border-color: transparent; box-shadow: none; }
+.note-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.note-foot .icon-btn { width: 32px; height: 32px; }
 .app-row { display: flex; align-items: center; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; padding: 4px 0; }
 .app-row .row { gap: 6px; }
 .title-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin-top: 24px; }
@@ -542,6 +553,7 @@ const ICON = {
   cup: '<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 9.5h12v4a5 5 0 01-5 5h-2a5 5 0 01-5-5v-4zM16.5 11h1.25a2.25 2.25 0 010 4.5H16M8 3.5v2.5M12 3.5v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
   swap: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h12l-3-3M17 17H5l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
   grip: '<svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><g fill="currentColor"><circle cx="2.5" cy="3" r="1.4"/><circle cx="7.5" cy="3" r="1.4"/><circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/><circle cx="2.5" cy="13" r="1.4"/><circle cx="7.5" cy="13" r="1.4"/></g></svg>',
+  notes: '<svg width="19" height="19" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 3v5h5M8 12h8M8 16h5"/></svg>',
   gear: '<svg width="19" height="19" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'
 };
 
@@ -613,7 +625,7 @@ function normTask(id, d) {
 }
 
 const state = {
-  ready: false, tasks: new Map(), records: new Map(), meta: defaultMeta(),
+  ready: false, tasks: new Map(), records: new Map(), notes: new Map(), meta: defaultMeta(),
   // Calendar events from the earlier version stay saved but are no longer used.
   events: new Map(),
   view: 'home', layer: null, draft: null,
@@ -786,24 +798,27 @@ const Store = {
   },
 
   applyDocs(docs) {
-    const tasks = new Map(), events = new Map(), records = new Map(); let meta = null;
+    const tasks = new Map(), events = new Map(), records = new Map(), notes = new Map(); let meta = null;
     for (const [id, d] of docs) {
       if (id === 'meta') meta = d;
       else if (id.startsWith('t_')) tasks.set(id, normTask(id, d));
       else if (id.startsWith('e_')) events.set(id, clone(d));
       else if (id.startsWith('r_')) records.set(id, clone(d));
+      else if (id.startsWith('n_')) notes.set(id, clone(d));
     }
     this.hadMeta = !!meta;
     // Docs with a write still on its way keep their local version.
     for (const id of this.queue.keys()) {
       if (id === 'meta') { meta = state.meta; continue; }
       if (id.startsWith('r_')) { const r = state.records.get(id); if (r) records.set(id, r); else records.delete(id); continue; }
+      if (id.startsWith('n_')) { const n = state.notes.get(id); if (n) notes.set(id, n); else notes.delete(id); continue; }
       const loc = state.tasks.get(id);
       if (loc) tasks.set(id, loc); else tasks.delete(id);
     }
     state.tasks = tasks;
     state.events = events;
     state.records = records;
+    state.notes = notes;
     state.meta = normMeta(meta);
     speedCache = null;
   },
@@ -853,6 +868,7 @@ const Store = {
       state.tasks = new Map((d.tasks || []).filter(t => t && t.id).map(t => [t.id, normTask(t.id, t)]));
       state.events = new Map((d.events || []).filter(e => e && e.id).map(e => [e.id, e]));
       state.records = new Map((d.records || []).filter(r => r && r.id).map(r => [r.id, r]));
+      state.notes = new Map((d.notes || []).filter(n => n && n.id).map(n => [n.id, n]));
       state.meta = normMeta(d.meta);
       speedCache = null;
     } catch (e) {}
@@ -860,7 +876,7 @@ const Store = {
 
   saveLocal() {
     if (this.mode !== 'local') return;
-    try { localStorage.setItem(KEY, JSON.stringify({ tasks: [...state.tasks.values()], events: [...state.events.values()], records: [...state.records.values()], meta: state.meta })); } catch (e) {}
+    try { localStorage.setItem(KEY, JSON.stringify({ tasks: [...state.tasks.values()], events: [...state.events.values()], records: [...state.records.values()], notes: [...state.notes.values()], meta: state.meta })); } catch (e) {}
   }
 };
 window.addEventListener('pagehide', () => { if (Store.mode === 'local') Store.saveLocal(); });
@@ -913,6 +929,7 @@ const Account = {
     for (const t of d.tasks || []) if (t && t.id && !state.tasks.has(t.id)) { saveTask(normTask(t.id, t)); moved++; }
     for (const e of d.events || []) if (e && e.id && !state.events.has(e.id)) { state.events.set(e.id, e); Store.write(e.id, e); }
     for (const r of d.records || []) if (r && r.id && !state.records.has(r.id)) saveRecord(r);
+    for (const n of d.notes || []) if (n && n.id && !state.notes.has(n.id)) saveNote(n);
     if (d.meta && !Store.hadMeta) { state.meta = normMeta(d.meta); saveMeta(); }
     try { localStorage.removeItem(KEY); localStorage.removeItem(GUEST_KEY); } catch (e) {}
     if (moved) setTimeout(() => toast(`Moved ${moved} ${moved === 1 ? 'task' : 'tasks'} from this browser into your account.`), 400);
@@ -927,7 +944,7 @@ const Account = {
   resetPassword(email) { return this.fb.sendPasswordResetEmail(this.auth, email); },
 
   clearScreen() {
-    state.tasks = new Map(); state.events = new Map(); state.records = new Map(); state.meta = defaultMeta(); speedCache = null;
+    state.tasks = new Map(); state.events = new Map(); state.records = new Map(); state.notes = new Map(); state.meta = defaultMeta(); speedCache = null;
     state.view = 'home'; state.layer = null; state.focusOpen = false; state.ask = null; state.fEdit = false;
     state.gt = null; Google.forget(); // the next person on this browser shouldn't get your Google tasks
   },
@@ -1689,7 +1706,7 @@ function connectedHTML() {
 
 function topbarHTML() {
   const archived = archivedTasks().length;
-  return `<div class="brand-row"><div class="brand">${ICON.mark}Paced</div>
+  return `<div class="brand-row"><div class="brand-left"><button class="icon-btn" data-act="open-notes" title="Notes" aria-label="Notes">${ICON.notes}</button><div class="brand">${ICON.mark}<span class="brand-name">Paced</span></div></div>
     <div class="row-actions"><button class="btn ghost small" data-act="show-archive">Completed${archived ? `<span class="count">${archived}</span>` : ''}</button>
     <button class="btn ghost small" data-act="show-history">History</button>
     <button class="icon-btn" data-act="open-look" title="Settings" aria-label="Settings">${ICON.gear}</button></div></div>`;
@@ -2250,7 +2267,7 @@ function renderLayer(enter) {
   }
   el.hidden = false;
   document.body.classList.add('locked');
-  el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'schedules' ? schedulesHTML(enter) : L.type === 'hours' ? hoursHTML(enter) : L.type === 'import' ? importHTML(enter) : ['gtasks', 'gcal', 'paste'].includes(L.type) ? gtHTML(enter) : L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : L.type === 'record' ? recordHTML(rec, enter) : detailHTML(t, enter));
+  el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'notes' ? notesHTML(enter) : L.type === 'schedules' ? schedulesHTML(enter) : L.type === 'hours' ? hoursHTML(enter) : L.type === 'import' ? importHTML(enter) : ['gtasks', 'gcal', 'paste'].includes(L.type) ? gtHTML(enter) : L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : L.type === 'record' ? recordHTML(rec, enter) : detailHTML(t, enter));
   autosizeAll(el);
 }
 const sheetOpen = (enter, label) => `<section class="sheet${enter ? ' enter' : ''}" role="dialog" aria-modal="true" aria-label="${esc(label)}">`;
@@ -2312,7 +2329,7 @@ function moveDueFocus(k) {
 
 // Step names wrap onto more lines instead of getting cut off.
 function autosize(el) { el.style.height = 'auto'; el.style.height = (el.scrollHeight + 2) + 'px'; }
-function autosizeAll(root) { root.querySelectorAll('textarea.step-title').forEach(autosize); }
+function autosizeAll(root) { root.querySelectorAll('textarea.step-title, textarea.note-text').forEach(autosize); }
 window.addEventListener('resize', () => { autosizeAll($('#layer')); autosizeAll($('#focus')); });
 
 /* ----- look and feel ----- */
@@ -3297,7 +3314,42 @@ function openDetail(id, focusAdd) {
   renderLayer(true);
   if (focusAdd) $('#detail-step').focus();
 }
-function closeLayer() { state.layer = null; renderLayer(); render(); }
+function closeLayer() { if (state.layer?.type === 'notes') pruneNotes(); state.layer = null; renderLayer(); render(); }
+
+/* ----- notes: anything you want to keep, saved with your tasks ----- */
+function openNotes() {
+  state.layer = { type: 'notes' };
+  renderLayer(true);
+}
+function notesHTML(enter) {
+  const list = [...state.notes.values()].sort((a, b) => b.createdAt - a.createdAt);
+  return `${sheetOpen(enter, 'Notes')}${sheetHead('Notes')}
+    <div class="notes-top"><p class="help">Anything you want to keep. Notes are saved with your tasks.</p>
+    <button class="btn primary small" data-act="note-add">${ICON.plus}New note</button></div>
+    ${list.length ? `<ul class="notes">${list.map(n => `<li class="note">
+      <textarea class="text-input note-text" data-id="${n.id}" rows="2" aria-label="Note from ${esc(fmtFullDay(dateKey(new Date(n.createdAt))))}" placeholder="Write something…">${esc(n.text)}</textarea>
+      <div class="note-foot"><small class="muted">${esc(fmtFullDay(dateKey(new Date(n.createdAt))))}</small>
+        <button class="icon-btn" data-act="note-del" data-id="${n.id}" title="Delete" aria-label="Delete this note">${ICON.trash}</button></div>
+    </li>`).join('')}</ul>` : '<p class="sub">No notes yet. Press New note to write one.</p>'}
+  </section>`;
+}
+function saveNote(n) { state.notes.set(n.id, n); Store.write(n.id, n); }
+function addNote() {
+  saveNote({ id: newId('n'), text: '', createdAt: Date.now(), updatedAt: Date.now() });
+  renderLayer();
+  $('#layer .note-text')?.focus();
+}
+function deleteNote(id) {
+  const n = state.notes.get(id);
+  if (!n) return;
+  state.notes.delete(id); Store.write(id, null);
+  renderLayer();
+  if (n.text.trim()) toast('Note deleted.', 'Undo', () => { saveNote(n); renderLayer(); });
+}
+// A note left empty doesn't stay on the list.
+function pruneNotes() {
+  for (const n of [...state.notes.values()]) if (!n.text.trim()) { state.notes.delete(n.id); Store.write(n.id, null); }
+}
 
 function addDraftStep() {
   const ti = $('#draft-step'), mi = $('#draft-min');
@@ -4110,6 +4162,9 @@ document.addEventListener('click', e => {
       break;
     }
     case 'open-look': state.layer = { type: 'look' }; renderLayer(true); break;
+    case 'open-notes': openNotes(); break;
+    case 'note-add': addNote(); break;
+    case 'note-del': deleteNote(id); break;
     case 'open-schedules': state.layer = { type: 'schedules' }; state.duePick = null; state.schedLoad = null; renderLayer(true); break;
     case 'sched-load': {
       const open = state.schedLoad === id;
@@ -4216,7 +4271,12 @@ document.addEventListener('input', e => {
     if (el.value.includes('\n')) el.value = el.value.replace(/\s*\n+\s*/g, ' ');
     autosize(el);
   }
-  if (el.id === 'auth-email') state.auth.email = el.value;
+  if (el.matches('textarea.note-text')) {
+    const n = state.notes.get(el.dataset.id);
+    autosize(el);
+    if (n) { n.text = el.value; n.updatedAt = Date.now(); saveNote(n); }
+  }
+  else if (el.id === 'auth-email') state.auth.email = el.value;
   else if (el.id === 'paste-text') state.gt.text = el.value;
   else if (el.id === 'sched-name') state.schedName = el.value;
   else if (el.id === 'new-title') { state.draft.title = el.value; if (el.value.trim()) $('#new-err').hidden = true; }

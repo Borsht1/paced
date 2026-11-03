@@ -22,6 +22,7 @@ A to-do list that helps you work at a steady pace and balance work with free tim
 - When you stop, Paced shows a summary of the session: what you worked on, your breaks and pauses, and how long each took, with room for a note. Each session is saved, breaks included.
 - History shows your past sessions and when you work best: by time of day, by day of the week, and by how long it's been since a break.
 - Try different ways of working (Break when you slow down, Pomodoro, Long focus, Switch tasks) and see which suits you.
+- The **Notes** button at the top left keeps anything you want to write down, newest first. Notes are saved with your tasks, and an empty one is removed when you close the sheet. Deleting a note offers **Undo**.
 
 ## Running it
 
