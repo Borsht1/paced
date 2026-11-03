@@ -289,8 +289,8 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .gt-intro { margin-top: 10px; }
 .src-list { display: grid; gap: 8px; margin-bottom: 8px; }
 .paste-box { width: 100%; min-height: 170px; resize: vertical; }
-.brand-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
-@media (max-width: 480px) { .brand-name { display: none; } } /* the Notes button and the top buttons need the room on a phone */
+.done-link { display: inline-flex; align-items: center; gap: 6px; margin: 12px 0 0 4px; font-size: 14px; }
+.done-link .count { margin-left: 2px; }
 .notes-word { margin-left: -2px; }
 @media (max-width: 480px) { .notes-word { display: none; } } /* on a phone the button keeps its icon and count */
 .notes-add { display: flex; gap: 8px; align-items: flex-end; margin-top: 12px; }
@@ -1724,21 +1724,23 @@ function connectedHTML() {
     <p class="help" style="margin-top:8px">Paced only reads these, and only when you press a button. To remove its access completely, go to <a href="https://myaccount.google.com/connections" target="_blank" rel="noopener">your Google Account</a>.</p>`;
 }
 
+// The places you can go sit together on the right. Completed tasks are at the end of your list, where you finish them.
 function topbarHTML() {
-  const archived = archivedTasks().length;
-  return `<div class="brand-row"><div class="brand-left"><button class="btn ghost small" data-act="open-notes" title="Jot down a thought (press N)" aria-label="Notes${noteCount() ? `, ${noteCount()}` : ''}">${ICON.notes}<span class="notes-word">Notes</span>${noteCount() ? `<span class="count">${noteCount()}</span>` : ''}</button><div class="brand">${ICON.mark}<span class="brand-name">Paced</span></div></div>
-    <div class="row-actions"><button class="btn ghost small" data-act="show-archive">Completed${archived ? `<span class="count">${archived}</span>` : ''}</button>
+  return `<div class="brand-row"><div class="brand">${ICON.mark}<span class="brand-name">Paced</span></div>
+    <div class="row-actions"><button class="btn ghost small" data-act="open-notes" title="Jot down a thought (press N)" aria-label="Notes${noteCount() ? `, ${noteCount()}` : ''}">${ICON.notes}<span class="notes-word">Notes</span>${noteCount() ? `<span class="count">${noteCount()}</span>` : ''}</button>
     <button class="btn ghost small" data-act="show-history">History</button>
     <button class="icon-btn" data-act="open-look" title="Settings" aria-label="Settings">${ICON.gear}</button></div></div>`;
 }
 
 function homeHTML() {
-  const list = activeTasks();
+  const list = activeTasks(), done = archivedTasks().length;
+  const doneLink = done ? `<button class="link done-link" data-act="show-archive">${ICON.check}Completed tasks<span class="count">${done}</span></button>` : '';
   const left = list.reduce((a, t) => a + minLeft(t), 0);
   return `<div class="title-row"><h1>My tasks</h1>${list.length ? `<div class="row-actions"><button class="btn ghost small" data-act="open-import">Import</button>
     <button class="btn primary small" data-act="open-add">${ICON.plus}New task</button></div>` : ''}</div>
   ${list.length ? `<p class="sub">${list.length} ${list.length === 1 ? 'task' : 'tasks'}${left ? ` · about ${fmtMin(left)} of work` : ''}</p>
   <ul class="tasks">${list.map(taskHTML).join('')}</ul>
+  ${doneLink}
   ${methodCardHTML()}` : `
   <p class="sub">Nothing to do yet</p>
   <section class="empty">
@@ -1750,7 +1752,8 @@ function homeHTML() {
     </ol>
     <div class="row"><button class="btn primary" data-act="open-add">${ICON.plus}Add your first task</button>
     <button class="btn ghost" data-act="open-import">Import tasks</button></div>
-  </section>`}
+  </section>
+  ${doneLink}`}
   ${savedLine()}`;
 }
 
