@@ -65,7 +65,14 @@ button:disabled { cursor: default; opacity: .45; }
 .app { max-width: 632px; margin: 0 auto; padding: 22px var(--side-r) 96px var(--side-l); }
 .topbar { max-width: 632px; margin: 0 auto; padding: 12px var(--side-r) 10px var(--side-l); }
 .topbar:empty { display: none; }
-.topbar:not(:empty) ~ .app { padding-top: 6px; }
+.topbar:not(:empty) ~ .page .app { padding-top: 6px; }
+/* On a wide screen the timeline gets a column of its own beside your list, and stays in view as you scroll.
+   The list keeps its width, since short rows are easier to read, and the pair is centered rather than stretched. */
+body.side-day .page { display: grid; grid-template-columns: minmax(0, 632px) minmax(0, 1100px); justify-content: center; align-items: start; column-gap: 8px; padding-inline: 8px; }
+body.side-day .app { grid-area: 1 / 1; max-width: none; margin: 0; }
+body.side-day .day { grid-area: 1 / 2; position: sticky; top: 8px; max-width: none; margin: 16px 0 0; }
+body.side-day .topbar { max-width: 1756px; }
+body.side-day .day-toggle { display: none; }
 .brand-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; }
 .brand { display: flex; align-items: center; gap: 7px; font: 700 16px/1 var(--font-display); color: var(--accent); }
 h1 { font: 800 clamp(32px, 8vw, 42px)/1.05 var(--font-display); letter-spacing: -.02em; margin: 18px 0 6px; text-wrap: balance; }
@@ -536,8 +543,8 @@ body.has-mini .toast { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 </style>
 
 <header class="topbar" id="topbar"></header>
-<aside class="day" id="day" aria-label="Today" hidden></aside>
-<div class="app"><main id="main"></main></div>
+<div class="page"><aside class="day" id="day" aria-label="Today" hidden></aside>
+<div class="app"><main id="main"></main></div></div>
 <div class="mini" id="mini" hidden></div>
 <div class="focus" id="focus" hidden></div>
 <div class="layer" id="layer" hidden></div>
@@ -1753,14 +1760,17 @@ const STRETCH_MAX_MIN = 180; // past this, a stretch you selected across is abou
 let railView = null; // where the timeline last drew itself, for turning a position into a time
 let dayOpen = true; // open or closed is a choice for each device, so it stays out of your account
 try { dayOpen = localStorage.getItem(DAY_KEY) !== 'shut'; } catch (e) {}
+// With room beside the list, the timeline has a column of its own and is always open there.
+const SIDE_MQ = '(min-width: 1180px)', SIDE_RAIL_H = 150; // pixels: how tall it starts out in its own column
+const sideDay = () => matchMedia(SIDE_MQ).matches, dayShown = () => dayOpen || sideDay();
 const RAIL_KEY = 'paced:rail', RAIL_MIN = 76, RAIL_MAX = 240, RAIL_STEP = 20; // pixels
-let railH = RAIL_MIN; // like open or closed, how tall it is suits the screen, so it's for each device too
-try { railH = clamp(+localStorage.getItem(RAIL_KEY) || RAIL_MIN, RAIL_MIN, RAIL_MAX); } catch (e) {}
+let railH = RAIL_MIN, railHSaved = false; // like open or closed, how tall it is suits the screen, so it's for each device too
+try { railHSaved = !!+localStorage.getItem(RAIL_KEY); railH = clamp(+localStorage.getItem(RAIL_KEY) || RAIL_MIN, RAIL_MIN, RAIL_MAX); } catch (e) {}
 function setRailH(h) {
   railH = clamp(h, RAIL_MIN, Math.max(RAIL_MIN, Math.min(RAIL_MAX, innerHeight - 220)));
   renderDay('quiet');
 }
-const saveRailH = () => { try { localStorage.setItem(RAIL_KEY, railH); } catch (e) {} };
+const saveRailH = () => { railHSaved = true; try { localStorage.setItem(RAIL_KEY, railH); } catch (e) {} };
 const RAIL_ZOOM = { min: 2, phone: 1.6, max: 3 }, RAIL_PEEK = 32, RAIL_EDGE = 40; // pixels: per minute, of the next hour left showing, and where a drag starts scrolling
 let railAt = null, railPx = 0; // the time at the left edge once you've scrolled; until then it follows your hours
 let daySel = null; // what's selected: { kind, ids }, with the { box } you dragged across and its snapped { range }
@@ -1775,7 +1785,7 @@ function setDayOpen(open) {
 function dayView() {
   const p = drag?.preview || dayPlan(), now = minuteNow(), lay = layoutDay(p, now), past = pastWork(now);
   const points = [now, ...p.windows.flatMap(w => [w.s, w.e])];
-  const laneW = Math.min(600, document.documentElement.clientWidth - 32), wide = laneW >= 560;
+  const laneW = Math.min(1068, ($('#day')?.clientWidth || document.documentElement.clientWidth) - 32), wide = laneW >= 560;
   // The whole day is always there to scroll through. Your hours set the zoom and where it opens, so what's on it never changes the scale.
   let home = Math.max(0, Math.floor((Math.min(...points) - (wide ? 20 : 0)) / 60) * 60), last = Math.ceil((Math.max(...points) + (wide ? 20 : 0)) / 60) * 60;
   home = Math.max(home, Math.floor((now - 60) / 60) * 60); // it opens an hour before now, so what's over doesn't squeeze what's left
@@ -2055,14 +2065,17 @@ function renderSlots(lay, quiet) {
 function renderDay(how) {
   const el = $('#day'), show = state.ready && Store.mode !== 'signin' && state.view === 'home' && !state.focusOpen && activeTasks().length > 0, wasHidden = el.hidden;
   el.hidden = !show;
+  const side = show && sideDay(), open = dayOpen || side;
+  document.body.classList.toggle('side-day', side); // before drawing, so the timeline is measured at its new width
   if (!show) { daySel = null; return; }
+  if (!railHSaved) railH = side ? SIDE_RAIL_H : RAIL_MIN;
   const scroller = $('.rail-scroll');
   if (scroller && !wasHidden) railScrolled(scroller); // the browser may not have told us about the latest scroll yet
-  el.classList.toggle('shut', !dayOpen);
+  el.classList.toggle('shut', !open);
   el.style.setProperty('--rail-h', `${railH}px`);
-  if (dayOpen) { el.innerHTML = dayHTML(); placeRail(railView); }
+  if (open) { el.innerHTML = dayHTML(); placeRail(railView); }
   else el.innerHTML = dayHeadHTML(layoutDay(), false);
-  renderSlots(dayOpen ? railView.lay : layoutDay(), how === 'quiet');
+  renderSlots(open ? railView.lay : layoutDay(), how === 'quiet');
 }
 window.addEventListener('resize', () => {
   if (drag) return;
@@ -3961,7 +3974,7 @@ function lift(p, x, y) {
   press = null;
   clearTimeout(p.timer);
   daySel = null;
-  if (!dayOpen) setDayOpen(true); // dragging a task means you're planning, so the timeline comes back
+  if (!dayShown()) setDayOpen(true); // dragging a task means you're planning, so the timeline comes back
   const d = p.src.dataset;
   const started = d.grow ? liftGrow(d.grow, p.x) : d.size ? liftSize(p.y) : d.edge ? liftEdge(+d.i, d.edge) : d.drag ? liftItem(p.src) : liftSelect(p.x);
   if (!started) return;
