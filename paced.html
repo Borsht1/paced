@@ -3365,7 +3365,7 @@ function noteWhen(n) {
 function notesHTML(enter) {
   const list = [...state.notes.values()].sort((a, b) => b.createdAt - a.createdAt);
   return `${sheetOpen(enter, 'Notes')}${sheetHead('Notes')}
-    <p class="help" style="margin-top:6px">Get a thought out of your head, then get back to work. Your timer keeps running.</p>
+    <p class="help" style="margin-top:6px">Get a thought out of your head, then get back to work. Your timer keeps running. Start a line with - for a bullet, and Enter carries it to the next line.</p>
     <form class="notes-add" id="note-form">
       <textarea id="note-new" class="text-input note-input" rows="1" placeholder="Write a thought, then press Enter" aria-label="New note">${esc(state.noteDraft || '')}</textarea>
       <button type="submit" class="btn primary">Save</button>
@@ -3373,7 +3373,8 @@ function notesHTML(enter) {
     ${list.length ? `<ul class="notes">${list.map(n => `<li class="note">
       <textarea class="text-input note-text" data-id="${n.id}" rows="1" aria-label="Note from ${esc(noteWhen(n))}">${esc(n.text)}</textarea>
       <div class="note-foot"><small class="muted">${esc(noteWhen(n))}</small>
-        <span class="note-acts"><button class="link small" data-act="note-task" data-id="${n.id}">Make it a task</button>
+        <span class="note-acts"><button class="link small" data-act="note-bullet" data-id="${n.id}" aria-label="Make this line a bullet">List</button>
+        <button class="link small" data-act="note-task" data-id="${n.id}">Make it a task</button>
         <button class="icon-btn" data-act="note-del" data-id="${n.id}" title="Delete" aria-label="Delete this note">${ICON.trash}</button></span></div>
     </li>`).join('')}</ul>` : '<p class="help" style="margin-top:16px">Nothing here yet. On a computer, press N anywhere in Paced to open this.</p>'}
   </section>`;
@@ -3410,6 +3411,50 @@ function deleteNote(id) {
   state.notes.delete(id); Store.write(id, null);
   renderLayer(); render();
   if (n.text.trim()) toast('Note deleted.', 'Undo', () => { saveNote(n); renderLayer(); render(); });
+}
+// Bullets are plain "- " lines, so a note is still just text. Indent nested ones with Tab.
+const NOTE_BULLET = /^(\s*)- /;
+function noteLine(ta) {
+  const start = ta.value.slice(0, ta.selectionStart).lastIndexOf('\n') + 1, end = ta.value.indexOf('\n', ta.selectionStart);
+  return { start, text: ta.value.slice(start, end < 0 ? ta.value.length : end) };
+}
+// Replaces part of a note and tells the page it changed, so the note saves like typing.
+function editNote(ta, from, to, text, caret) {
+  ta.setRangeText(text, from, to, 'end');
+  ta.setSelectionRange(caret, caret);
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
+}
+function toggleBullet(ta) {
+  const { start, text } = noteLine(ta), m = text.match(NOTE_BULLET);
+  if (m) editNote(ta, start, start + m[0].length, '', start);
+  else editNote(ta, start, start, '- ', start + 2);
+  ta.focus();
+}
+// Pressing List keeps the cursor where it was in the note, or puts it at the end if the note wasn't being edited.
+document.addEventListener('mousedown', e => {
+  const b = e.target.closest?.('[data-act="note-bullet"]');
+  if (!b) return;
+  e.preventDefault();
+  const ta = document.querySelector(`textarea.note-text[data-id="${b.dataset.id}"]`);
+  if (ta && document.activeElement !== ta) ta.setSelectionRange(ta.value.length, ta.value.length);
+});
+// Enter carries the bullet to the next line, and on an empty bullet it stops the list. Returns false when the key is left alone.
+function noteKey(e, ta) {
+  const { start, text } = noteLine(ta), m = text.match(NOTE_BULLET);
+  if (!m) return false;
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    if (!text.slice(m[0].length).trim()) editNote(ta, start, start + m[0].length, '', start);
+    else { const at = ta.selectionStart; editNote(ta, at, at, `\n${m[1]}- `, at + 3 + m[1].length); }
+    return true;
+  }
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    if (!e.shiftKey) editNote(ta, start, start, '  ', ta.selectionStart + 2);
+    else if (text.startsWith('  ')) editNote(ta, start, start + 2, '', Math.max(start, ta.selectionStart - 2));
+    return true;
+  }
+  return false;
 }
 // A note left empty doesn't stay on the list.
 function pruneNotes() {
@@ -4230,6 +4275,7 @@ document.addEventListener('click', e => {
     case 'open-notes': openNotes(); break;
     case 'note-task': noteToTask(id); break;
     case 'note-del': deleteNote(id); break;
+    case 'note-bullet': toggleBullet(document.querySelector(`textarea.note-text[data-id="${id}"]`)); break;
     case 'open-schedules': state.layer = { type: 'schedules' }; state.duePick = null; state.schedLoad = null; renderLayer(true); break;
     case 'sched-load': {
       const open = state.schedLoad === id;
@@ -4419,6 +4465,7 @@ document.addEventListener('keydown', e => {
   const el = e.target;
   // N opens Notes from anywhere, unless you're typing somewhere else.
   if (e.key.toLowerCase() === 'n' && !e.metaKey && !e.ctrlKey && !e.altKey && !state.layer && state.ready && Store.mode !== 'signin' && !el.closest?.('input, textarea, select, [contenteditable]')) { e.preventDefault(); openNotes(); return; }
+  if (el.matches?.('textarea.note-text, #note-new') && (e.key === 'Enter' || e.key === 'Tab') && noteKey(e, el)) return;
   if (e.key === 'Enter' && !e.shiftKey && el.id === 'note-new') { e.preventDefault(); saveNewNote(); return; }
   if (e.key === 'Enter') {
     if (el.id === 'new-title') { e.preventDefault(); $('#draft-step').focus(); return; }
