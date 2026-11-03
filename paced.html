@@ -102,7 +102,7 @@ button.check:hover > span { border-color: var(--zone); color: var(--zone); }
 .check.sm { width: 38px; height: 38px; }
 .check.sm > span { width: 22px; height: 22px; }
 .task-body { min-width: 0; text-align: left; background: none; border: none; padding: 12px 6px; display: grid; gap: 4px; }
-.task-title { font-weight: 600; font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
+.task-title { font-weight: 600; font-size: 17px; line-height: 1.3; overflow-wrap: break-word; }
 .task-meta { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .badge { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--accent); }
 .badge .dot, .mini-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; animation: pulse 1.6s ease-in-out infinite; }
@@ -234,8 +234,31 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .mini-in { max-width: 600px; margin: 0 auto; display: flex; align-items: center; gap: 12px; background: var(--ink); color: var(--bg); border-radius: 18px; padding: 10px 10px 10px 16px; box-shadow: 0 8px 28px rgba(0, 0, 0, .25); }
 /* One column, with today's timeline above your list. On a big screen it gets a little wider, so the timeline
    shows more of the day, but it stays a single centered column: rows stretched wider are harder to read. */
+/* The one thing to do next, above everything else. When yesterday left work unfinished, it asks about that first. */
+.next { max-width: 632px; margin: 0 auto; padding: 6px var(--side-r) 4px var(--side-l); }
+.next-card { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; padding: 14px 14px 14px 18px; border-radius: var(--r); background: var(--accent-soft); }
+.next-card.carry { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.next-text { flex: 1 1 240px; min-width: 0; display: grid; gap: 2px; }
+.next-kicker { font-size: 13px; font-weight: 700; color: var(--accent); }
+.next-text b { font: 700 19px/1.25 var(--font-display); overflow-wrap: break-word; }
+.next-text span:last-child { font-size: 14px; color: var(--muted); }
+.next-card .row-actions { gap: 8px; margin-left: auto; }
+/* Quick add: one line, read as you type */
+.quick-add { display: flex; gap: 8px; margin: 0 0 6px; }
+.quick-add .text-input { flex: 1; min-width: 0; }
+.quick-hint { margin: 0 0 12px 4px; min-height: 19px; font-size: 13px; color: var(--muted); }
+.quick-hint b { color: var(--ink); font-weight: 600; }
+/* A task past its due date gets one calm line with what to do about it */
+.task-ask { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: -6px 0 6px; padding-left: 70px; font-size: 14px; color: var(--warn); }
+.task-ask .link { font-size: 14px; }
+@media (max-width: 400px) {
+  .task-ask { padding-left: 16px; }
+  .task .start { padding: 8px 10px; }
+  .start-word { display: none; } /* on the smallest phones the play icon is enough, so the name gets the room */
+  .task-toggle { width: 28px; }
+}
 @media (min-width: 1400px) {
-  .app, .topbar, .day { max-width: 792px; }
+  .app, .topbar, .day, .next { max-width: 792px; }
   .mini-in { max-width: 760px; }
 }
 .mini-dot { color: var(--zone); }
@@ -542,6 +565,7 @@ body.has-mini .toast { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 </style>
 
 <header class="topbar" id="topbar"></header>
+<section class="next" id="next" aria-label="Next up" hidden></section>
 <aside class="day" id="day" aria-label="Today" hidden></aside>
 <div class="app"><main id="main"></main></div>
 <div class="mini" id="mini" hidden></div>
@@ -676,7 +700,7 @@ const CHECK_WAIT_MIN = 3; // how long a "Still working?" notification waits for 
 function dueInfo(t) {
   if (!t.due) return null;
   const today = dateKey();
-  if (!t.archived && t.due < today) return { text: `Overdue, was due ${t.due === addDays(today, -1) ? 'yesterday' : fmtDayShort(t.due)}`, cls: 'late' };
+  if (!t.archived && t.due < today) return { text: `Was due ${t.due === addDays(today, -1) ? 'yesterday' : fmtDayShort(t.due)}`, cls: 'soon', past: true };
   if (t.due === today) return { text: 'Due today', cls: 'soon' };
   if (t.due === addDays(today, 1)) return { text: 'Due tomorrow', cls: 'soon' };
   return { text: `Due ${fmtDayShort(t.due)}`, cls: '' };
@@ -1126,7 +1150,10 @@ function dayPlan() {
   if (p && p.date === today) return p;
   return set ? { date: today, windows: clone(set.windows), items: clone(set.items) } : { date: today, windows: clone(usualHours()), items: [] };
 }
-function savePlan(p) { state.meta.plan = p; saveMeta(); }
+function savePlan(p) {
+  if (state.meta.plan && state.meta.plan.date !== p.date) state.meta.prevPlan = state.meta.plan; // so yesterday's unfinished work can still be offered
+  state.meta.plan = p; saveMeta();
+}
 // Windows in order, with any that touch joined and any with no length dropped.
 function cleanWindows(list) {
   const out = [];
@@ -1293,6 +1320,7 @@ function renderMain() {
   if (state.focusOpen && state.ready) return;
   const main = $('#main');
   $('#topbar').innerHTML = state.ready && Store.mode !== 'signin' && state.view === 'home' ? topbarHTML() : '';
+  renderNext();
   if (!state.ready) { main.innerHTML = '<div class="loading"><span class="pulse"></span>Loading your tasks…</div>'; return; }
   if (Store.mode === 'signin') { main.innerHTML = authHTML(); return; }
   main.innerHTML = state.view === 'archive' ? archiveHTML() : state.view === 'history' ? historyPageHTML() : homeHTML();
@@ -1733,6 +1761,116 @@ function topbarHTML() {
     <button class="icon-btn" data-act="open-look" title="Settings" aria-label="Settings">${ICON.gear}</button></div></div>`;
 }
 
+/* ----- Next up: the one thing to start, so opening Paced never begins with a choice ----- */
+// What the timeline says comes next, or else what's due soonest, or else the top of your list.
+function nextUp() {
+  const m = state.meta;
+  if (m.session || m.brk) return null; // the bar at the bottom covers what's running
+  const ready = t => stepsLeft(t).length > 0, now = minuteNow();
+  const b = layoutDay().blocks.find(x => !x.item.front && ready(x.task));
+  if (b) {
+    const st = b.step || itemSteps(b.item, b.task, dayPlan())[0] || nextStep(b.task, null);
+    return { t: b.task, st, why: b.start > now + PLAN_SNAP ? `On your timeline at ${clockAt(b.start)}` : 'First on your timeline' };
+  }
+  const list = activeTasks().filter(ready), soon = list.find(t => t.due && t.due <= addDays(dateKey(), 1));
+  const t = soon || list[0];
+  return t ? { t, st: nextStep(t, null), why: soon ? dueInfo(t).text : 'Top of your list' } : null;
+}
+// Yesterday's timeline, if it left tasks unfinished that aren't on today's yet.
+function carryOver() {
+  const m = state.meta, today = dateKey();
+  if (m.carryDone === today || m.session || m.brk) return null;
+  const old = [m.plan, m.prevPlan].filter(x => x && x.date < today).sort((a, b) => b.date.localeCompare(a.date))[0];
+  if (!old) return null;
+  const now = dayPlan().items, onToday = i => now.some(j => j.taskId === i.taskId && (j.stepId || null) === (i.stepId || null));
+  const items = old.items.filter(i => i.taskId && onTimeline(i) && !onToday(i));
+  return items.length ? { date: old.date, items } : null;
+}
+function nextHTML() {
+  const c = carryOver();
+  if (c) {
+    const names = [...new Set(c.items.map(i => state.tasks.get(i.taskId).title))], n = names.length;
+    const day = c.date === addDays(dateKey(), -1) ? 'yesterday' : fmtDayShort(c.date);
+    return `<div class="next-card carry"><div class="next-text"><span class="next-kicker">From ${esc(day)}</span>
+        <b>${n === 1 ? 'One task' : `${n} tasks`} didn’t get done</b>
+        <span>${esc(names.slice(0, 3).join(', '))}${n > 3 ? ` and ${n - 3} more` : ''}</span></div>
+      <div class="row-actions"><button class="btn ghost" data-act="carry-no">Not now</button><button class="btn primary" data-act="carry-yes">Put on today</button></div></div>`;
+  }
+  const x = nextUp();
+  if (!x || !x.st) return '';
+  const step = x.t.steps.length > 1 ? `${x.st.title} · ` : '';
+  return `<div class="next-card"><div class="next-text"><span class="next-kicker">Next up</span><b>${esc(x.t.title)}</b>
+      <span>${esc(step)}${x.st.est ? fmtMin(x.st.est) : 'No minutes yet'} · ${esc(x.why)}</span></div>
+    <button class="btn primary" data-act="sel-start" data-id="${x.t.id}" data-step="${x.st.id}">${ICON.play}Start</button></div>`;
+}
+function renderNext() {
+  const el = $('#next'), html = state.ready && Store.mode !== 'signin' && state.view === 'home' ? nextHTML() : '';
+  el.hidden = !html;
+  el.innerHTML = html;
+}
+function carryYes() {
+  const c = carryOver(); if (!c) return;
+  const p = dayPlan();
+  state.meta.carryDone = dateKey();
+  changePlan(`Put ${c.items.length === 1 ? 'it' : 'them'} on today`, { ...p, items: [...p.items, ...c.items.map(i => ({ ...clone(i), id: newId('i'), at: null }))] });
+}
+
+/* ----- Quick add: "chem lab 40m fri" becomes a task with 40 minutes, due Friday ----- */
+const DAY_WORDS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+// Minutes and a day are read only from the end, so a name like "sat prep" stays a name.
+function parseQuick(text) {
+  const words = text.trim().split(/\s+/).filter(Boolean), today = dateKey();
+  let min = null, due = null;
+  const dayOf = w => {
+    w = w.toLowerCase().replace(/[.,]$/, '');
+    if (['today', 'tonight', 'tod'].includes(w)) return today;
+    if (['tomorrow', 'tmr', 'tmrw', 'tom'].includes(w)) return addDays(today, 1);
+    const i = DAY_WORDS.findIndex(d => w === d || (w.length >= 3 && d.startsWith(w.slice(0, 3)) && /^(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)(day|nesday|sday|urday|rsday)?$/.test(w)));
+    if (i >= 0) return addDays(today, (i - keyDate(today).getDay() + 7) % 7);
+    const md = w.match(/^(\d{1,2})\/(\d{1,2})$/);
+    if (md) {
+      const y = +today.slice(0, 4), k = `${y}-${pad(+md[1])}-${pad(+md[2])}`;
+      return +md[1] >= 1 && +md[1] <= 12 && +md[2] >= 1 && +md[2] <= 31 ? (k < today ? `${y + 1}${k.slice(4)}` : k) : null;
+    }
+    return null;
+  };
+  const minOf = w => {
+    const m = w.toLowerCase().match(/^(?:(\d+(?:\.\d+)?)(?:h|hr|hrs|hour|hours))?(?:(\d+)(?:m|min|mins|minute|minutes))?$/);
+    return m && (m[1] || m[2]) ? Math.round((+m[1] || 0) * 60 + (+m[2] || 0)) || null : null;
+  };
+  for (let n = 0; n < 4 && words.length > 1; n++) {
+    const w = words[words.length - 1], prev = words[words.length - 2];
+    const unit = words.length > 2 && /^\d+(\.\d+)?$/.test(prev) && /^(h|hr|hrs|hour|hours|m|min|mins|minute|minutes)$/i.test(w); // "1 hr", "40 min"
+    if (min == null && unit) { min = minOf(prev + w); words.splice(-2); continue; }
+    if (min == null && minOf(w)) { min = minOf(w); words.pop(); continue; }
+    if (due == null && dayOf(w)) { due = dayOf(w); words.pop(); if (words.length > 1 && /^due$/i.test(words[words.length - 1])) words.pop(); continue; }
+    break;
+  }
+  return { title: words.join(' ').slice(0, 200), min, due };
+}
+function quickHint(text) {
+  if (!text.trim()) return '';
+  const q = parseQuick(text);
+  if (!q.title) return 'Type a name for the task';
+  return `Adds <b>${esc(q.title)}</b>${q.min ? ` · ${fmtMin(q.min)}` : ' · add minutes like 40m'}${q.due ? ` · due ${esc(fmtFullDay(q.due))}` : ''}`;
+}
+function quickAdd() {
+  const el = $('#quick-input'), q = parseQuick(el.value);
+  if (!q.title) { el.focus(); return; }
+  const t = { id: newId('t'), title: q.title, due: q.due, createdAt: Date.now(), archived: false, completedAt: null,
+    steps: [{ id: newId('s'), title: q.title, est: q.min, done: false, actual: null, doneAt: null }] };
+  saveTask(t);
+  state.quick = '';
+  render();
+  $('#quick-input')?.focus();
+  toast(`Added “${t.title}”`, 'Undo', () => { removeTask(t.id); render(); });
+}
+const quickHTML = () => `<form class="quick-add" id="quick-add">
+    <input id="quick-input" class="text-input" autocomplete="off" enterkeyhint="done" value="${esc(state.quick || '')}" placeholder="Quick add, like “lab 40m fri”" aria-label="Quick add a task. End with minutes like 40m and a day like fri or tomorrow." aria-describedby="quick-hint">
+    <button type="submit" class="btn ghost">Add</button>
+  </form>
+  <p class="quick-hint" id="quick-hint" aria-live="polite">${quickHint(state.quick || '')}</p>`;
+
 function homeHTML() {
   const list = activeTasks(), done = archivedTasks().length;
   const doneLink = done ? `<button class="link done-link" data-act="show-archive">${ICON.check}Completed tasks<span class="count">${done}</span></button>` : '';
@@ -1740,10 +1878,12 @@ function homeHTML() {
   return `<div class="title-row"><h1>My tasks</h1>${list.length ? `<div class="row-actions"><button class="btn ghost small" data-act="open-import">Import</button>
     <button class="btn primary small" data-act="open-add">${ICON.plus}New task</button></div>` : ''}</div>
   ${list.length ? `<p class="sub">${list.length} ${list.length === 1 ? 'task' : 'tasks'}${left ? ` · about ${fmtMin(left)} of work` : ''}</p>
+  ${quickHTML()}
   <ul class="tasks">${list.map(taskHTML).join('')}</ul>
   ${doneLink}
   ${methodCardHTML()}` : `
   <p class="sub">Nothing to do yet</p>
+  ${quickHTML()}
   <section class="empty">
     <h2>Here’s how Paced works</h2>
     <ol class="how-list">
@@ -2177,10 +2317,10 @@ function taskHTML(t) {
   if (!total) meta = 'No steps yet';
   else if (!done) meta = `${total} ${total === 1 ? 'step' : 'steps'}${left ? ` · about ${fmtMin(left)}` : ''}`;
   else meta = `${done} of ${total} steps done${left ? ` · about ${fmtMin(left)} left` : ''}`;
-  const live = state.meta.session?.active?.taskId === t.id;
+  const live = state.meta.session?.active?.taskId === t.id, due = dueInfo(t);
   const action = !total
     ? `<button class="btn ghost small" data-act="add-steps" data-id="${t.id}">Add steps</button>`
-    : `<button class="btn soft small start" data-act="focus-task" data-id="${t.id}" aria-label="${live ? 'Open the timer for' : 'Start working on'} “${esc(t.title)}”">${live ? 'Open timer' : ICON.play + 'Start'}</button>`;
+    : `<button class="btn soft small start" data-act="focus-task" data-id="${t.id}" aria-label="${live ? 'Open the timer for' : 'Start working on'} “${esc(t.title)}”">${live ? 'Open timer' : ICON.play + '<span class="start-word">Start</span>'}</button>`;
   const todo = stepsLeft(t), open = openSteps.has(t.id) && todo.length;
   const toggle = todo.length ? `<button class="icon-btn task-toggle" data-act="toggle-steps" data-id="${t.id}" title="${open ? 'Hide steps' : 'Show steps to drag onto the timeline'}" aria-label="${open ? 'Hide' : 'Show'} the steps of “${esc(t.title)}”" aria-expanded="${!!open}">${ICON.chev}</button>` : '';
   const lay = open ? layoutDay() : null;
@@ -2195,11 +2335,12 @@ function taskHTML(t) {
     <button class="check" data-act="complete-task" data-id="${t.id}" title="Mark the whole task as done" aria-label="Mark “${esc(t.title)}” as done"><span>${ICON.check}</span></button>
     <button class="task-body" data-act="open-task" data-id="${t.id}">
       <span class="task-title">${esc(t.title)}</span>
-      <span class="task-meta">${meta}${t.due ? ' · ' + dueHTML(t) : ''}</span>
+      <span class="task-meta">${meta}${t.due && !due?.past ? ' · ' + dueHTML(t) : ''}</span>
       ${live ? '<span class="badge"><span class="dot"></span>Working on this now</span>' : ''}
       ${done ? `<span class="bar" aria-hidden="true"><i style="width:${Math.round(done / total * 100)}%"></i></span>` : ''}
     </button>
     <div class="task-acts">${toggle}${action}</div>
+    ${due?.past ? `<div class="task-ask"><span>${esc(due.text)}</span><button class="link" data-act="due-today" data-id="${t.id}">Move to today</button></div>` : ''}
     ${steps}
     <div class="task-slot" data-slot="${t.id}" hidden></div>
   </li>`;
@@ -2257,7 +2398,12 @@ function renderMini() {
   const dot = `<span class="mini-dot${m.brk || (c && c.paused) ? ' still' : ''}"></span>`;
   const title = c ? esc(c.label) + (c.paused ? ' (paused)' : '') : 'Ready for your next step';
   const time = c ? `<span class="mini-time" data-tick="mini">${fmtClock(c.left)}</span>` : '';
-  el.innerHTML = `<div class="mini-in">${dot}<span class="mini-title">${title}</span>${time}${popOutButton()}<button class="btn small" data-act="focus-open">Open timer</button></div>`;
+  // Running over, the bar offers what to do about it instead of only showing the time.
+  const plan = !m.brk && s && !s.active && s.gap ? gapPlan(s) : null;
+  const act = c?.over && m.brk ? '<button class="btn small" data-act="end-break">Back to work</button>'
+    : c?.over && plan?.type === 'step' ? `<button class="btn small" data-act="start-step" data-id="${plan.t.id}" data-step="${plan.next.id}">${ICON.play}Start next step</button>`
+    : '<button class="btn small" data-act="focus-open">Open timer</button>';
+  el.innerHTML = `<div class="mini-in">${dot}<span class="mini-title">${title}</span>${time}${popOutButton()}${act}</div>`;
 }
 
 // The one clock that matters right now, for the tab title and the bar at the bottom. A negative "left" is time past the end.
@@ -2275,7 +2421,7 @@ function liveClock(now = Date.now()) {
   if (!s.gap) return null;
   const plan = gapPlan(s), left = (s.gap.until - now) / 1000;
   if (plan.type === 'none') return null;
-  const label = left < 0 ? 'Nothing running' : plan.type === 'step' ? 'Next: ' + plan.next.title : plan.type === 'break' ? 'Break coming up' : 'Pick what’s next';
+  const label = left < 0 ? 'Break’s over' : plan.type === 'step' ? 'Next: ' + plan.next.title : plan.type === 'break' ? 'Break coming up' : 'Pick what’s next';
   return { label, left, over: left < 0 };
 }
 
@@ -4212,6 +4358,14 @@ document.addEventListener('click', e => {
     case 'break-yes': takeBreak(min || 5); break;
     case 'keep-going': if (s) { s.snoozeUntil = Date.now() + SNOOZE_MIN * 60e3; saveMeta(); } render(); break;
     case 'end-break': endBreak(); break;
+    case 'carry-yes': carryYes(); break;
+    case 'carry-no': state.meta.carryDone = dateKey(); saveMeta(); render(); break;
+    case 'due-today': {
+      const t = state.tasks.get(id); if (!t) break;
+      const was = t.due; t.due = dateKey(); saveTask(t); render();
+      toast(`Moved “${t.title}” to today`, 'Undo', () => { t.due = was; saveTask(t); render(); });
+      break;
+    }
     case 'fedit-toggle': state.fEdit = !state.fEdit; renderFocus(); break;
     case 'fstep-move': moveStep(step, parseInt(v, 10)); break;
     case 'fstep-del': deleteFocusStep(step); break;
@@ -4308,6 +4462,7 @@ document.addEventListener('submit', e => {
   const f = e.target;
   if (f.id === 'auth-form') submitAuth();
   else if (f.id === 'draft-add') addDraftStep();
+  else if (f.id === 'quick-add') quickAdd();
   else if (f.id === 'sched-form') saveSchedule($('#sched-name').value.trim());
   else if (f.id === 'note-form') saveNewNote();
   else if (f.id === 'jot-form') {
@@ -4352,6 +4507,7 @@ document.addEventListener('input', e => {
   else if (el.id === 'auth-email') state.auth.email = el.value;
   else if (el.id === 'paste-text') state.gt.text = el.value;
   else if (el.id === 'sched-name') state.schedName = el.value;
+  else if (el.id === 'quick-input') { state.quick = el.value; $('#quick-hint').innerHTML = quickHint(el.value); }
   else if (el.id === 'new-title') { state.draft.title = el.value; if (el.value.trim()) $('#new-err').hidden = true; }
   else if (el.id === 'split-name' && state.ask) state.ask.name = el.value;
   else if ((el.id === 'split-min' || el.id === 'forgot-min') && state.ask) state.ask.min = parseMin(el.value);
