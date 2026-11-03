@@ -111,6 +111,13 @@ button.check:hover > span { border-color: var(--zone); color: var(--zone); }
 .task.can-plan { grid-template-columns: auto auto minmax(0, 1fr) auto; padding-left: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: grab; }
 .grip { width: 22px; align-self: stretch; display: grid; place-items: center; color: var(--muted); opacity: .55; touch-action: none; }
 .task.can-plan .task-body { cursor: inherit; }
+.task-acts { display: flex; align-items: center; gap: 2px; }
+.task-toggle { width: 32px; height: 32px; }
+.task-toggle svg { transition: transform .15s; }
+.task-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.task-steps { grid-column: 1 / -1; list-style: none; margin: 2px 0 4px; padding: 0; display: grid; gap: 2px; }
+.tstep { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 5px 8px 5px 0; border-radius: 8px; background: var(--bg); font-size: 14px; cursor: grab; }
+.tstep small { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .task-slot { grid-column: 1 / -1; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 2px -12px -6px 0; padding: 6px 14px; border-radius: 0 0 var(--r) var(--r); background: var(--zone-soft); color: var(--zone); font-size: 13px; font-variant-numeric: tabular-nums; }
 .task-slot b { font-weight: 700; }
 .task-slot.live { background: var(--accent-soft); color: var(--accent); }
@@ -298,6 +305,7 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .cal-day:hover { background: var(--surface-2); }
 .cal-day.past { color: var(--muted); font-weight: 400; }
 .cal-day.today { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.cal-day:disabled { opacity: .35; cursor: default; background: none; }
 .cal-day.on { background: var(--accent); color: var(--accent-ink); }
 
 .steps { list-style: none; margin: 4px 0 0; padding: 0; }
@@ -318,6 +326,11 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .min-field input::-webkit-outer-spin-button, .min-field input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .min-field input:focus { outline: none; }
 .min-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.scheds { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sched { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.sched > div:first-child { display: grid; gap: 2px; min-width: 0; }
+.sched small { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sched .cal { flex-basis: 100%; margin-top: 0; }
 .step-add { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
 .step-add > .text-input { flex: 1 1 130px; width: auto; }
 
@@ -515,6 +528,7 @@ const ICON = {
   up: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
   down: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
   calendar: '<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 5.5h13a2 2 0 012 2v11a2 2 0 01-2 2h-13a2 2 0 01-2-2v-11a2 2 0 012-2zM3.5 10.5h17M8 3.5v4M16 3.5v4" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" fill="none"/></svg>',
+  chev: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9.5l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" fill="none"/></svg>',
   archive: '<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 4.5h17v4h-17zM5 8.5V18a2 2 0 002 2h10a2 2 0 002-2V8.5M10 12.5h4" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" fill="none"/></svg>',
   trash: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15M10 7V4.5h4V7M6.5 7l1 13h9l1-13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
   edit: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 00-3-3L5 17v3zM14.5 7.5l2 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
@@ -1066,8 +1080,9 @@ const hourName = h => { const d = new Date(); d.setHours(h, 0, 0, 0); return d.t
 const usualHours = () => state.meta.hours?.length ? state.meta.hours : DEFAULT_HOURS;
 // Today's plan. A new day starts empty, with your usual hours.
 function dayPlan() {
-  const p = state.meta.plan;
-  return p && p.date === dateKey() ? p : { date: dateKey(), windows: clone(usualHours()), items: [] };
+  const p = state.meta.plan, today = dateKey(), set = (state.meta.dayPlans || []).find(d => d.date === today);
+  if (p && p.date === today) return p;
+  return set ? { date: today, windows: clone(set.windows), items: clone(set.items) } : { date: today, windows: clone(usualHours()), items: [] };
 }
 function savePlan(p) { state.meta.plan = p; saveMeta(); }
 // Windows in order, with any that touch joined and any with no length dropped.
@@ -1082,26 +1097,34 @@ function cleanWindows(list) {
 const sameHours = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // The room a task takes: what's left of it, at the speed you really work rather than the speed you guess.
-function taskRoom(t) {
+function taskRoom(t, steps = stepsLeft(t)) {
   if (!t.steps.length) return { min: NO_STEPS_MIN, guess: true };
   const a = state.meta.session?.active, f = timeFactor();
   let min = 0, guess = false;
-  for (const st of stepsLeft(t)) {
+  for (const st of steps) {
     if (a && a.stepId === st.id) { const el = elapsedSec(a); min += Math.max(0, (targetSec(a, st) ?? el) - el) / 60; }
     else if (st.est) min += Math.max(1, st.est * f - (st.spent || 0) / 60);
     else { min += NO_EST_MIN; guess = true; }
   }
   return { min: Math.max(1, Math.ceil(min)), guess };
 }
-// The room a task takes on the timeline, with any time you dragged on or off it. What's running goes by its timer.
-function planRoom(item, t) {
-  const room = taskRoom(t);
+// A step on the timeline is its own block, and the block for its task covers the steps that are left.
+const itemSteps = (item, t, p) => stepsLeft(t).filter(st => item.stepId ? st.id === item.stepId : !p.items.some(i => i.stepId === st.id));
+// The room an item takes on the timeline, with any time you dragged on or off it. What's running goes by its timer.
+function planRoom(item, t, p = dayPlan()) {
+  const room = taskRoom(t, itemSteps(item, t, p));
   return item.front ? room : { ...room, min: Math.max(PLAN_SNAP, room.min + (item.extra || 0)) };
 }
 const withExtra = (item, extra) => { const { extra: old, ...rest } = item; return extra ? { ...rest, extra } : rest; };
 // A plan with this task taking up this many minutes today. Its steps and timers stay as they are.
-const sizedPlan = (p, id, min) => ({ ...p, items: p.items.map(i => i.id === id ? withExtra(i, min - taskRoom(state.tasks.get(i.taskId)).min) : i) });
+function sizedPlan(p, id, min) {
+  const room = i => { const t = state.tasks.get(i.taskId); return taskRoom(t, itemSteps(i, t, p)).min; };
+  return { ...p, items: p.items.map(i => i.id === id ? withExtra(i, min - room(i)) : i) };
+}
 const onPlan = t => !!t && !t.archived && (!t.steps.length || stepsLeft(t).length > 0);
+const onTimeline = i => { const t = state.tasks.get(i.taskId); return !!i.taskId && onPlan(t) && (!i.stepId || stepsLeft(t).some(st => st.id === i.stepId)); };
+const stepPlanned = id => dayPlan().items.some(i => i.stepId === id);
+const blockName = b => (b.step || b.task).title;
 
 // Where everything lands right now. Blocks are the tasks, each in one or more pieces; stops are the breaks.
 function layoutDay(p = dayPlan(), now = minuteNow()) {
@@ -1134,12 +1157,19 @@ function layoutDay(p = dayPlan(), now = minuteNow()) {
   }
   // What's happening right now goes first, planned or not.
   const liveId = m.brk ? m.brk.taskId : s && (s.active ? s.active.taskId : s.taskId);
-  const tasks = p.items.filter(i => i.taskId && onPlan(state.tasks.get(i.taskId)) && i.taskId !== liveId);
-  if (liveId && onPlan(state.tasks.get(liveId))) tasks.unshift({ ...(p.items.find(i => i.taskId === liveId) || { id: 'live', taskId: liveId }), at: null, front: true, live: !!s?.active });
+  let tasks = p.items.filter(onTimeline);
+  if (liveId && onPlan(state.tasks.get(liveId))) {
+    const mine = tasks.filter(i => i.taskId === liveId), running = s?.active?.stepId;
+    const front = mine.find(i => i.stepId && i.stepId === running) || mine.find(i => !i.stepId); // other steps of this task stay where you put them
+    tasks = tasks.filter(i => i !== front);
+    tasks.unshift({ ...(front || { id: 'live', taskId: liveId }), at: null, front: true, live: !!s?.active });
+  }
   const blocks = [];
   let at = now;
   for (const item of tasks) {
-    const t = state.tasks.get(item.taskId), { min, guess } = planRoom(item, t), pieces = [];
+    const t = state.tasks.get(item.taskId), step = item.stepId ? findStep(t.id, item.stepId) : null;
+    if (t.steps.length && !itemSteps(item, t, p).length) continue; // every step has a block of its own
+    const { min, guess } = planRoom(item, t, p), pieces = [];
     if (item.at != null) at = Math.max(at, item.at);
     let need = min;
     while (need > 0) {
@@ -1160,7 +1190,7 @@ function layoutDay(p = dayPlan(), now = minuteNow()) {
       at = start + len;
       need -= len;
     }
-    blocks.push({ item, task: t, min, guess, pieces, start: pieces[0].s, end: at });
+    blocks.push({ item, task: t, step, min, guess, pieces, start: pieces[0].s, end: at });
   }
   const sum = (list, f) => list.reduce((a, x) => a + f(x), 0);
   return {
@@ -1173,8 +1203,9 @@ function layoutDay(p = dayPlan(), now = minuteNow()) {
 
 // The first task on the timeline after this one, and whether its time has come.
 function nextPlanned(exceptId) {
-  const b = layoutDay().blocks.find(x => x.task.id !== exceptId && stepsLeft(x.task).length);
-  return b ? { task: b.task, waits: b.item.at != null && b.item.at > minuteNow() + PLAN_SNAP } : null;
+  const running = state.meta.session?.active?.stepId;
+  const b = layoutDay().blocks.find(x => (x.step ? x.step.id !== running : x.task.id !== exceptId) && stepsLeft(x.task).length);
+  return b ? { task: b.task, step: b.step, waits: b.item.at != null && b.item.at > minuteNow() + PLAN_SNAP } : null;
 }
 const dueBreak = (now = minuteNow()) => dayPlan().items.find(i => i.brk && i.at <= now && i.at + i.brk + BREAK_GIVE_UP_MIN > now) || null;
 const plannedBreakSoon = () => dayPlan().items.some(i => i.brk && i.at > minuteNow() && i.at <= minuteNow() + BREAK_NEAR_MIN);
@@ -1765,13 +1796,13 @@ function blockState(item, kind, lay) {
 }
 
 function pieceHTML(b, piece, i, v) {
-  const t = b.task, px = (piece.e - piece.s) * v.pxPerMin, item = b.item;
+  const name = blockName(b), px = (piece.e - piece.s) * v.pxPerMin, item = b.item;
   const cls = [item.live && 'live', piece.late && 'late', b.guess && !item.live && 'guess', i && 'cont', i < b.pieces.length - 1 && 'cut', ...blockState(item, 'task', v.lay)].filter(Boolean).join(' ');
   const when = i ? 'continued' : `${clockAt(b.start)} · ${fmtMin(b.min)}`;
-  const words = px >= 24 ? `<b>${esc(t.title)}</b>${px >= 92 ? `<span>${esc(when)}</span>` : ''}` : '';
-  return `<div class="tblock ${cls}"${item.front ? '' : ` data-drag="item" data-item="${item.id}"`} style="${spanStyle(v, piece.s, piece.e)}" title="${esc(t.title)}, ${esc(when)}">
-    <button class="tb-open" data-act="day-pick" data-item="${item.id}" aria-label="${esc(t.title)}, ${rangeWords(b.start, b.end)}${piece.late ? ', past the end of your day' : ''}">${words}</button>
-    ${item.front || i < b.pieces.length - 1 ? '' : `<button class="tb-edge" data-grow="${item.id}" title="Drag to change how long this takes" aria-label="Length of ${esc(t.title)}, ${fmtMin(b.min)}. Use the arrow keys to change it."></button>`}
+  const words = px >= 24 ? `<b>${esc(name)}</b>${px >= 92 ? `<span>${esc(when)}</span>` : ''}` : '';
+  return `<div class="tblock ${cls}"${item.front ? '' : ` data-drag="item" data-item="${item.id}"`} style="${spanStyle(v, piece.s, piece.e)}" title="${b.step ? `${esc(b.task.title)}: ` : ''}${esc(name)}, ${esc(when)}">
+    <button class="tb-open" data-act="day-pick" data-item="${item.id}" aria-label="${esc(name)}, ${rangeWords(b.start, b.end)}${piece.late ? ', past the end of your day' : ''}">${words}</button>
+    ${item.front || i < b.pieces.length - 1 ? '' : `<button class="tb-edge" data-grow="${item.id}" title="Drag to change how long this takes" aria-label="Length of ${esc(name)}, ${fmtMin(b.min)}. Use the arrow keys to change it."></button>`}
   </div>`;
 }
 
@@ -1820,6 +1851,7 @@ function dayHTML() {
         <button class="link small" id="day-now" data-act="day-now"${railAt == null ? ' hidden' : ''}>Back to now</button>
         <button class="btn ghost small" data-drag="brk" data-act="plan-break" title="Drag onto the timeline, or click to add one after your next task">${ICON.cup}Add break</button>
         ${Google.available() ? `<button class="link small" data-act="cal-open" title="Show today’s events from Google Calendar">${calStale() ? 'Update calendar' : 'Calendar'}</button>` : ''}
+        <button class="link small" data-act="open-schedules" title="Save today’s plan, or load a saved one into any day">Schedules</button>
         <button class="link small" data-act="open-hours" title="Set the hours you can work today">Work hours</button>
         <button class="link small" data-act="plan-reset"${fresh ? ' disabled' : ''} title="Remove everything from today’s timeline and go back to your usual hours">Clear today</button>
       </div>
@@ -1831,7 +1863,7 @@ function dayHTML() {
       ${v.past.map(b => `<div class="tblock ago" style="${spanStyle(v, b.s, b.e)}" title="${esc(b.title)}, done"><div class="tb-open">${(b.e - b.s) * v.pxPerMin >= 24 ? `<b>${esc(b.title)}</b>` : ''}</div></div>`).join('')}
       ${lay.blocks.flatMap(b => b.pieces.map((x, i) => pieceHTML(b, x, i, v))).join('')}
       ${lay.stops.map(b => b.ev ? eventBlockHTML(b, v) : breakBlockHTML(b, v)).join('')}
-      ${lay.blocks.length ? '' : `<div class="rail-hint" style="${spanStyle(v, hintFrom, hintTo)}">Drag a task here</div>`}
+      ${lay.blocks.length ? '' : `<div class="rail-hint" style="${spanStyle(v, hintFrom, hintTo)}">Drag a task or step here</div>`}
       ${box ? `<div class="marquee" style="${spanStyle(v, box.s, box.e)}"></div>` : ''}
       <div class="now-line" style="left:${atPct(v, now)}%"><span>${clockAt(now).replace(/\s?[AP]M$/i, '')}</span></div>
     </div></div>
@@ -1845,17 +1877,17 @@ const menuHead = title => `<div class="dm-head"><b>${esc(title)}</b><button clas
 
 function taskMenuHTML(b, lay) {
   const t = b.task, item = b.item, m = state.meta, late = b.pieces.some(x => x.late);
-  const sub = `<p class="dm-sub">${rangeWords(b.start, b.end)} · ${fmtMin(b.min)}${late ? ' · past your work hours' : ''}</p>`;
+  const sub = `<p class="dm-sub">${b.step ? `From “${esc(t.title)}” · ` : ''}${rangeWords(b.start, b.end)} · ${fmtMin(b.min)}${late ? ' · past your work hours' : ''}</p>`;
   const details = `<button class="btn ghost" data-act="sel-open" data-id="${t.id}">Edit task</button>`;
-  if (item.front) return menuHead(t.title) + sub + `<div class="dm-row"><button class="btn primary" data-act="sel-show">Open timer</button>${details}</div>`;
+  if (item.front) return menuHead(blockName(b)) + sub + `<div class="dm-row"><button class="btn primary" data-act="sel-show">Open timer</button>${details}</div>`;
   const others = activeTasks().filter(x => x.id !== t.id && onPlan(x) && !lay.blocks.some(y => y.item.front && y.task.id === x.id));
-  const rows = others.map(x => {
+  const rows = b.step ? '' : others.map(x => {
     const on = lay.blocks.find(y => y.task.id === x.id);
     return `<li><button data-act="sel-swap" data-id="${x.id}"><span>${esc(x.title)}</span><small>${on ? `Swaps with ${clockAt(on.start)}` : fmtMin(taskRoom(x).min)}</small></button></li>`;
   }).join('');
   const busy = m.session?.active || m.brk;
-  return menuHead(t.title) + sub + `<div class="dm-row">
-      ${t.steps.length && !busy ? `<button class="btn primary" data-act="sel-start" data-id="${t.id}">${ICON.play}Start</button>` : ''}
+  return menuHead(blockName(b)) + sub + `<div class="dm-row">
+      ${t.steps.length && !busy ? `<button class="btn primary" data-act="sel-start" data-id="${t.id}"${b.step ? ` data-step="${b.step.id}"` : ''}>${ICON.play}Start</button>` : ''}
       ${details}
       <button class="btn danger" data-act="sel-delete">Remove from today</button>
     </div>
@@ -1915,7 +1947,7 @@ function dayMenuHTML(v) {
     if (blocks.length === 1) { at = (blocks[0].start + blocks[0].end) / 2; body = taskMenuHTML(blocks[0], lay); }
     else if (blocks.length) {
       at = (blocks[0].start + blocks[blocks.length - 1].end) / 2;
-      body = menuHead(`${blocks.length} tasks`) + `<p class="dm-sub">${esc(blocks.map(b => b.task.title).join(', '))}</p>
+      body = menuHead(`${blocks.length} tasks`) + `<p class="dm-sub">${esc(blocks.map(blockName).join(', '))}</p>
         <div class="dm-row"><button class="btn danger" data-act="sel-delete">Remove ${blocks.length} from today</button></div>`;
     }
   }
@@ -1927,14 +1959,14 @@ function dayMenuHTML(v) {
 
 /* ----- the colored row on each task: when the timeline says it'll be finished ----- */
 function slotInfo(t, lay) {
-  const b = lay.blocks.find(x => x.task.id === t.id);
+  const mine = lay.blocks.filter(x => x.task.id === t.id), b = mine[mine.length - 1]; // a task's steps can be spread across the day
   if (!b) return null;
   const over = b.pieces.reduce((a, x) => a + (x.late ? x.e - x.s : 0), 0), end = clockAt(b.end);
   if (b.pieces[0].late) return { cls: 'late', text: b.item.at != null ? 'Outside your work hours' : 'Doesn’t fit today', side: `Would finish ${end}` };
   if (over >= 1) return { cls: 'late', text: `Runs ${fmtMin(over)} past your work hours`, side: `Would finish ${end}` };
   if (b.item.front) return { cls: 'live', text: `Finish by ${end}`, side: `${fmtMin(b.min)} left` };
   if (b.guess) return { cls: 'guess', text: `Finish by about ${end}`, side: t.steps.length ? 'Some steps have no minutes' : 'No steps yet' };
-  return { cls: '', text: `Finish by ${end}`, side: `Starts ${clockAt(b.start)}` };
+  return { cls: '', text: `Finish by ${end}`, side: `Starts ${clockAt(mine[0].start)}` };
 }
 
 const slotSeen = new Map();
@@ -1988,6 +2020,62 @@ document.addEventListener('wheel', e => {
 const hhmm = min => `${pad(Math.floor(min / 60))}:${pad(min % 60)}`;
 const parseHHMM = v => { const m = /^(\d\d):(\d\d)$/.exec(v || ''); return m ? +m[1] * 60 + +m[2] : null; };
 
+/* ----- saved schedules: today's hours, breaks and tasks, kept to use on any day ----- */
+const schedules = () => state.meta.schedules || [];
+const comingUp = () => (state.meta.dayPlans || []).filter(d => d.date > dateKey());
+function schedWords(x) {
+  const n = x.items.filter(i => !i.brk).length, b = x.items.length - n;
+  return [x.windows.map(w => rangeWords(w.s, w.e)).join(', ') || 'No hours', n && `${n} ${n === 1 ? 'task' : 'tasks'}`, b && `${b} ${b === 1 ? 'break' : 'breaks'}`].filter(Boolean).join(' · ');
+}
+function schedulesHTML(enter) {
+  const list = schedules(), soon = comingUp();
+  return `${sheetOpen(enter, 'Schedules')}${sheetHead('Schedules')}
+    <p class="help">Save today’s hours, breaks and tasks so you can use them again on any day.</p>
+    <form class="step-add" id="sched-form">
+      <input id="sched-name" class="text-input" placeholder="Name, like School day" autocomplete="off" aria-label="Name for this schedule" value="${esc(state.schedName || '')}">
+      <button type="submit" class="btn primary">Save schedule</button>
+    </form>
+    <h3 class="label">Saved</h3>
+    ${list.length ? `<ul class="scheds">${list.map(x => `<li class="sched">
+      <div><b>${esc(x.name)}</b><small>${esc(schedWords(x))}</small></div>
+      <div class="row-actions">
+        <button class="btn ghost small" data-act="sched-load" data-id="${x.id}" aria-expanded="${state.schedLoad === x.id}">Load</button>
+        <button class="icon-btn" data-act="sched-del" data-id="${x.id}" title="Delete" aria-label="Delete “${esc(x.name)}”">${ICON.trash}</button>
+      </div>
+      ${state.schedLoad === x.id && state.duePick ? calHTML(null, true) : ''}
+    </li>`).join('')}</ul>` : '<p class="help">Nothing saved yet. Name today’s schedule above to keep it.</p>'}
+    ${soon.length ? `<h3 class="label">Coming up</h3><ul class="scheds">${soon.map(d => `<li class="sched">
+      <div><b>${esc(fmtFullDay(d.date))}</b><small>${esc(d.name)} · ${esc(schedWords(d))}</small></div>
+      <button class="btn ghost small" data-act="sched-unset" data-v="${d.date}">Remove</button>
+    </li>`).join('')}</ul>` : ''}
+  </section>`;
+}
+function saveSchedule(name) {
+  const p = dayPlan(), label = name || fmtFullDay(dateKey()), old = schedules().find(x => x.name.toLowerCase() === label.toLowerCase());
+  const items = clone(p.items.filter(i => i.brk || onTimeline(i))).map(({ id, ...rest }) => rest);
+  state.meta.schedules = [...schedules().filter(x => x !== old), { id: old?.id || newId('sc'), name: old?.name || label, windows: clone(p.windows), items }];
+  state.schedName = '';
+  saveMeta(); renderLayer();
+  toast(old ? `Updated “${old.name}”` : `Saved “${label}”`);
+}
+// A schedule is a copy, so what you change on the day doesn't change it. Tasks finished since it was saved are left out.
+function loadSchedule(id, date) {
+  const x = schedules().find(y => y.id === id), today = dateKey();
+  if (!x) return;
+  const items = clone(x.items.filter(i => i.brk || onTimeline(i))).map(i => ({ ...i, id: newId('i') })), gone = x.items.length - items.length;
+  const note = gone ? ` ${gone} finished ${gone === 1 ? 'task' : 'tasks'} left out.` : '';
+  state.duePick = null; state.schedLoad = null;
+  if (date === today) {
+    state.layer = null; daySel = null;
+    changePlan(`Loaded “${x.name}” for today.${note}`, { date, windows: clone(x.windows), items });
+    return;
+  }
+  const before = comingUp();
+  state.meta.dayPlans = [...before.filter(d => d.date !== date), { date, name: x.name, windows: clone(x.windows), items }].sort((a, b) => a.date.localeCompare(b.date));
+  saveMeta(); renderLayer();
+  toast(`“${x.name}” is set for ${fmtFullDay(date)}.${note}`, 'Undo', () => { state.meta.dayPlans = before; saveMeta(); renderLayer(); });
+}
+
 function hoursHTML(enter) {
   const p = dayPlan();
   const rows = p.windows.map((w, i) => `<div class="hours-row">
@@ -2007,6 +2095,7 @@ function hoursHTML(enter) {
   </section>`;
 }
 
+const openSteps = new Set(); // the tasks showing their steps in the list
 function taskHTML(t) {
   const total = t.steps.length, done = total - stepsLeft(t).length, left = minLeft(t);
   let meta;
@@ -2017,6 +2106,15 @@ function taskHTML(t) {
   const action = !total
     ? `<button class="btn ghost small" data-act="add-steps" data-id="${t.id}">Add steps</button>`
     : `<button class="btn soft small start" data-act="focus-task" data-id="${t.id}" aria-label="${live ? 'Open the timer for' : 'Start working on'} “${esc(t.title)}”">${live ? 'Open timer' : ICON.play + 'Start'}</button>`;
+  const todo = stepsLeft(t), open = openSteps.has(t.id) && todo.length;
+  const toggle = todo.length ? `<button class="icon-btn task-toggle" data-act="toggle-steps" data-id="${t.id}" title="${open ? 'Hide steps' : 'Show steps to drag onto the timeline'}" aria-label="${open ? 'Hide' : 'Show'} the steps of “${esc(t.title)}”" aria-expanded="${!!open}">${ICON.chev}</button>` : '';
+  const lay = open ? layoutDay() : null;
+  const steps = open ? `<ul class="task-steps">${todo.map(st => {
+    const on = lay.blocks.find(b => b.step?.id === st.id);
+    return `<li class="tstep" data-drag="step" data-id="${t.id}" data-step="${st.id}" title="Drag onto the timeline">
+      <span class="grip">${ICON.grip}</span><span>${esc(st.title)}</span><small>${on ? clockAt(on.start) : st.est ? fmtMin(st.est) : ''}</small>
+    </li>`;
+  }).join('')}</ul>` : '';
   return `<li class="task can-plan" data-drag="task" data-id="${t.id}">
     <span class="grip" title="Drag onto the timeline">${ICON.grip}</span>
     <button class="check" data-act="complete-task" data-id="${t.id}" title="Mark the whole task as done" aria-label="Mark “${esc(t.title)}” as done"><span>${ICON.check}</span></button>
@@ -2026,7 +2124,8 @@ function taskHTML(t) {
       ${live ? '<span class="badge"><span class="dot"></span>Working on this now</span>' : ''}
       ${done ? `<span class="bar" aria-hidden="true"><i style="width:${Math.round(done / total * 100)}%"></i></span>` : ''}
     </button>
-    ${action}
+    <div class="task-acts">${toggle}${action}</div>
+    ${steps}
     <div class="task-slot" data-slot="${t.id}" hidden></div>
   </li>`;
 }
@@ -2117,7 +2216,7 @@ function renderLayer(enter) {
   }
   el.hidden = false;
   document.body.classList.add('locked');
-  el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'hours' ? hoursHTML(enter) : L.type === 'import' ? importHTML(enter) : ['gtasks', 'gcal', 'paste'].includes(L.type) ? gtHTML(enter) : L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : L.type === 'record' ? recordHTML(rec, enter) : detailHTML(t, enter));
+  el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'schedules' ? schedulesHTML(enter) : L.type === 'hours' ? hoursHTML(enter) : L.type === 'import' ? importHTML(enter) : ['gtasks', 'gcal', 'paste'].includes(L.type) ? gtHTML(enter) : L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : L.type === 'record' ? recordHTML(rec, enter) : detailHTML(t, enter));
   autosizeAll(el);
 }
 const sheetOpen = (enter, label) => `<section class="sheet${enter ? ' enter' : ''}" role="dialog" aria-modal="true" aria-label="${esc(label)}">`;
@@ -2128,7 +2227,7 @@ const sheetHead = title => `<div class="sheet-head"><h2>${esc(title)}</h2><butto
 const dueValue = () => state.layer?.type === 'add' ? state.draft?.due : state.tasks.get(state.layer?.id)?.due;
 const monthKey = (month, n = 0) => { const d = keyDate(month + '-01'); d.setMonth(d.getMonth() + n); return dateKey(d).slice(0, 7); };
 
-function calHTML(due) {
+function calHTML(due, noPast) {
   const today = dateKey(), { month } = state.duePick, first = keyDate(month + '-01');
   const count = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
   const days = Array.from({ length: count }, (_, i) => `${month}-${pad(i + 1)}`);
@@ -2144,7 +2243,7 @@ function calHTML(due) {
     <div class="cal-grid">
       ${Array.from({ length: 7 }, (_, i) => `<span class="cal-dow">${keyDate(addDays('2023-01-01', i)).toLocaleDateString(undefined, { weekday: 'narrow' })}</span>`).join('')}
       ${'<span></span>'.repeat(first.getDay())}
-      ${days.map((k, i) => `<button type="button" class="cal-day${k === due ? ' on' : ''}${k === today ? ' today' : ''}${k < today ? ' past' : ''}" data-act="due-set" data-v="${k}" aria-label="${esc(fmtFullDay(k))}" aria-pressed="${k === due}" tabindex="${k === tabStop ? 0 : -1}">${i + 1}</button>`).join('')}
+      ${days.map((k, i) => `<button type="button" class="cal-day${k === due ? ' on' : ''}${k === today ? ' today' : ''}${k < today ? ' past' : ''}" data-act="due-set" data-v="${k}" aria-label="${esc(fmtFullDay(k))}" aria-pressed="${k === due}" tabindex="${k === tabStop ? 0 : -1}"${noPast && k < today ? ' disabled' : ''}>${i + 1}</button>`).join('')}
     </div>
   </div>`;
 }
@@ -2159,12 +2258,13 @@ function dueFieldHTML() {
 }
 // Only the picker redraws, so the sheet keeps its place and anything half-typed.
 function renderDue(focus) {
-  const el = $('#due-field'); if (!el) return;
-  el.innerHTML = dueFieldHTML();
+  const el = $('#due-field');
+  if (el) el.innerHTML = dueFieldHTML(); else renderLayer(); // the schedules sheet uses this calendar too
   $(focus)?.focus();
 }
 function setDue(k) {
   const L = state.layer, t = L.type === 'detail' && state.tasks.get(L.id);
+  if (L.type === 'schedules') { loadSchedule(state.schedLoad, k); return; }
   if (L.type === 'add') state.draft.due = k;
   else if (t) { t.due = k; saveTask(t); render(); }
   state.duePick = null;
@@ -2420,7 +2520,7 @@ function detailSummary(t) {
 const missingMinutes = t => t.steps.some(s => !s.done && !s.est);
 
 function planRowHTML(t) {
-  const item = dayPlan().items.find(i => i.taskId === t.id), b = layoutDay().blocks.find(x => x.task.id === t.id);
+  const item = dayPlan().items.find(i => i.taskId === t.id && !i.stepId), b = item && layoutDay().blocks.find(x => x.item.id === item.id);
   if (!item) return `<button class="btn ghost small" data-act="plan-on" data-id="${t.id}">Add to today</button>`;
   return `<span class="muted">${b && b.pieces[0].late ? 'Doesn’t fit today' : b ? `Planned for ${clockAt(b.start)}` : 'On today’s timeline'}</span>
     <button class="btn ghost small" data-act="plan-off" data-id="${item.id}">Remove from today</button>`;
@@ -2703,7 +2803,7 @@ function planCostHTML() {
   if (!next) return '';
   const spare = Math.max(0, Math.floor(lay.freeMin - lay.planMin));
   const room = lay.lateMin >= 1 ? `Today’s plan is ${fmtMin(lay.lateMin)} over your hours.` : `You have ${spare ? fmtMin(spare) : 'no time'} to spare today.`;
-  return `<p>Next up is “${esc(next.task.title)}” at ${clockAt(next.start)}. ${room}</p>`;
+  return `<p>Next up is “${esc(blockName(next))}” at ${clockAt(next.start)}. ${room}</p>`;
 }
 
 // The stop at the planned end of a step: you decide what happens next instead of drifting on.
@@ -2851,7 +2951,7 @@ function betweenHTML() {
       <div class="row" style="margin-top:6px"><button class="btn ${bp ? 'ghost' : 'primary'} big" data-act="start-step" data-id="${plan.t.id}" data-step="${plan.next.id}">${ICON.play}Start</button></div>
     </section>`;
     const later = plan.type === 'none' && layoutDay().blocks.find(b => stepsLeft(b.task).length);
-    if (later) html += `<p class="muted" style="margin:0;text-align:center">“${esc(later.task.title)}” is on your timeline for ${clockAt(later.start)}. Until then, the time is yours.</p>`;
+    if (later) html += `<p class="muted" style="margin:0;text-align:center">“${esc(blockName(later))}” is on your timeline for ${clockAt(later.start)}. Until then, the time is yours.</p>`;
     html += pickHTML(t, false);
   }
   if (!bp) html += statusHTML(as, s);
@@ -2861,7 +2961,7 @@ function betweenHTML() {
 }
 
 function pickHTML(t, noSession) {
-  const planned = layoutDay().blocks.map(b => b.task);
+  const planned = [...new Set(layoutDay().blocks.map(b => b.task))];
   const others = [...planned, ...activeTasks().filter(x => !planned.includes(x))].filter(x => x.steps.some(s => !s.done));
   const head = t && t.archived
     ? `<h2 class="step-name">You finished “${esc(t.title)}”!</h2><p class="muted" style="margin:0">It’s been moved to Completed tasks.</p>`
@@ -3321,19 +3421,19 @@ function closeGap(s, at = Date.now()) {
 // What happens when the clock between steps runs out: the next step or a due break starts by itself, or it waits for you.
 function gapPlan(s) {
   const t = state.tasks.get(s.taskId), as = assess(state.meta), bp = breakPlan(as, s);
-  const next = t && !t.archived ? nextStep(t, s) : null;
+  const next = t && !t.archived ? nextStep({ steps: t.steps.filter(st => !stepPlanned(st.id)) }, s) : null; // a step with its own time waits for it
   const after = next ? null : nextPlanned(s.taskId);
   if (!next && !switchTarget(null)) return { type: 'none' };
   if (bp && bp.type !== 'switch') return { type: 'break', min: bp.type === 'short' ? 5 : bp.min || as.breakMin };
   if (bp) return { type: 'hold' };
   // Done with this task: the timeline says what's next. Time before something you placed later is yours.
   if (after?.waits) return { type: 'none' };
-  if (after) { const n = nextStep(after.task, s); return n && n.est ? { type: 'step', t: after.task, next: n } : { type: 'hold' }; }
+  if (after) { const n = after.step || nextStep(after.task, s); return n && n.est ? { type: 'step', t: after.task, next: n } : { type: 'hold' }; }
   if (!next || !next.est) return { type: 'hold' };
   return { type: 'step', t, next };
 }
 
-function startFocus(taskId) {
+function startFocus(taskId, stepId) {
   const t = state.tasks.get(taskId); if (!t) return;
   expireIdleSession(true);
   const m = state.meta, s = m.session;
@@ -3343,7 +3443,7 @@ function startFocus(taskId) {
     if (s.active.taskId !== taskId) toast('Finish or skip the step you’re on first.');
     return;
   }
-  const next = nextStep(t, s);
+  const next = stepsLeft(t).find(st => st.id === stepId) || nextStep(t, s);
   if (!next) { openDetail(taskId, true); toast(t.steps.length ? 'All steps are done. Add another step, or mark the task as done.' : 'Add a step first.'); return; }
   state.layer = null; renderLayer();
   state.focusOpen = true;
@@ -3643,7 +3743,7 @@ function pickItem(id, add) {
 
 // Put another task in this block's place. If that task is already on the timeline, the two swap.
 function swapTask(taskId) {
-  const p = dayPlan(), id = daySel?.ids[0], item = p.items.find(i => i.id === id), other = p.items.find(i => i.taskId === taskId), t = state.tasks.get(taskId);
+  const p = dayPlan(), id = daySel?.ids[0], item = p.items.find(i => i.id === id), other = p.items.find(i => i.taskId === taskId && !i.stepId), t = state.tasks.get(taskId);
   if (!item || !t) return;
   daySel = null;
   changePlan(`Changed to “${t.title}”`, { ...p, items: p.items.map(i => i === item ? withExtra({ ...i, taskId }, other?.extra) : i === other ? withExtra({ ...i, taskId: item.taskId }, item.extra) : i) });
@@ -3703,15 +3803,16 @@ const ghostShow = (text, x, y) => {
 function liftItem(src) {
   const p = dayPlan(), type = src.dataset.drag;
   const item = type === 'brk' ? { id: newId('i'), brk: PLAN_BREAK_MIN, at: 0 }
-    : type === 'task' ? p.items.find(i => i.taskId === src.dataset.id) || { id: newId('i'), taskId: src.dataset.id, at: null }
+    : type === 'task' ? p.items.find(i => i.taskId === src.dataset.id && !i.stepId) || { id: newId('i'), taskId: src.dataset.id, at: null }
+    : type === 'step' ? p.items.find(i => i.stepId === src.dataset.step) || { id: newId('i'), taskId: src.dataset.id, stepId: src.dataset.step, at: null }
     : p.items.find(i => i.id === src.dataset.item);
   if (!item) return null;
   const t = item.taskId && state.tasks.get(item.taskId);
-  return { type: 'plan', item, known: p.items.includes(item), preview: null, label: t ? `${t.title} · ${fmtMin(planRoom(item, t).min)}` : `Break · ${fmtMin(item.brk)}` };
+  return { type: 'plan', item, known: p.items.includes(item), preview: null, label: t ? `${item.stepId ? findStep(t.id, item.stepId).title : t.title} · ${fmtMin(planRoom(item, t, p).min)}` : `Break · ${fmtMin(item.brk)}` };
 }
 function liftGrow(id, x) {
   const b = railView.lay.blocks.find(y => y.item.id === id);
-  return b && { type: 'grow', item: b.item, title: b.task.title, min: b.min, from: railTime(x), preview: null };
+  return b && { type: 'grow', item: b.item, title: blockName(b), min: b.min, from: railTime(x), preview: null };
 }
 function liftSize(y) { return { type: 'size', h: railH, from: y, preview: null }; }
 function liftEdge(i, side) { return { type: 'hours', list: clone(dayPlan().windows), i, side, preview: null }; }
@@ -3824,7 +3925,7 @@ document.addEventListener('pointerdown', e => {
   if (daySel && !el.closest('#day')) { daySel = null; renderDay('quiet'); }
   if (e.button || drag || state.layer || state.focusOpen || day.hidden) return;
   const touch = e.pointerType === 'touch';
-  if (el.closest('.check, .start, .day-menu')) return;
+  if (el.closest('.check, .start, .task-toggle, .day-menu')) return;
   // Shift-dragging selects, even when it starts on a block.
   const onBlock = el.closest('.tblock'), select = onBlock && e.shiftKey;
   const src = select ? $('#rail') : el.closest('[data-grow], [data-size], [data-drag], [data-edge]') || el.closest('#rail');
@@ -3899,6 +4000,7 @@ document.addEventListener('click', e => {
     case 'add-steps': openDetail(id, true); break;
     case 'complete-task': completeTask(id); break;
     case 'focus-task': startFocus(id); break;
+    case 'toggle-steps': if (openSteps.has(id)) openSteps.delete(id); else openSteps.add(id); render(); break;
     case 'toggle-step': toggleStep(id, step); break;
     case 'delete-step': deleteStep(id, step); break;
     case 'delete-task': deleteTask(id); break;
@@ -3973,6 +4075,21 @@ document.addEventListener('click', e => {
       break;
     }
     case 'open-look': state.layer = { type: 'look' }; renderLayer(true); break;
+    case 'open-schedules': state.layer = { type: 'schedules' }; state.duePick = null; state.schedLoad = null; renderLayer(true); break;
+    case 'sched-load': {
+      const open = state.schedLoad === id;
+      state.schedLoad = open ? null : id;
+      state.duePick = open ? null : { month: dateKey().slice(0, 7) };
+      renderLayer(); break;
+    }
+    case 'sched-del': {
+      const before = schedules(), x = before.find(y => y.id === id);
+      state.meta.schedules = before.filter(y => y !== x);
+      saveMeta(); renderLayer();
+      toast(`Deleted “${x.name}”`, 'Undo', () => { state.meta.schedules = before; saveMeta(); renderLayer(); });
+      break;
+    }
+    case 'sched-unset': state.meta.dayPlans = comingUp().filter(d => d.date !== v); saveMeta(); renderLayer(); break;
     case 'open-hours': state.layer = { type: 'hours' }; renderLayer(true); break;
     case 'hours-add': {
       const p = dayPlan(), from = Math.min(1320, p.windows.length ? p.windows[p.windows.length - 1].e + 60 : 540);
@@ -3993,7 +4110,7 @@ document.addEventListener('click', e => {
     case 'day-kind': daySel = { ...daySel, kind: v, ids: idsIn(railView.lay, daySel.box.s, daySel.box.e, v) }; renderDay('quiet'); break;
     case 'day-close': daySel = null; renderDay('quiet'); break;
     case 'day-pick': pickItem(b.dataset.item, e.shiftKey || e.metaKey || e.ctrlKey); break;
-    case 'sel-start': daySel = null; startFocus(id); break;
+    case 'sel-start': daySel = null; startFocus(id, step); break;
     case 'sel-show': daySel = null; state.focusOpen = true; render(); break;
     case 'sel-open': daySel = null; renderDay('quiet'); openDetail(id); break;
     case 'sel-swap': swapTask(id); break;
@@ -4035,6 +4152,7 @@ document.addEventListener('submit', e => {
   const f = e.target;
   if (f.id === 'auth-form') submitAuth();
   else if (f.id === 'draft-add') addDraftStep();
+  else if (f.id === 'sched-form') saveSchedule($('#sched-name').value.trim());
   else if (f.id === 'est-form') setEstimateAndStart(parseMin($('#est-input').value));
   else if (f.id === 'split-form') splitStep($('#split-name').value.trim(), parseMin($('#split-min').value));
   else if (f.id === 'forgot-form') correctTime(parseMin($('#forgot-min').value), false);
@@ -4064,6 +4182,7 @@ document.addEventListener('input', e => {
   }
   if (el.id === 'auth-email') state.auth.email = el.value;
   else if (el.id === 'paste-text') state.gt.text = el.value;
+  else if (el.id === 'sched-name') state.schedName = el.value;
   else if (el.id === 'new-title') { state.draft.title = el.value; if (el.value.trim()) $('#new-err').hidden = true; }
   else if (el.id === 'split-name' && state.ask) state.ask.name = el.value;
   else if ((el.id === 'split-min' || el.id === 'forgot-min') && state.ask) state.ask.min = parseMin(el.value);
@@ -4312,7 +4431,7 @@ function tickPlan(m) {
   const due = Math.max(first.item.at ?? 0, p.windows[0]?.s ?? 0);
   if (now < due || now >= due + PLAN_ALERT_MIN) return;
   planAlerted = first.item.id;
-  Alert.send(`Time to start: ${first.task.title}`, `${fmtMin(first.min)} on your timeline.`);
+  Alert.send(`Time to start: ${blockName(first)}`, `${fmtMin(first.min)} on your timeline.`);
 }
 
 let lastTick = 0, syncUntil = 0;
