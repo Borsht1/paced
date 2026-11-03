@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500;600&family=Figtree:wght@400;500;600;700&family=Schibsted+Grotesk:wght@600;700;800&display=swap">
 <style>
-/* Layout: one centered 600px column for the task list, with the day's timeline as a ruler across the page above it; sheets rise from the bottom on phones and float centered on wide screens; the working screen takes the whole screen */
+/* Layout: one centered 600px column, with the day's timeline as a card above the task list; sheets rise from the bottom on phones and float centered on wide screens; the working screen takes the whole screen */
 :root {
   --bg: #F2F3EF;
   --surface: #FFFFFF;
@@ -100,7 +100,6 @@ h1 { font: 800 clamp(32px, 8vw, 42px)/1.05 var(--font-display); letter-spacing: 
 button.check:hover > span { border-color: var(--zone); color: var(--zone); }
 .check.on { color: var(--surface); }
 .check.on > span { background: var(--zone); border-color: var(--zone); }
-.task .check:not(.on) > span { border-color: var(--c, var(--line)); }
 .check.sm { width: 38px; height: 38px; }
 .check.sm > span { width: 22px; height: 22px; }
 .task-body { min-width: 0; text-align: left; background: none; border: none; padding: 12px 6px; display: grid; gap: 4px; }
@@ -138,31 +137,32 @@ button.check:hover > span { border-color: var(--zone); color: var(--zone); }
 .pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s ease-in-out infinite; flex: none; }
 @keyframes pulse { 50% { opacity: .3; transform: scale(.7); } }
 
-/* The day's timeline: a ruler drawn across the page, between the header and your list.
-   Its words line up with the list, and the strip runs from edge to edge. It stays in view as the list scrolls. */
-.day { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 21; background: var(--bg); border-block: 1px solid var(--line); }
-.day.shut { position: static; }
-.day-head { display: flex; align-items: center; gap: 0 12px; flex-wrap: wrap; max-width: 632px; min-height: 40px; margin: 0 auto; padding: 4px var(--side-r) 4px var(--side-l); }
-.day-head h2 { font: 700 16px/1 var(--font-display); margin: 0; }
-.day-sum { flex: 1; min-width: 0; margin: 0; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The day's timeline: the first card in the column, above your list, in the same width and style.
+   It scrolls with the page, and only sticks to the top while you drag something onto it. */
+.day { position: relative; z-index: 21; max-width: 632px; margin: 0 auto; padding: 8px var(--side-r) 8px var(--side-l); background: var(--bg); }
+body.dragging .day:not(.shut) { position: sticky; top: env(safe-area-inset-top, 0px); }
+.day-head { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 8px; min-height: 40px; }
+.day-head h2 { font: 700 22px/1.2 var(--font-display); letter-spacing: -.01em; margin: 0; }
+.day-sum { order: 3; flex: 0 0 100%; min-width: 0; margin: 0; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .day-sum b { color: var(--stop); font-weight: 600; }
-.day-tools { display: flex; align-items: center; gap: 12px; }
-.day-tools .btn { padding: 4px 10px; font-size: 13px; cursor: grab; touch-action: none; }
-.day-tools .link { padding: 4px 0; font-size: 13px; }
+.day-tools { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.day-tools [data-drag] { cursor: grab; touch-action: none; }
+.day-tools .link { padding: 4px 0; font-size: 14px; }
 .day-kinds { display: flex; }
 .day-kinds button { flex: 1; border: 1px solid var(--line); background: none; padding: 5px 9px; font-size: 13px; font-weight: 600; color: var(--muted); }
 .day-kinds button:first-child { border-radius: 999px 0 0 999px; }
 .day-kinds button:last-child { border-radius: 0 999px 999px 0; margin-left: -1px; }
 .day-kinds button.on { position: relative; background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
-.day-toggle { padding: 4px 0; font-size: 13px; color: var(--muted); }
-.day-grip { position: absolute; bottom: -7px; left: 50%; z-index: 6; width: 72px; height: 13px; margin-left: -36px; padding: 0; border: none; background: none; cursor: ns-resize; touch-action: none; }
+.day-toggle { padding: 4px 0 4px 4px; font-size: 14px; color: var(--muted); }
+.day-grip { position: absolute; bottom: 0; left: 50%; z-index: 6; width: 72px; height: 12px; margin-left: -36px; padding: 0; border: none; background: none; cursor: ns-resize; touch-action: none; }
 .day-grip::after { content: ""; position: absolute; top: 4px; left: 18px; right: 18px; height: 4px; border-radius: 2px; background: var(--line); transition: background .15s; }
 .day-grip:hover::after, .day-grip:focus-visible::after { background: var(--accent); }
-.rail-wrap { position: relative; }
-#day-now { position: absolute; right: var(--side-r); bottom: 8px; z-index: 5; padding: 4px 10px; font-size: 13px; background: var(--surface); }
+.rail-wrap { position: relative; margin-top: 10px; overflow: hidden; border-radius: var(--r); background: color-mix(in srgb, var(--surface) 50%, var(--bg)); box-shadow: var(--shadow); }
+#day-now { position: absolute; right: 10px; bottom: 8px; z-index: 5; padding: 4px 10px; font-size: 13px; background: var(--surface); }
 .rail-scroll { height: min(var(--rail-h, 76px), calc(100vh - 220px)); overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: thin; touch-action: pan-x; }
 .rail { --lane: 20px; position: relative; isolation: isolate; height: 100%; overflow: hidden; cursor: crosshair; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .rail::before { content: ""; position: absolute; left: 0; right: 0; top: calc(var(--lane) - 1px); z-index: 1; border-top: 1px solid var(--line); pointer-events: none; }
+.rail { background: linear-gradient(var(--surface) 0 var(--lane), transparent 0); }
 .tick { position: absolute; top: 0; bottom: 0; z-index: 1; border-left: 1px solid var(--line); pointer-events: none; }
 .tick span { position: absolute; left: 5px; top: 4px; font-size: 11px; font-weight: 500; line-height: 1; color: var(--muted); white-space: nowrap; }
 .win { position: absolute; top: var(--lane); bottom: 0; background: var(--surface); }
@@ -172,17 +172,11 @@ button.check:hover > span { border-color: var(--zone); color: var(--zone); }
 .win-edge.closes { right: -7px; }
 .win-edge::after { content: ""; position: absolute; top: 50%; left: 5px; width: 4px; height: 24px; margin-top: -12px; border-radius: 2px; background: var(--muted); opacity: .45; transition: opacity .15s; }
 .win-edge:hover::after, .win-edge:focus-visible::after { opacity: 1; }
-.spent { position: absolute; left: 0; top: var(--lane); bottom: 0; background: var(--bg); opacity: .55; z-index: 1; pointer-events: none; }
+.spent { position: absolute; left: 0; top: var(--lane); bottom: 0; background: var(--bg); opacity: .45; z-index: 1; pointer-events: none; }
 .now-line { position: absolute; top: calc(var(--lane) - 5px); bottom: 0; border-left: 2px solid var(--stop); z-index: 3; pointer-events: none; }
 .now-line::before { content: ""; position: absolute; left: -6px; top: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--stop); }
-.now-line span { position: absolute; left: -1px; top: -13px; transform: translateX(-50%); padding: 0 3px; background: var(--bg); color: var(--stop); font-size: 11px; font-weight: 700; line-height: 12px; font-variant-numeric: tabular-nums; }
+.now-line span { position: absolute; left: -1px; top: -13px; transform: translateX(-50%); padding: 0 3px; background: var(--surface); color: var(--stop); font-size: 11px; font-weight: 700; line-height: 12px; font-variant-numeric: tabular-nums; }
 .rail-hint { position: absolute; top: var(--lane); bottom: 0; display: grid; place-items: center; color: var(--muted); font-size: 13px; font-weight: 600; pointer-events: none; z-index: 2; }
-/* Each task keeps one color, on its block and on its circle in the list */
-.tc0 { --c: var(--tc0); --c-ink: var(--tc0-ink); --c-soft: var(--tc0-soft); }
-.tc1 { --c: var(--tc1); --c-ink: var(--tc1-ink); --c-soft: var(--tc1-soft); }
-.tc2 { --c: var(--tc2); --c-ink: var(--tc2-ink); --c-soft: var(--tc2-soft); }
-.tc3 { --c: var(--tc3); --c-ink: var(--tc3-ink); --c-soft: var(--tc3-soft); }
-.tc4 { --c: var(--tc4); --c-ink: var(--tc4-ink); --c-soft: var(--tc4-soft); }
 .tblock { position: absolute; top: calc(var(--lane) + 4px); bottom: 5px; display: flex; background: var(--surface-2); color: var(--ink); border-radius: 7px; overflow: hidden; cursor: grab; z-index: 2; touch-action: none; transition: box-shadow .12s; }
 .tblock:hover { box-shadow: 0 3px 10px rgba(20, 24, 28, .3); }
 .tblock.cont { border-top-left-radius: 2px; border-bottom-left-radius: 2px; }
@@ -195,19 +189,20 @@ button.check:hover > span { border-color: var(--zone); color: var(--zone); }
 .tb-edge::after { content: ""; position: absolute; top: 50%; right: 2px; width: 3px; height: 16px; margin-top: -8px; border-radius: 2px; background: currentColor; opacity: 0; transition: opacity .15s; }
 .tblock:hover .tb-edge::after, .tb-edge:focus-visible::after, .tblock.lifted .tb-edge::after { opacity: .7; }
 @media (pointer: coarse) { .tb-edge { width: min(18px, 40%); } .tb-edge::after { opacity: .7; } }
-.tblock.job { background: var(--c); color: var(--c-ink); }
-.tblock.job.guess { background: var(--c-soft); color: var(--c); box-shadow: inset 0 0 0 1px var(--c); }
+/* Like a calendar with one color: your tasks in your color, meetings gray, breaks green */
+.tblock.job { background: var(--accent); color: var(--accent-ink); }
+.tblock.job.guess { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .tblock.job.late { background: var(--stop-soft); color: var(--stop); box-shadow: inset 0 0 0 1px var(--stop); }
 .tblock.brk { background: var(--zone-soft); color: var(--zone); }
-.tblock.evt { background: var(--ev); color: var(--ev-ink); cursor: pointer; }
+.tblock.evt { background: var(--surface-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); cursor: pointer; }
 .tblock.evt.done { opacity: .5; }
 .tblock.ago { background: var(--surface-2); color: var(--muted); cursor: crosshair; }
 .tblock.ago:hover { box-shadow: none; }
-.tblock.live:not(.cont) { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--c, var(--zone)); }
+.tblock.live:not(.cont) { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
 .tblock.lifted, .tblock.picked { outline: 2px solid var(--ink); outline-offset: 1px; z-index: 3; }
 .marquee { position: absolute; top: var(--lane); bottom: 0; background: color-mix(in srgb, var(--accent) 16%, transparent); border-left: 1px solid var(--accent); border-right: 1px solid var(--accent); z-index: 3; pointer-events: none; }
-.day-menu { position: absolute; top: calc(100% + 6px); z-index: 7; width: 300px; max-width: 100%; max-height: calc(100vh - 170px); overflow-y: auto; padding: 12px 14px; display: grid; gap: 8px; background: var(--surface); border-radius: 14px; box-shadow: 0 0 0 1px var(--line), 0 10px 32px rgba(20, 24, 28, .24); }
-.day-menu.opts { left: auto; right: max(var(--side-r), calc(50vw - 300px)); }
+.day-menu { position: absolute; top: calc(100% - 4px); z-index: 7; width: 300px; max-width: 100%; max-height: calc(100vh - 170px); overflow-y: auto; padding: 12px 14px; display: grid; gap: 8px; background: var(--surface); border-radius: 14px; box-shadow: 0 0 0 1px var(--line), 0 10px 32px rgba(20, 24, 28, .24); }
+.day-menu.opts { top: 52px; left: auto; right: var(--side-r); }
 .dm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .dm-head b { font-size: 15px; overflow-wrap: anywhere; }
 .dm-head .icon-btn { width: 28px; height: 28px; margin: -4px -6px -4px 0; }
@@ -223,14 +218,12 @@ button.check:hover > span { border-color: var(--zone); color: var(--zone); }
 .dm-list button:hover:not(:disabled) { border-color: var(--accent); }
 .dm-list span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dm-list small { flex: none; font-size: 12px; font-weight: 500; color: var(--muted); }
-.drag-ghost { position: fixed; left: 0; top: 0; z-index: 70; max-width: 240px; padding: 8px 12px; border-radius: 7px; background: var(--c, var(--ink)); color: var(--c-ink, var(--bg)); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 8px 28px rgba(0, 0, 0, .25); pointer-events: none; }
+.drag-ghost { position: fixed; left: 0; top: 0; z-index: 70; max-width: 240px; padding: 8px 12px; border-radius: 7px; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 8px 28px rgba(0, 0, 0, .25); pointer-events: none; }
 body.dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
 body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbing; }
 .hours-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; flex-wrap: wrap; }
 .hours-row .text-input { width: auto; }
 @media (max-width: 560px) {
-  .day-sum { order: 3; flex: 0 0 100%; }
-  .day-tools { margin-left: auto; }
   .day-menu { left: 8px !important; right: 8px; width: auto; }
 }
 @media (hover: none) {
@@ -291,7 +284,9 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .paste-box { width: 100%; min-height: 170px; resize: vertical; }
 .app-row { display: flex; align-items: center; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; padding: 4px 0; }
 .app-row .row { gap: 6px; }
-.title-row { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 0 12px; }
+.title-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin-top: 24px; }
+.title-row h1 { font: 700 22px/1.2 var(--font-display); letter-spacing: -.01em; margin: 0; }
+.title-row + .sub { margin: 2px 0 14px; font-size: 14px; }
 .brand-row .row-actions, .title-row .row-actions { gap: 8px; }
 .gt-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .gt-row { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; border-radius: 10px; background: transparent; color: inherit; font: inherit; text-align: left; padding: 2px 6px 2px 0; }
@@ -732,17 +727,13 @@ const COLORS = {
   orange: { name: 'Orange', light: ['#AD4E0C', '#FFFFFF', '#FBE7D6'], dark: ['#F4A261', '#2E1606', '#3A2514'] },
   graphite: { name: 'Graphite', light: ['#3D4A5C', '#FFFFFF', '#E3E7EC'], dark: ['#AFBCCD', '#121820', '#252C36'] }
 };
-const TONES = ['blue', 'teal', 'purple', 'pink', 'orange'];
-// A task's color comes from its id, so it stays the same everywhere and on every device.
-const taskTone = id => `tc${[...String(id)].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 9973, 7) % TONES.length}`;
 let themeSetByApp = false;
 function applyLook() {
   const look = state.meta.look || {}, c = COLORS[look.color] || COLORS.blue;
   let el = document.getElementById('look-vars');
   if (!el) { el = document.createElement('style'); el.id = 'look-vars'; document.body.appendChild(el); } // after the page's own styles, so it wins
-  const tones = mode => TONES.map((id, i) => { const [t, ink, soft] = COLORS[id][mode]; return `--tc${i}:${t};--tc${i}-ink:${ink};--tc${i}-soft:${soft};`; }).join('') + `--ev:${COLORS.graphite[mode][0]};--ev-ink:${COLORS.graphite[mode][1]};`;
-  const v = ([a, ink, soft], mode) => `--accent:${a};--accent-ink:${ink};--accent-soft:${soft};${tones(mode)}`;
-  el.textContent = `:root{${v(c.light, 'light')}}@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${v(c.dark, 'dark')}}}:root[data-theme="dark"]{${v(c.dark, 'dark')}}`;
+  const v = ([a, ink, soft]) => `--accent:${a};--accent-ink:${ink};--accent-soft:${soft};`;
+  el.textContent = `:root{${v(c.light)}}@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${v(c.dark)}}}:root[data-theme="dark"]{${v(c.dark)}}`;
   // The browser tab icon: the same metronome as the header, in your color.
   const mark = ICON.mark.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
     .replace('aria-hidden="true">', `><style>path{fill:${c.light[0]}}@media (prefers-color-scheme:dark){path{fill:${c.dark[0]}}}</style>`);
@@ -1727,7 +1718,7 @@ function homeHTML() {
   ${savedLine()}`;
 }
 
-/* ----- the timeline: a thin ruler across the page, with time running left to right ----- */
+/* ----- the timeline: a card above your list, with time running left to right ----- */
 const DAY_KEY = 'paced:day';
 const LENGTHS = [5, 10, 15, 20, 30, 45, 60], NUDGES = [-15, -5, 5, 15];
 const STRETCH_MAX_MIN = 180; // past this, a stretch you selected across is about what's in it, not the time itself
@@ -1742,7 +1733,7 @@ function setRailH(h) {
   renderDay('quiet');
 }
 const saveRailH = () => { try { localStorage.setItem(RAIL_KEY, railH); } catch (e) {} };
-const RAIL_ZOOM = { min: 1.5, max: 3 }, RAIL_PEEK = 32, RAIL_EDGE = 40; // pixels: per minute, of the next hour left showing, and where a drag starts scrolling
+const RAIL_ZOOM = { min: 2, phone: 1.6, max: 3 }, RAIL_PEEK = 32, RAIL_EDGE = 40; // pixels: per minute, of the next hour left showing, and where a drag starts scrolling
 let railAt = null, railPx = 0; // the time at the left edge once you've scrolled; until then it follows your hours
 let daySel = null; // what's selected: { kind, ids }, with the { box } you dragged across and its snapped { range }
 
@@ -1756,11 +1747,11 @@ function setDayOpen(open) {
 function dayView() {
   const p = drag?.preview || dayPlan(), now = minuteNow(), lay = layoutDay(p, now), past = pastWork(now);
   const points = [now, ...p.windows.flatMap(w => [w.s, w.e])];
-  const laneW = document.documentElement.clientWidth, wide = laneW >= 600;
+  const laneW = Math.min(600, document.documentElement.clientWidth - 32), wide = laneW >= 560;
   // The whole day is always there to scroll through. Your hours set the zoom and where it opens, so what's on it never changes the scale.
   let home = Math.max(0, Math.floor((Math.min(...points) - (wide ? 20 : 0)) / 60) * 60), last = Math.ceil((Math.max(...points) + (wide ? 20 : 0)) / 60) * 60;
-  if (!wide) home = Math.max(home, Math.floor((now - 60) / 60) * 60); // on a phone, what's over doesn't get to squeeze what's left
-  let end = Math.max(1440, ...lay.blocks.map(b => Math.ceil(b.end / 60) * 60)), pxPerMin = clamp((laneW - RAIL_PEEK) / (last - home), RAIL_ZOOM.min, RAIL_ZOOM.max);
+  home = Math.max(home, Math.floor((now - 60) / 60) * 60); // it opens an hour before now, so what's over doesn't squeeze what's left
+  let end = Math.max(1440, ...lay.blocks.map(b => Math.ceil(b.end / 60) * 60)), pxPerMin = clamp((laneW - RAIL_PEEK) / (last - home), wide ? RAIL_ZOOM.min : RAIL_ZOOM.phone, RAIL_ZOOM.max);
   if ((now - home) * pxPerMin > laneW - RAIL_PEEK * 4) home = Math.floor((now - 60) / 60) * 60; // your hours don't all fit, so it opens where you are
   if (drag) ({ home, end, pxPerMin } = drag.frozen); // the timeline holds still under your finger
   return (railView = { p, now, lay, past, start: 0, end, home, pxPerMin });
@@ -1819,7 +1810,7 @@ function blockState(item, kind, lay) {
 
 function pieceHTML(b, piece, i, v) {
   const name = blockName(b), px = (piece.e - piece.s) * v.pxPerMin, item = b.item;
-  const cls = ['job', taskTone(b.task.id), item.live && 'live', piece.late && 'late', b.guess && !item.live && 'guess', i && 'cont', i < b.pieces.length - 1 && 'cut', ...blockState(item, 'task', v.lay)].filter(Boolean).join(' ');
+  const cls = ['job', item.live && 'live', piece.late && 'late', b.guess && !item.live && 'guess', i && 'cont', i < b.pieces.length - 1 && 'cut', ...blockState(item, 'task', v.lay)].filter(Boolean).join(' ');
   const longest = b.pieces.reduce((a, x) => Math.max(a, x.e - x.s), 0); // a block split into short pieces still gets its name on one of them
   const named = x => { const w = (x.e - x.s) * v.pxPerMin; return w >= 64 || (w >= 36 && x.e - x.s === longest); };
   const when = i && named(b.pieces[0]) ? 'continued' : px >= 130 ? rangeWords(b.start, b.end) : clockAt(b.start);
@@ -1869,7 +1860,7 @@ function dayHeadHTML(lay, open, gaps) {
         ${gaps ? '<button class="link small" data-act="plan-tidy" title="Everything fits if tasks start sooner">Move tasks earlier</button>' : ''}
         ${Google.available() && calStale() ? '<button class="link small" data-act="cal-open">Update calendar</button>' : ''}
         <button class="btn ghost small" data-drag="brk" data-act="plan-break" title="Drag onto the timeline, or click to add one after your next task">${ICON.cup}Add break</button>
-        <button class="link small" data-act="day-opts" aria-expanded="${daySel?.kind === 'opts'}">Options</button>
+        <button class="btn ghost small" data-act="day-opts" aria-expanded="${daySel?.kind === 'opts'}">Options</button>
       </div>` : ''}
       <button class="link small day-toggle" data-act="day-toggle" aria-expanded="${open}" title="${open ? 'Hide' : 'Show'} the timeline">${open ? 'Hide' : 'Show'}</button>
     </div>`;
@@ -2161,7 +2152,7 @@ function taskHTML(t) {
   }).join('')}</ul>` : '';
   return `<li class="task can-plan" data-drag="task" data-id="${t.id}">
     <span class="grip" title="Drag onto the timeline">${ICON.grip}</span>
-    <button class="check ${taskTone(t.id)}" data-act="complete-task" data-id="${t.id}" title="Mark the whole task as done" aria-label="Mark “${esc(t.title)}” as done"><span>${ICON.check}</span></button>
+    <button class="check" data-act="complete-task" data-id="${t.id}" title="Mark the whole task as done" aria-label="Mark “${esc(t.title)}” as done"><span>${ICON.check}</span></button>
     <button class="task-body" data-act="open-task" data-id="${t.id}">
       <span class="task-title">${esc(t.title)}</span>
       <span class="task-meta">${meta}${t.due ? ' · ' + dueHTML(t) : ''}</span>
@@ -3837,10 +3828,9 @@ const LONG_PRESS_MS = 280;
 let press = null, drag = null, skipClick = false;
 
 const railTime = x => { const r = $('#rail').getBoundingClientRect(); return railView.start + (x - r.left) / r.width * (railView.end - railView.start); };
-const ghostShow = (text, x, y, tone = '') => {
+const ghostShow = (text, x, y) => {
   let g = $('#drag-ghost');
-  if (!g) { g = document.createElement('div'); g.id = 'drag-ghost'; document.body.appendChild(g); }
-  g.className = `drag-ghost ${tone}`;
+  if (!g) { g = document.createElement('div'); g.id = 'drag-ghost'; g.className = 'drag-ghost'; document.body.appendChild(g); }
   g.textContent = text;
   g.style.transform = `translate(${Math.min(x + 14, innerWidth - 200)}px, ${y > innerHeight - 90 ? y - 44 : y + 14}px) rotate(2deg)`; // near the bottom of the window it sits above your finger
 };
@@ -3853,7 +3843,7 @@ function liftItem(src) {
     : p.items.find(i => i.id === src.dataset.item);
   if (!item) return null;
   const t = item.taskId && state.tasks.get(item.taskId);
-  return { type: 'plan', item, known: p.items.includes(item), preview: null, tone: t ? taskTone(t.id) : '', label: t ? `${item.stepId ? findStep(t.id, item.stepId).title : t.title} · ${fmtMin(planRoom(item, t, p).min)}` : `Break · ${fmtMin(item.brk)}` };
+  return { type: 'plan', item, known: p.items.includes(item), preview: null, label: t ? `${item.stepId ? findStep(t.id, item.stepId).title : t.title} · ${fmtMin(planRoom(item, t, p).min)}` : `Break · ${fmtMin(item.brk)}` };
 }
 function liftGrow(id, x) {
   const b = railView.lay.blocks.find(y => y.item.id === id);
@@ -3932,7 +3922,7 @@ function dragTo(x, y) {
   }
   const r = $('#day').getBoundingClientRect(), near = 24;
   const inside = x >= r.left - near && x <= r.right + near && y >= r.top - near && y <= r.bottom + near;
-  ghostShow(!inside && drag.known ? 'Remove from today' : drag.label, x, y, drag.tone);
+  ghostShow(!inside && drag.known ? 'Remove from today' : drag.label, x, y);
   const key = inside ? snapTo(clamp(railTime(x), drag.frozen.start, drag.frozen.end), PLAN_SNAP) : 'out';
   if (key === drag.key) return;
   drag.key = key;
