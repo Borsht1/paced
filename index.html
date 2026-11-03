@@ -1286,9 +1286,12 @@ function render() {
   renderFocus();
   renderDay();
   showPip();
+  paintClock();
 }
 
 function renderMain() {
+  // The working screen covers the list, so it's redrawn when you go back to it. That keeps every tap quick on slow computers.
+  if (state.focusOpen && state.ready) return;
   const main = $('#main');
   $('#topbar').innerHTML = state.ready && Store.mode !== 'signin' && state.view === 'home' ? topbarHTML() : '';
   if (!state.ready) { main.innerHTML = '<div class="loading"><span class="pulse"></span>Loading your tasks…</div>'; return; }
@@ -4569,8 +4572,9 @@ function showClocks() {
   if (document.title !== title) document.title = title;
   if (a) {
     const st = findStep(a.taskId, a.stepId), el = elapsedSec(a), target = targetSec(a, st);
+    const v = target == null ? el : target - el;
     document.querySelectorAll('[data-tick="timer"]').forEach(n => {
-      n.innerHTML = clockHTML(target == null ? el : target - el);
+      if (n.textContent !== fmtClock(v)) n.innerHTML = clockHTML(v);
       n.classList.toggle('over', target != null && el > target);
     });
     const line = $('[data-tick="estline"]');
@@ -4580,7 +4584,7 @@ function showClocks() {
   }
   if (m.brk) {
     const left = (m.brk.until - Date.now()) / 1000;
-    document.querySelectorAll('[data-tick="break"]').forEach(n => { n.innerHTML = clockHTML(left); n.classList.toggle('over', left < 0); });
+    document.querySelectorAll('[data-tick="break"]').forEach(n => { if (n.textContent !== fmtClock(left)) n.innerHTML = clockHTML(left); n.classList.toggle('over', left < 0); });
   }
   const box = $('[data-tick="gapbox"]');
   if (box && s && s.gap) {
@@ -4602,6 +4606,26 @@ function tickPlan(m) {
   if (now < due || now >= due + PLAN_ALERT_MIN) return;
   planAlerted = first.item.id;
   Alert.send(`Time to start: ${blockName(first)}`, `${fmtMin(first.min)} on your timeline.`);
+}
+
+// The clock on screen changes on the frame its number does. The once-a-second loop below can't promise that:
+// browsers run it early or late, slow computers most of all, so the countdown stalled on a number and then jumped two.
+// This only runs while a clock is counting and you can see it, and it repaints only when the number changes.
+let paintId = null, paintHost = null, painted = null;
+function paintClock() {
+  try { if (paintHost) paintHost.cancelAnimationFrame(paintId); } catch (e) {} // the mini timer window may have closed
+  paintHost = null;
+  const m = state.meta, s = m.session, a = s && s.active, now = Date.now();
+  let left = null;
+  if (!state.ready) left = null;
+  else if (m.brk) left = (m.brk.until - now) / 1000;
+  else if (a) { if (!a.pausedAt) { const t = targetSec(a, findStep(a.taskId, a.stepId)), el = elapsedSec(a, now); left = t == null ? el : t - el; } }
+  else if (s && s.gap) left = (s.gap.until - now) / 1000;
+  if (left == null) return;
+  const shown = fmtClock(left);
+  if (shown !== painted) { painted = shown; showClocks(); }
+  paintHost = pip || window; // a hidden tab stops drawing, but the mini timer stays on screen
+  paintId = paintHost.requestAnimationFrame(paintClock);
 }
 
 let lastTick = 0, syncUntil = 0;
