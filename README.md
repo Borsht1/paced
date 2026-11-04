@@ -23,7 +23,7 @@ A to-do list that helps you work at a steady pace and balance work with free tim
 - It tells you when to take a break once you slow down, or to switch tasks when something is due soon.
 - Sound, notifications and the tab title reach you when you're not looking at Paced. Notifications need the page open in a desktop browser; on most phones you get sound and vibration only.
 - **Pop out timer** opens a small timer window that stays on top of your other apps, with the current step, the time left, and buttons to finish or pause. It turns red when you run over. It works in desktop Zen, Firefox and Chrome, opens only when you press the button, and closes with the Paced tab.
-- When you stop using your computer, the step pauses from the moment you stopped and carries on when you're back. It's on by default, and you can change it in Settings. It needs the browser extension to see activity in other apps. Without the extension, Paced sends a "Still working?" notification every 15 minutes while you're in another app, and pauses if you don't click it within 3 minutes.
+- When you stop using your computer, the step pauses from the moment you stopped and carries on when you're back. It's on by default, and you can change it in Settings. It only sees this window, so in another app Paced sends a "Still working?" notification every 15 minutes, and pauses if you don't click it within 3 minutes.
 - When you stop, Paced shows a summary of the session: what you worked on, your breaks and pauses, and how long each took, with room for a note. Each session is saved, breaks included.
 - History shows your past sessions and when you work best: by time of day, by day of the week, and by how long it's been since a break.
 - Try different ways of working (Break when you slow down, Pomodoro, Long focus, Switch tasks) and see which suits you.
@@ -57,20 +57,3 @@ Sign-in and saving across devices use Firebase, on the website only.
 The client ID comes from the `paced-5dbc5` project in the [Google Cloud console](https://console.cloud.google.com/). The project needs the Google Tasks API and Google Calendar API turned on, the `tasks.readonly` and `calendar.readonly` scopes on its sign-in screen, and a web client that allows `https://borsht1.github.io`.
 
 While the sign-in screen is in Testing, only the people added as test users can connect, up to 100, and they see an "unverified app" warning. Removing the warning for everyone takes Google's verification, which can take months. Publishing without verification lets anyone connect, but only 100 people ever can, and that limit can't be reset.
-
-## Browser extension
-
-`extension/` keeps your timer on the browser toolbar and can pause or finish a step from there. It also sends alerts after the Paced tab is closed, as long as the browser is running. It works in Zen and Firefox, and is written to work in Chrome too.
-
-It only learns about a session from an open Paced tab on that computer, so it won't see a timer you start on your phone unless Paced is also open here.
-
-**Zen or Firefox**
-
-1. Go to `about:debugging#/runtime/this-firefox`, press **Load Temporary Add-on**, and pick `extension/manifest.json`.
-2. Pin Paced Timer from the extensions menu so the badge stays in view.
-
-A temporary add-on disappears when the browser restarts. To keep it, sign it for free as an unlisted add-on at [addons.mozilla.org](https://addons.mozilla.org/developers/) and install the signed file.
-
-**Chrome**
-
-Go to `chrome://extensions`, turn on **Developer mode**, press **Load unpacked**, and pick the `extension` folder.

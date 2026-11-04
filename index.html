@@ -2572,8 +2572,8 @@ function idleHTML() {
   return `<h3 class="label">Pause when you’re away</h3>
     <p class="help">If you stop using your computer for this long, Paced pauses the step and takes that time off. It carries on when you’re back.</p>
     <div class="seg four">${btn(0, 'Off')}${btn(5, '5 min')}${btn(10, '10 min')}${btn(15, '15 min')}</div>
-    <p class="help">${extIdle ? 'The Paced Timer extension is watching for this, so it works in any app.' : 'Without the Paced Timer extension, this only works while Paced is the window you’re using, and not on phones.'}</p>
-    ${!extIdle && cur ? checkInHTML() : ''}`;
+    <p class="help">Paced can only see this window, and not phones. In other apps it asks “Still working?” instead.</p>
+    ${cur ? checkInHTML() : ''}`;
 }
 
 function checkInHTML() {
@@ -3383,61 +3383,7 @@ function showPip() {
   if (acts !== pipActs) { pipActs = acts; d.querySelector('.pip-acts').innerHTML = acts; } // only when they change, or a click can land on a replaced button
 }
 
-/* ---------- the browser extension: keeps the clock on the toolbar, and alerts you after this tab closes ---------- */
-// Fixed times rather than a countdown, so the extension can carry on by itself.
-function clockForExtension() {
-  const m = state.meta, s = m.session, c = liveClock();
-  if (!c) return null;
-  const pageNotifies = Alert.notifyState() === 'on';
-  const repeat = (end, steps, title, body) => steps.map(min => ({ at: end + min * 60e3, title, body }));
-  if (m.brk) {
-    const b = m.brk, t = b.taskId && state.tasks.get(b.taskId), next = t && !t.archived ? nextStep(t, null) : null;
-    return { kind: 'break', label: c.label, endsAt: b.until, stopAt: b.until + BREAK_GIVE_UP_MIN * 60e3, pageNotifies,
-      alerts: repeat(b.until, BREAK_ALERTS, 'Break’s over', next ? `Up next: ${next.title}` : 'Time to get back to work.') };
-  }
-  if (s.active) {
-    const a = s.active, st = findStep(a.taskId, a.stepId), target = targetSec(a, st);
-    if (a.pausedAt) return { kind: 'step', label: c.label, paused: !a.autoStopped, stopped: !!a.autoStopped, left: c.left, pageNotifies, alerts: [] };
-    if (target == null) return { kind: 'step', label: c.label, endsAt: null, pageNotifies, alerts: [] };
-    const endsAt = a.startedAt + (a.pausedMs || 0) + (target - (a.carry || 0)) * 1000;
-    const stopAt = endsAt + (Math.max(target, a.okSec || 0) - target + AUTO_STOP_MIN * 60) * 1000;
-    return { kind: 'step', label: c.label, endsAt, stopAt, pageNotifies, alerts: [
-      ...repeat(endsAt, OVER_ALERTS, a.extended ? 'Your extra time is up' : 'Time’s up', `Did you finish “${c.label}”?`),
-      { at: stopAt, title: 'Paced stopped your timer', body: `“${c.label}” ran ${AUTO_STOP_MIN} minutes over.` }
-    ] };
-  }
-  const plan = gapPlan(s), idle = 'Start your next step, or take a break.';
-  return { kind: 'gap', label: c.label, endsAt: s.gap.until, stopAt: (s.lastAt || s.gap.until) + 30 * 60e3, pageNotifies, alerts: [
-    { at: s.gap.until, title: plan.type === 'break' ? 'Time for a break' : plan.type === 'step' ? `Up next: ${plan.next.title}` : 'Nothing is running', body: 'It starts by itself while Paced is open.' },
-    ...repeat(s.gap.until, OVER_ALERTS.slice(1), 'Nothing is running', idle)
-  ] };
-}
-
-let sharedClock = null;
-function shareClock() {
-  const clock = clockForExtension();
-  if (clock) clock.idleMin = idleMin();
-  const key = JSON.stringify(clock);
-  if (key === sharedClock) return;
-  sharedClock = key;
-  window.postMessage({ from: 'paced-page', clock }, '*'); // to this window only, where the extension listens
-}
-
-window.addEventListener('message', e => {
-  if (e.source !== window || !e.data || e.data.from !== 'paced-ext') return;
-  if (e.data.hello) { sharedClock = null; extIdle = !!e.data.idle; } // the extension just arrived: send it the clock on the next tick
-  else if (e.data.act === 'idle') {
-    if (e.data.state === 'active') backFromIdle();
-    else goIdle(e.data.state === 'locked' ? Date.now() : Date.now() - idleMin() * 60e3);
-  }
-  else if (e.data.act === 'done') finishStep();
-  else if (e.data.act === 'pause') togglePause();
-  else if (e.data.act === 'back') endBreak();
-  else if (e.data.act === 'show') { state.focusOpen = true; render(); }
-});
-
 /* ---------- idle: a step stops counting when you stop using the computer, and carries on when you're back ---------- */
-let extIdle = false; // the extension watches every app. Without it, Paced only sees its own window.
 let lastInput = Date.now(), backWaiting = false;
 let checkIn = null; // the "Still working?" notification that's waiting for you
 const idleMin = () => state.meta.idleMin ?? IDLE_MIN; // 0 means off
@@ -3452,7 +3398,7 @@ function goIdle(at) {
   a.pausedAt = clamp(at, a.startedAt + (a.pausedMs || 0), Date.now());
   a.idlePaused = true;
   a.alerts = 0; a.okSec = 0;
-  saveMeta(); render(); shareClock();
+  saveMeta(); render();
 }
 
 function backFromIdle() {
@@ -3462,7 +3408,7 @@ function backFromIdle() {
   const sec = (Date.now() - a.pausedAt) / 1000, stepId = a.stepId, from = a.pausedAt;
   if (sec > IDLE_RESUME_MIN * 60) a.idlePaused = false;
   else resumeStep(a);
-  saveMeta(); render(); shareClock();
+  saveMeta(); render();
   if (a.pausedAt || sec < 60) return;
   // A thought or a phone call can look idle, so you can put the time back.
   const addBack = () => {
@@ -3483,12 +3429,12 @@ function noteInput() {
   if (state.meta.session?.active?.idlePaused) backFromIdle();
 }
 ['pointermove', 'pointerdown', 'keydown', 'wheel', 'focus'].forEach(n => window.addEventListener(n, noteInput, { passive: true }));
-// Leaving the window means you're there. Locking the screen also blurs it, but then the extension is the one to ask.
-window.addEventListener('blur', () => { if (!extIdle) noteInput(); });
+// Leaving the window means you're there.
+window.addEventListener('blur', noteInput);
 
 function watchIdle() {
   const min = idleMin();
-  if (min && !extIdle && seesOwnInput && document.hasFocus() && Date.now() - lastInput >= min * 60e3) goIdle(lastInput);
+  if (min && seesOwnInput && document.hasFocus() && Date.now() - lastInput >= min * 60e3) goIdle(lastInput);
 }
 
 function endCheckIn() {
@@ -3501,7 +3447,7 @@ function endCheckIn() {
 function watchCheckIn() {
   const a = state.meta.session?.active, now = Date.now();
   if (checkIn && (!a || a.stepId !== checkIn.stepId || !!a.pausedAt !== !!checkIn.paused)) endCheckIn();
-  if (!a || a.pausedAt || extIdle || !idleMin() || !checkMin() || document.hasFocus()) return;
+  if (!a || a.pausedAt || !idleMin() || !checkMin() || document.hasFocus()) return;
   const st = findStep(a.taskId, a.stepId), stepId = a.stepId;
   if (checkIn) {
     if (now - checkIn.at < CHECK_WAIT_MIN * 60e3) return;
@@ -3838,7 +3784,7 @@ function togglePause() {
   const a = state.meta.session?.active; if (!a) return;
   if (a.pausedAt) resumeStep(a);
   else a.pausedAt = Date.now();
-  if (state.ask?.type === 'away') state.ask = null; // the extension can get here while Paced is asking
+  if (state.ask?.type === 'away') state.ask = null;
   saveMeta(); render();
 }
 
@@ -4875,7 +4821,6 @@ function tick() {
   if (m.brk) tickBreak(m);
   else breakWasOver = null;
   showClocks();
-  shareClock();
   // Once a minute: idle sessions close, and the working screen's numbers catch up.
   const minute = Math.floor(Date.now() / 60000);
   if (minute !== lastMinute) {
