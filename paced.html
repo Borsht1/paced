@@ -245,7 +245,9 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 /* Quick add: one line, read as you type */
 .quick-add { display: flex; gap: 8px; margin: 0 0 6px; }
 .quick-add .text-input { flex: 1; min-width: 0; }
-.quick-hint { margin: 0 0 12px 4px; min-height: 19px; font-size: 13px; color: var(--muted); }
+.quick-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; margin: 0 0 12px 4px; }
+.quick-foot .link { font-size: 14px; padding: 0; }
+.quick-hint { margin: 0; min-height: 19px; font-size: 13px; color: var(--muted); }
 .quick-hint b { color: var(--ink); font-weight: 600; }
 /* A task past its due date gets one calm line with what to do about it */
 .task-ask { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: -6px 0 6px; padding-left: 70px; font-size: 14px; color: var(--warn); }
@@ -305,6 +307,10 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .pencil { flex: none; width: 28px; height: 28px; display: grid; place-items: center; }
 .err { color: var(--stop); font-size: 14px; margin: 8px 0 0; }
 .sheet-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
+/* New task keeps Save in reach: the bar stays at the bottom of the sheet however far you scroll. */
+.sheet-foot.pinned { position: sticky; bottom: calc(-20px - env(safe-area-inset-bottom, 0px)); z-index: 2; margin: 20px -18px calc(-20px - env(safe-area-inset-bottom, 0px)); padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px)); background: var(--surface); border-top: 1px solid var(--line); }
+.how-long { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
+.how-long .min-field input { width: 3.6em; font-size: 16px; }
 .gt-foot { position: sticky; bottom: calc(-20px - env(safe-area-inset-bottom, 0px)); background: var(--surface); padding: 12px 0 20px; margin-bottom: -20px; }
 .gt-intro { margin-top: 10px; }
 .src-list { display: grid; gap: 8px; margin-bottom: 8px; }
@@ -353,7 +359,14 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .due-btn svg { color: var(--muted); }
 .cal { max-width: 320px; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .cal .chips { margin: 0 0 10px; gap: 6px; }
-.cal-time { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+.cal-time { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: 14px; font-weight: 600; }
+.cal-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.cal-foot .btn { margin-left: auto; }
+/* Due date and Work on it sit side by side, and stack when the sheet is narrow. Each opens its calendar under itself. */
+.date-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); column-gap: 16px; align-items: start; }
+#date-cal .cal { max-width: 360px; }
+.date-pair .due-row { gap: 4px 6px; }
+.field-x { width: 34px; height: 34px; }
 .cal-time select { width: auto; padding: 7px 10px; font-weight: 400; }
 .plan-note { font-size: 14px; color: var(--muted); }
 .plan-note.late { color: var(--stop); }
@@ -1870,16 +1883,16 @@ function quickAdd() {
 }
 const quickHTML = () => `<form class="quick-add" id="quick-add">
     <input id="quick-input" class="text-input" autocomplete="off" enterkeyhint="done" value="${esc(state.quick || '')}" placeholder="Quick add, like “lab 40m fri”" aria-label="Quick add a task. End with minutes like 40m and a day like fri or tomorrow." aria-describedby="quick-hint">
-    <button type="submit" class="btn ghost">Add</button>
+    <button type="submit" class="btn primary">${ICON.plus}Add</button>
   </form>
-  <p class="quick-hint" id="quick-hint" aria-live="polite">${quickHint(state.quick || '')}</p>`;
+  <div class="quick-foot"><p class="quick-hint" id="quick-hint" aria-live="polite">${quickHint(state.quick || '')}</p>
+    <button type="button" class="link" data-act="open-add">${draftHas(state.draft) ? 'Finish your draft' : 'More details'}</button></div>`;
 
 function homeHTML() {
   const list = activeTasks(), done = archivedTasks().length;
   const doneLink = done ? `<button class="link done-link" data-act="show-archive">${ICON.check}Completed tasks<span class="count">${done}</span></button>` : '';
   const left = list.reduce((a, t) => a + minLeft(t), 0);
-  return `<div class="title-row"><h1>My tasks</h1>${list.length ? `<div class="row-actions"><button class="btn ghost small" data-act="open-import">Import</button>
-    <button class="btn primary small" data-act="open-add">${ICON.plus}New task</button></div>` : ''}</div>
+  return `<div class="title-row"><h1>My tasks</h1>${list.length ? `<div class="row-actions"><button class="btn ghost small" data-act="open-import">Import</button></div>` : ''}</div>
   ${list.length ? `<p class="sub">${list.length} ${list.length === 1 ? 'task' : 'tasks'}${left ? ` · about ${fmtMin(left)} of work` : ''}</p>
   ${quickHTML()}
   <ul class="tasks">${list.map(taskHTML).join('')}</ul>
@@ -1890,12 +1903,11 @@ function homeHTML() {
   <section class="empty">
     <h2>Here’s how Paced works</h2>
     <ol class="how-list">
-      <li>Add a task and split it into small steps.</li>
-      <li>Guess how many minutes each step will take.</li>
-      <li>Press <b>Start</b>. Paced times each step and tells you when it’s time for a break.</li>
+      <li>Type a task in the box above, with how long it will take, like “essay 40m”.</li>
+      <li>Press <b>Start</b>. Paced times it and tells you when it’s time for a break.</li>
+      <li>For a big task, use <b>More details</b> to split it into steps, each with its own timer.</li>
     </ol>
-    <div class="row"><button class="btn primary" data-act="open-add">${ICON.plus}Add your first task</button>
-    <button class="btn ghost" data-act="open-import">Import tasks</button></div>
+    <div class="row"><button class="btn ghost" data-act="open-import">Import tasks from elsewhere</button></div>
   </section>
   ${doneLink}`}
   ${savedLine()}`;
@@ -2440,7 +2452,7 @@ const sheetHead = title => `<div class="sheet-head"><h2>${esc(title)}</h2><butto
 const dueValue = () => state.layer?.type === 'add' ? state.draft?.due : state.tasks.get(state.layer?.id)?.due;
 const monthKey = (month, n = 0) => { const d = keyDate(month + '-01'); d.setMonth(d.getMonth() + n); return dateKey(d).slice(0, 7); };
 
-function calHTML(due, noPast, top = '') {
+function calHTML(due, noPast, top = '', bottom = '') {
   const today = dateKey(), { month } = state.duePick, first = keyDate(month + '-01');
   const count = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
   const days = Array.from({ length: count }, (_, i) => `${month}-${pad(i + 1)}`);
@@ -2457,20 +2469,20 @@ function calHTML(due, noPast, top = '') {
       ${Array.from({ length: 7 }, (_, i) => `<span class="cal-dow">${keyDate(addDays('2023-01-01', i)).toLocaleDateString(undefined, { weekday: 'narrow' })}</span>`).join('')}
       ${'<span></span>'.repeat(first.getDay())}
       ${days.map((k, i) => `<button type="button" class="cal-day${k === due ? ' on' : ''}${k === today ? ' today' : ''}${k < today ? ' past' : ''}" data-act="due-set" data-v="${k}" aria-label="${esc(fmtFullDay(k))}" aria-pressed="${k === due}" tabindex="${k === tabStop ? 0 : -1}"${noPast && k < today ? ' disabled' : ''}>${i + 1}</button>`).join('')}
-    </div>
+    </div>${bottom}
   </div>`;
 }
 
 function dueFieldHTML() {
   const due = dueValue(), soon = due && dueInfo({ due })?.cls;
   return `<div class="due-row">
-      <button type="button" id="due-toggle" class="text-input due-btn${due ? '' : ' none'}" data-act="due-toggle" aria-expanded="${!!state.duePick && !state.duePick.plan}">${ICON.calendar}${due ? esc(fmtFullDay(due)) : 'Pick a date'}</button>
+      <button type="button" id="due-toggle" class="text-input due-btn${due ? '' : ' none'}" data-act="due-toggle" aria-expanded="${!!state.duePick && !state.duePick.plan}">${ICON.calendar}${due ? esc(fmtFullDay(due)) : 'Pick a due date'}</button>
       ${soon ? dueHTML({ due }) : ''}
-      ${due ? '<button type="button" class="btn ghost small" data-act="due-set" data-v="">Remove</button>' : ''}
-    </div>${state.duePick && !state.duePick.plan ? calHTML(due) : ''}`;
+      ${due ? `<button type="button" class="icon-btn field-x" data-act="due-set" data-v="" title="Remove" aria-label="Remove the due date">${ICON.x}</button>` : ''}
+    </div>`; // its calendar opens under both fields, in #date-cal
 }
 
-/* ----- When will you work on it: a day, and if you like a time, on that day's timeline ----- */
+/* ----- Work on it: a day, and if you like a time, on that day's timeline ----- */
 // The day a task is planned for, today's timeline first. A task is planned for one day at a time.
 function plannedOf(taskId) {
   const mine = i => i.taskId === taskId && !i.stepId, today = dayPlan().items.find(mine);
@@ -2481,12 +2493,17 @@ function plannedOf(taskId) {
 const planValue = () => state.layer?.type === 'add' ? state.draft?.plan || null : plannedOf(state.layer?.id);
 const dayName = k => k === dateKey() ? 'Today' : k === addDays(dateKey(), 1) ? 'Tomorrow' : fmtFullDay(k);
 const planWords = p => `${dayName(p.date)}, ${p.at != null ? clockAt(p.at) : 'any time'}`;
-function planTimeHTML() {
-  const cur = state.duePick.time ?? '', opts = Array.from({ length: 96 }, (_, i) => (i * 15 + 360) % 1440); // from 6 AM, with the small hours last
-  return `<label class="cal-time">Time <select id="plan-time" class="text-input" aria-label="Time to start (optional)">
-      <option value=""${cur === '' ? ' selected' : ''}>Any time</option>
-      ${opts.map(m => `<option value="${m}"${cur === m ? ' selected' : ''}>${clockAt(m)}</option>`).join('')}
-    </select><span class="muted" style="font-weight:400">then pick a day</span></label>`;
+// Under the days: a start time once there's a day, and Done. Each choice counts as soon as you make it.
+function planTimeHTML(p) {
+  const cur = p?.at ?? '', opts = Array.from({ length: 96 }, (_, i) => (i * 15 + 360) % 1440); // from 6 AM, with the small hours last
+  return `<div class="cal-foot">
+      <label class="cal-time">Start at <select id="plan-time" class="text-input" aria-label="Start at (optional)"${p ? '' : ' disabled'}>
+        <option value=""${cur === '' ? ' selected' : ''}>Any time</option>
+        ${opts.map(m => `<option value="${m}"${cur === m ? ' selected' : ''}>${clockAt(m)}</option>`).join('')}
+      </select></label>
+      ${p ? '' : '<span class="muted">Pick a day first</span>'}
+      <button type="button" class="btn small" data-act="plan-done">Done</button>
+    </div>`;
 }
 function planFieldHTML() {
   const p = planValue(), open = !!state.duePick?.plan, t = state.layer?.type === 'detail' && state.tasks.get(state.layer.id);
@@ -2494,10 +2511,18 @@ function planFieldHTML() {
   const b = t && p && p.date === dateKey() ? layoutDay().blocks.find(x => x.task.id === t.id && !x.item.stepId) : null;
   const note = b ? (b.pieces[0].late ? '<span class="plan-note late">Doesn’t fit today</span>' : `<span class="plan-note">Starts ${b.start > minuteNow() + 1 ? clockAt(b.start) : 'now'}</span>`) : '';
   return `<div class="due-row">
-      <button type="button" id="plan-toggle" class="text-input due-btn${p ? '' : ' none'}" data-act="plan-toggle" aria-expanded="${open}">${ICON.calendar}${p ? esc(planWords(p)) : 'Pick a day'}</button>
+      <button type="button" id="plan-toggle" class="text-input due-btn${p ? '' : ' none'}" data-act="plan-toggle" aria-expanded="${open}">${ICON.calendar}${p ? esc(planWords(p)) : 'Pick a day and time'}</button>
       ${note}
-      ${p ? '<button type="button" class="btn ghost small" data-act="plan-clear">Remove</button>' : ''}
-    </div>${open ? calHTML(p?.date || null, true, planTimeHTML()) : ''}`;
+      ${p ? `<button type="button" class="icon-btn field-x" data-act="plan-clear" title="Remove" aria-label="Take it off your plan">${ICON.x}</button>` : ''}
+    </div>`;
+}
+// The two fields sit side by side, so whichever calendar is open gets the full width under both.
+function dateCalHTML() {
+  const d = state.duePick;
+  if (!d) return '';
+  if (!d.plan) return calHTML(dueValue());
+  const p = planValue();
+  return calHTML(p?.date || null, true, '', planTimeHTML(p));
 }
 // Put a task on a day's plan, starting no sooner than "at" (minutes after midnight) if you gave one.
 function setPlan(taskId, date, at) {
@@ -2516,18 +2541,23 @@ function setPlan(taskId, date, at) {
   state.meta.dayPlans = days.filter(d => d.name || d.items.length).sort((a, b) => a.date.localeCompare(b.date));
   savePlan(todayPlan); // saves the days ahead too
 }
+// Picking a day keeps the picker open, so a time can follow. A time already chosen moves with it.
+function setPlanWhen(date, at) {
+  const L = state.layer;
+  if (L.type === 'add') state.draft.plan = { date, at };
+  else { setPlan(L.id, date, at); render(); }
+}
 function setPlanDay(k) {
-  const L = state.layer, at = state.duePick.time ?? null;
-  state.duePick = null;
-  if (L.type === 'add') state.draft.plan = { date: k, at };
-  else { setPlan(L.id, k, at); render(); toast(`Planned for ${planWords({ date: k, at })}`); }
-  renderDue('#plan-toggle');
+  setPlanWhen(k, planValue()?.at ?? null);
+  state.duePick.month = k.slice(0, 7);
+  renderDue('#plan-time');
 }
 // Only the picker redraws, so the sheet keeps its place and anything half-typed.
 function renderDue(focus) {
   const el = $('#due-field'), plan = $('#plan-field');
   if (el) el.innerHTML = dueFieldHTML(); else renderLayer(); // the schedules sheet uses this calendar too
   if (plan) plan.innerHTML = planFieldHTML();
+  if ($('#date-cal')) $('#date-cal').innerHTML = dateCalHTML();
   $(focus)?.focus();
 }
 function setDue(k) {
@@ -2756,6 +2786,7 @@ function draftTotal() {
 function renderDraftSteps() {
   $('#draft-steps').innerHTML = draftStepsHTML();
   $('#draft-total').textContent = draftTotal();
+  $('#draft-unsplit').hidden = state.draft.steps.length > 0; // once there are steps, the task is its steps
   autosizeAll($('#draft-steps'));
 }
 
@@ -2764,11 +2795,14 @@ function addHTML(enter) {
     <label class="label" for="new-title">What do you need to do?</label>
     <input id="new-title" class="text-input big" placeholder="Task name" autocomplete="off" value="${esc(state.draft.title)}">
     <p class="err" id="new-err" hidden>Type a name for the task first.</p>
-    <label class="label" for="due-toggle">Due date <span class="muted">(optional)</span></label>
-    <div id="due-field">${dueFieldHTML()}</div>
-    <label class="label" for="plan-toggle">When will you work on it? <span class="muted">(optional)</span></label>
-    <div id="plan-field">${planFieldHTML()}</div>
-    <h3 class="label">Steps</h3>
+    <div class="date-pair">
+      <div><label class="label" for="due-toggle">Due date <span class="muted">(optional)</span></label>
+      <div id="due-field">${dueFieldHTML()}</div></div>
+      <div><label class="label" for="plan-toggle">Work on it <span class="muted">(optional)</span></label>
+      <div id="plan-field">${planFieldHTML()}</div></div>
+    </div>
+    <div id="date-cal">${dateCalHTML()}</div>
+    ${state.draft.split || state.draft.steps.length ? `<h3 class="label">Steps</h3>
     <p class="help">Split the task into small pieces. For each one, guess how many minutes it will take.</p>
     <div id="draft-steps">${draftStepsHTML()}</div>
     <form class="step-add" id="draft-add">
@@ -2777,9 +2811,15 @@ function addHTML(enter) {
       <button type="submit" class="btn small">${ICON.plus}Add</button>
     </form>
     <p class="total" id="draft-total">${draftTotal()}</p>
-    <div class="sheet-foot">
-      <button class="btn ghost" data-act="close-layer">Cancel</button>
-      <button class="btn primary" data-act="save-new">Save task</button>
+    <button type="button" class="link small" id="draft-unsplit" data-act="draft-unsplit"${state.draft.steps.length ? ' hidden' : ''}>Just one length instead</button>`
+    : `<label class="label" for="new-min">How long will it take? <span class="muted">(optional)</span></label>
+    <div class="how-long">
+      <label class="min-field"><input id="new-min" type="number" min="1" max="600" inputmode="numeric" value="${state.draft.min ?? ''}" aria-label="Minutes it will take"><span>min</span></label>
+      <button type="button" class="link" data-act="draft-split">Break it into steps</button>
+    </div>`}
+    <div class="sheet-foot pinned">
+      <button class="btn ghost" data-act="add-cancel">Cancel</button>
+      <button class="btn primary" data-act="save-new" title="Save (Ctrl or ⌘ + Enter)">Save task</button>
     </div>
   </section>`;
 }
@@ -2821,10 +2861,13 @@ function detailHTML(t, enter) {
       <button class="icon-btn" data-act="close-layer" aria-label="Close">${ICON.x}</button>
     </div>
     <p class="sub" id="detail-sum">${detailSummary(t)}</p>
-    <label class="label" for="due-toggle">Due date <span class="muted">(optional)</span></label>
-    <div id="due-field">${dueFieldHTML()}</div>
-    <label class="label" for="plan-toggle">When will you work on it? <span class="muted">(optional)</span></label>
-    <div id="plan-field">${planFieldHTML()}</div>
+    <div class="date-pair">
+      <div><label class="label" for="due-toggle">Due date <span class="muted">(optional)</span></label>
+      <div id="due-field">${dueFieldHTML()}</div></div>
+      <div><label class="label" for="plan-toggle">Work on it <span class="muted">(optional)</span></label>
+      <div id="plan-field">${planFieldHTML()}</div></div>
+    </div>
+    <div id="date-cal">${dateCalHTML()}</div>
     <h3 class="label">Steps</h3>
     <p class="help">${t.steps.length ? 'Change any name or minutes right here. Tick a step when it’s finished.' : 'No steps yet. Add the first one below.'}</p>
     ${t.steps.length ? `<ol class="steps">${rows}</ol>` : ''}
@@ -3465,8 +3508,10 @@ function watchCheckIn() {
 }
 
 /* ---------- actions: tasks ---------- */
-function openAdd() {
-  state.draft = { title: '', due: null, steps: [] };
+// A new task you were writing is kept when the sheet closes, until you save it or press Cancel.
+const draftHas = d => !!d && !!(d.title.trim() || d.steps.length || d.due || d.plan || d.min);
+function openAdd(from) {
+  if (from || !draftHas(state.draft)) state.draft = { title: from?.title || '', due: from?.due || null, plan: null, min: from?.min || null, steps: [], split: false };
   state.duePick = null;
   state.layer = { type: 'add' };
   renderLayer(true);
@@ -3478,7 +3523,12 @@ function openDetail(id, focusAdd) {
   renderLayer(true);
   if (focusAdd) $('#detail-step').focus();
 }
-function closeLayer() { if (state.layer?.type === 'notes') pruneNotes(); state.layer = null; renderLayer(); render(); }
+function closeLayer() {
+  const kept = state.layer?.type === 'add' && draftHas(state.draft);
+  if (state.layer?.type === 'notes') pruneNotes();
+  state.layer = null; renderLayer(); render();
+  if (kept) toast(`Kept “${state.draft.title.trim() || 'your new task'}” to finish later`);
+}
 
 /* ----- notes: anything you want to keep, saved with your tasks ----- */
 // Notes are for getting a thought out of your head mid-step, so the box to type in comes first and the timer keeps going.
@@ -3564,16 +3614,19 @@ function addDraftStep() {
 }
 
 function saveNew() {
-  if ($('#draft-step').value.trim()) addDraftStep();
+  if ($('#draft-step')?.value.trim()) addDraftStep();
   const title = state.draft.title.trim();
   if (!title) { $('#new-err').hidden = false; $('#new-title').focus(); return; }
+  // With no steps, the task is one step of its own, so Start works straight away.
+  const steps = state.draft.steps.filter(s => s.title.trim()).map(s => ({ title: s.title.trim(), est: s.est || null }));
   const t = {
     id: newId('t'), title, due: isKey(state.draft.due) ? state.draft.due : null, createdAt: Date.now(), archived: false, completedAt: null,
-    steps: state.draft.steps.filter(s => s.title.trim()).map(s => ({ id: newId('s'), title: s.title.trim(), est: s.est || null, done: false, actual: null, doneAt: null }))
+    steps: (steps.length ? steps : [{ title, est: state.draft.min || null }]).map(s => ({ id: newId('s'), ...s, done: false, actual: null, doneAt: null }))
   };
   saveTask(t);
   const plan = state.draft.plan;
   if (plan) setPlan(t.id, plan.date, plan.at);
+  state.draft = null;
   state.layer = null; renderLayer();
   render();
   toast(plan ? `Saved “${t.title}” for ${planWords(plan)}` : `Saved “${t.title}”`);
@@ -4269,7 +4322,10 @@ document.addEventListener('click', e => {
   Alert.unlock();
   if (['focus-task', 'sel-start', 'start-step', 'pick-task', 'history'].includes(act)) Alert.askPermission();
   switch (act) {
-    case 'open-add': openAdd(); break;
+    case 'open-add': { const q = (state.quick || '').trim(); state.quick = ''; openAdd(q ? parseQuick(q) : null); break; }
+    case 'add-cancel': state.draft = null; closeLayer(); break;
+    case 'draft-split': state.draft.split = true; renderLayer(); $('#draft-step').focus(); break;
+    case 'draft-unsplit': state.draft.split = false; renderLayer(); $('#new-min').focus(); break;
     case 'open-import': openImport(); break;
     case 'open-gtasks': openGoogle('gtasks'); break;
     case 'open-paste': openPaste(); break;
@@ -4314,9 +4370,10 @@ document.addEventListener('click', e => {
     case 'due-toggle': state.duePick = state.duePick && !state.duePick.plan ? null : { month: (dueValue() || dateKey()).slice(0, 7) }; renderDue('#due-toggle'); break;
     case 'plan-toggle': {
       const p = planValue();
-      state.duePick = state.duePick?.plan ? null : { plan: true, month: (p?.date || dateKey()).slice(0, 7), time: p?.at ?? null };
+      state.duePick = state.duePick?.plan ? null : { plan: true, month: (p?.date || dateKey()).slice(0, 7) };
       renderDue('#plan-toggle'); break;
     }
+    case 'plan-done': state.duePick = null; renderDue('#plan-toggle'); break;
     case 'plan-clear': {
       state.duePick = null;
       if (state.layer?.type === 'add') state.draft.plan = null;
@@ -4522,6 +4579,7 @@ document.addEventListener('input', e => {
   else if (el.id === 'paste-text') state.gt.text = el.value;
   else if (el.id === 'sched-name') state.schedName = el.value;
   else if (el.id === 'quick-input') { state.quick = el.value; $('#quick-hint').innerHTML = quickHint(el.value); }
+  else if (el.id === 'new-min') state.draft.min = parseMin(el.value);
   else if (el.id === 'new-title') { state.draft.title = el.value; if (el.value.trim()) $('#new-err').hidden = true; }
   else if (el.id === 'split-name' && state.ask) state.ask.name = el.value;
   else if ((el.id === 'split-min' || el.id === 'forgot-min') && state.ask) state.ask.min = parseMin(el.value);
@@ -4534,7 +4592,11 @@ document.addEventListener('input', e => {
 
 document.addEventListener('change', e => {
   const el = e.target;
-  if (el.id === 'plan-time' && state.duePick) { state.duePick.time = el.value === '' ? null : +el.value; return; }
+  if (el.id === 'plan-time') {
+    const p = planValue();
+    if (p) { setPlanWhen(p.date, el.value === '' ? null : +el.value); renderDue('#plan-time'); }
+    return;
+  }
   if (el.dataset.hour) {
     const p = dayPlan(), list = clone(p.windows), w = list[+el.dataset.i], v = parseHHMM(el.value);
     if (w && v != null) w[el.dataset.hour] = v;
@@ -4591,8 +4653,10 @@ document.addEventListener('keydown', e => {
   // N opens Notes from anywhere, unless you're typing somewhere else.
   if (e.key.toLowerCase() === 'n' && !e.metaKey && !e.ctrlKey && !e.altKey && !state.layer && state.ready && Store.mode !== 'signin' && !el.closest?.('input, textarea, select, [contenteditable]')) { e.preventDefault(); openNotes(); return; }
   if (e.key === 'Enter' && !e.shiftKey && el.id === 'note-new') { e.preventDefault(); saveNewNote(); return; }
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && state.layer?.type === 'add') { e.preventDefault(); saveNew(); return; }
   if (e.key === 'Enter') {
-    if (el.id === 'new-title') { e.preventDefault(); $('#draft-step').focus(); return; }
+    if (el.id === 'new-title') { e.preventDefault(); ($('#new-min') || $('#draft-step')).focus(); return; }
+    if (el.id === 'new-min') { e.preventDefault(); saveNew(); return; }
     if ((el.id === 'draft-step' || el.id === 'detail-step' || el.id === 'fstep-name') && el.value.trim()) {
       e.preventDefault();
       $({ 'draft-step': '#draft-min', 'detail-step': '#detail-min', 'fstep-name': '#fstep-min' }[el.id]).focus();
