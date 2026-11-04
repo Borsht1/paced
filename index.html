@@ -354,6 +354,10 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .due-btn svg { color: var(--muted); }
 .cal { max-width: 320px; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .cal .chips { margin: 0 0 10px; gap: 6px; }
+.cal-time { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+.cal-time select { width: auto; padding: 7px 10px; font-weight: 400; }
+.plan-note { font-size: 14px; color: var(--muted); }
+.plan-note.late { color: var(--stop); }
 .cal .chip { padding: 6px 12px; font-size: 14px; }
 .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; font-weight: 600; }
 .cal-next svg { transform: rotate(180deg); }
@@ -2249,7 +2253,7 @@ function schedulesHTML(enter) {
       ${state.schedLoad === x.id && state.duePick ? calHTML(null, true) : ''}
     </li>`).join('')}</ul>` : '<p class="help">Nothing saved yet. Name today’s schedule above to keep it.</p>'}
     ${soon.length ? `<h3 class="label">Coming up</h3><ul class="scheds">${soon.map(d => `<li class="sched">
-      <div><b>${esc(fmtFullDay(d.date))}</b><small>${esc(d.name)} · ${esc(schedWords(d))}</small></div>
+      <div><b>${esc(fmtFullDay(d.date))}</b><small>${esc(d.name || 'Your plan')} · ${esc(schedWords(d))}</small></div>
       <button class="btn ghost small" data-act="sched-unset" data-v="${d.date}">Remove</button>
     </li>`).join('')}</ul>` : ''}
   </section>`;
@@ -2306,7 +2310,7 @@ function taskHTML(t) {
   if (!total) meta = 'No steps yet';
   else if (!done) meta = `${total} ${total === 1 ? 'step' : 'steps'}${left ? ` · about ${fmtMin(left)}` : ''}`;
   else meta = `${done} of ${total} steps done${left ? ` · about ${fmtMin(left)} left` : ''}`;
-  const live = state.meta.session?.active?.taskId === t.id, due = dueInfo(t);
+  const live = state.meta.session?.active?.taskId === t.id, due = dueInfo(t), when = plannedOf(t.id), later = when && when.date > dateKey() ? when : null;
   const action = !total
     ? `<button class="btn ghost small" data-act="add-steps" data-id="${t.id}">Add steps</button>`
     : `<button class="btn soft small start" data-act="focus-task" data-id="${t.id}" aria-label="${live ? 'Open the timer for' : 'Start working on'} “${esc(t.title)}”">${live ? 'Open timer' : ICON.play + '<span class="start-word">Start</span>'}</button>`;
@@ -2324,7 +2328,7 @@ function taskHTML(t) {
     <button class="check" data-act="complete-task" data-id="${t.id}" title="Mark the whole task as done" aria-label="Mark “${esc(t.title)}” as done"><span>${ICON.check}</span></button>
     <button class="task-body" data-act="open-task" data-id="${t.id}">
       <span class="task-title">${esc(t.title)}</span>
-      <span class="task-meta">${meta}${t.due && !due?.past ? ' · ' + dueHTML(t) : ''}</span>
+      <span class="task-meta">${meta}${t.due && !due?.past ? ' · ' + dueHTML(t) : ''}${later ? ` · Planned ${esc(planWords(later))}` : ''}</span>
       ${live ? '<span class="badge"><span class="dot"></span>Working on this now</span>' : ''}
       ${done ? `<span class="bar" aria-hidden="true"><i style="width:${Math.round(done / total * 100)}%"></i></span>` : ''}
     </button>
@@ -2437,13 +2441,13 @@ const sheetHead = title => `<div class="sheet-head"><h2>${esc(title)}</h2><butto
 const dueValue = () => state.layer?.type === 'add' ? state.draft?.due : state.tasks.get(state.layer?.id)?.due;
 const monthKey = (month, n = 0) => { const d = keyDate(month + '-01'); d.setMonth(d.getMonth() + n); return dateKey(d).slice(0, 7); };
 
-function calHTML(due, noPast) {
+function calHTML(due, noPast, top = '') {
   const today = dateKey(), { month } = state.duePick, first = keyDate(month + '-01');
   const count = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
   const days = Array.from({ length: count }, (_, i) => `${month}-${pad(i + 1)}`);
   const tabStop = days.includes(due) ? due : days.includes(today) ? today : days[0]; // arrow keys move around the rest
   const quick = [['Today', today], ['Tomorrow', addDays(today, 1)], ['In a week', addDays(today, 7)]];
-  return `<div class="cal">
+  return `<div class="cal">${top}
     <div class="chips">${quick.map(([label, k]) => `<button type="button" class="chip" data-act="due-set" data-v="${k}">${label}</button>`).join('')}</div>
     <div class="cal-head">
       <button type="button" class="icon-btn" data-act="due-month" data-v="-1" aria-label="Previous month">${ICON.back}</button>
@@ -2461,20 +2465,76 @@ function calHTML(due, noPast) {
 function dueFieldHTML() {
   const due = dueValue(), soon = due && dueInfo({ due })?.cls;
   return `<div class="due-row">
-      <button type="button" id="due-toggle" class="text-input due-btn${due ? '' : ' none'}" data-act="due-toggle" aria-expanded="${!!state.duePick}">${ICON.calendar}${due ? esc(fmtFullDay(due)) : 'Pick a date'}</button>
+      <button type="button" id="due-toggle" class="text-input due-btn${due ? '' : ' none'}" data-act="due-toggle" aria-expanded="${!!state.duePick && !state.duePick.plan}">${ICON.calendar}${due ? esc(fmtFullDay(due)) : 'Pick a date'}</button>
       ${soon ? dueHTML({ due }) : ''}
       ${due ? '<button type="button" class="btn ghost small" data-act="due-set" data-v="">Remove</button>' : ''}
-    </div>${state.duePick ? calHTML(due) : ''}`;
+    </div>${state.duePick && !state.duePick.plan ? calHTML(due) : ''}`;
+}
+
+/* ----- When will you work on it: a day, and if you like a time, on that day's timeline ----- */
+// The day a task is planned for, today's timeline first. A task is planned for one day at a time.
+function plannedOf(taskId) {
+  const mine = i => i.taskId === taskId && !i.stepId, today = dayPlan().items.find(mine);
+  if (today) return { date: dateKey(), at: today.at ?? null };
+  const d = comingUp().find(x => x.items.some(mine));
+  return d ? { date: d.date, at: d.items.find(mine).at ?? null } : null;
+}
+const planValue = () => state.layer?.type === 'add' ? state.draft?.plan || null : plannedOf(state.layer?.id);
+const dayName = k => k === dateKey() ? 'Today' : k === addDays(dateKey(), 1) ? 'Tomorrow' : fmtFullDay(k);
+const planWords = p => `${dayName(p.date)}, ${p.at != null ? clockAt(p.at) : 'any time'}`;
+function planTimeHTML() {
+  const cur = state.duePick.time ?? '', opts = Array.from({ length: 96 }, (_, i) => (i * 15 + 360) % 1440); // from 6 AM, with the small hours last
+  return `<label class="cal-time">Time <select id="plan-time" class="text-input" aria-label="Time to start (optional)">
+      <option value=""${cur === '' ? ' selected' : ''}>Any time</option>
+      ${opts.map(m => `<option value="${m}"${cur === m ? ' selected' : ''}>${clockAt(m)}</option>`).join('')}
+    </select><span class="muted" style="font-weight:400">then pick a day</span></label>`;
+}
+function planFieldHTML() {
+  const p = planValue(), open = !!state.duePick?.plan, t = state.layer?.type === 'detail' && state.tasks.get(state.layer.id);
+  // On today's timeline, say where it really landed, since tasks ahead of it can push it later.
+  const b = t && p && p.date === dateKey() ? layoutDay().blocks.find(x => x.task.id === t.id && !x.item.stepId) : null;
+  const note = b ? (b.pieces[0].late ? '<span class="plan-note late">Doesn’t fit today</span>' : `<span class="plan-note">Starts ${b.start > minuteNow() + 1 ? clockAt(b.start) : 'now'}</span>`) : '';
+  return `<div class="due-row">
+      <button type="button" id="plan-toggle" class="text-input due-btn${p ? '' : ' none'}" data-act="plan-toggle" aria-expanded="${open}">${ICON.calendar}${p ? esc(planWords(p)) : 'Pick a day'}</button>
+      ${note}
+      ${p ? '<button type="button" class="btn ghost small" data-act="plan-clear">Remove</button>' : ''}
+    </div>${open ? calHTML(p?.date || null, true, planTimeHTML()) : ''}`;
+}
+// Put a task on a day's plan, starting no sooner than "at" (minutes after midnight) if you gave one.
+function setPlan(taskId, date, at) {
+  const today = dateKey(), mine = i => i.taskId === taskId && !i.stepId, p = dayPlan();
+  const was = p.items.find(mine) || comingUp().flatMap(d => d.items).find(mine), item = { ...(was ? clone(was) : {}), id: was?.id || newId('i'), taskId, at: date ? at ?? null : null };
+  if (!item.extra) delete item.extra;
+  let todayPlan = { ...p, items: p.items.filter(i => !mine(i)) };
+  let days = comingUp().map(d => ({ ...d, items: d.items.filter(i => !mine(i)) }));
+  if (date === today) todayPlan = at != null ? placeItem(todayPlan, item, at) : { ...todayPlan, items: [...todayPlan.items, item] };
+  else if (date) {
+    const d = days.find(x => x.date === date) || { date, name: '', windows: clone(usualHours()), items: [] };
+    const i = at == null ? -1 : d.items.findIndex(x => x.taskId && (x.at == null || x.at > at)); // keep the day in time order
+    d.items = i < 0 ? [...d.items, item] : [...d.items.slice(0, i), item, ...d.items.slice(i)];
+    days = [...days.filter(x => x.date !== date), d];
+  }
+  state.meta.dayPlans = days.filter(d => d.name || d.items.length).sort((a, b) => a.date.localeCompare(b.date));
+  savePlan(todayPlan); // saves the days ahead too
+}
+function setPlanDay(k) {
+  const L = state.layer, at = state.duePick.time ?? null;
+  state.duePick = null;
+  if (L.type === 'add') state.draft.plan = { date: k, at };
+  else { setPlan(L.id, k, at); render(); toast(`Planned for ${planWords({ date: k, at })}`); }
+  renderDue('#plan-toggle');
 }
 // Only the picker redraws, so the sheet keeps its place and anything half-typed.
 function renderDue(focus) {
-  const el = $('#due-field');
+  const el = $('#due-field'), plan = $('#plan-field');
   if (el) el.innerHTML = dueFieldHTML(); else renderLayer(); // the schedules sheet uses this calendar too
+  if (plan) plan.innerHTML = planFieldHTML();
   $(focus)?.focus();
 }
 function setDue(k) {
   const L = state.layer, t = L.type === 'detail' && state.tasks.get(L.id);
   if (L.type === 'schedules') { loadSchedule(state.schedLoad, k); return; }
+  if (state.duePick?.plan) { setPlanDay(k); return; }
   if (L.type === 'add') state.draft.due = k;
   else if (t) { t.due = k; saveTask(t); render(); }
   state.duePick = null;
@@ -2707,6 +2767,8 @@ function addHTML(enter) {
     <p class="err" id="new-err" hidden>Type a name for the task first.</p>
     <label class="label" for="due-toggle">Due date <span class="muted">(optional)</span></label>
     <div id="due-field">${dueFieldHTML()}</div>
+    <label class="label" for="plan-toggle">When will you work on it? <span class="muted">(optional)</span></label>
+    <div id="plan-field">${planFieldHTML()}</div>
     <h3 class="label">Steps</h3>
     <p class="help">Split the task into small pieces. For each one, guess how many minutes it will take.</p>
     <div id="draft-steps">${draftStepsHTML()}</div>
@@ -2731,13 +2793,6 @@ function detailSummary(t) {
   return `${total - left} of ${total} steps done${min ? ` · about ${fmtMin(min)} left` : ''}`;
 }
 const missingMinutes = t => t.steps.some(s => !s.done && !s.est);
-
-function planRowHTML(t) {
-  const item = dayPlan().items.find(i => i.taskId === t.id && !i.stepId), b = item && layoutDay().blocks.find(x => x.item.id === item.id);
-  if (!item) return `<button class="btn ghost small" data-act="plan-on" data-id="${t.id}">Add to today</button>`;
-  return `<span class="muted">${b && b.pieces[0].late ? 'Doesn’t fit today' : b ? `Planned for ${clockAt(b.start)}` : 'On today’s timeline'}</span>
-    <button class="btn ghost small" data-act="plan-off" data-id="${item.id}">Remove from today</button>`;
-}
 
 function detailHTML(t, enter) {
   const live = state.meta.session?.active;
@@ -2769,8 +2824,8 @@ function detailHTML(t, enter) {
     <p class="sub" id="detail-sum">${detailSummary(t)}</p>
     <label class="label" for="due-toggle">Due date <span class="muted">(optional)</span></label>
     <div id="due-field">${dueFieldHTML()}</div>
-    <h3 class="label">Today’s timeline</h3>
-    <div class="due-row">${planRowHTML(t)}</div>
+    <label class="label" for="plan-toggle">When will you work on it? <span class="muted">(optional)</span></label>
+    <div id="plan-field">${planFieldHTML()}</div>
     <h3 class="label">Steps</h3>
     <p class="help">${t.steps.length ? 'Change any name or minutes right here. Tick a step when it’s finished.' : 'No steps yet. Add the first one below.'}</p>
     ${t.steps.length ? `<ol class="steps">${rows}</ol>` : ''}
@@ -3572,9 +3627,11 @@ function saveNew() {
     steps: state.draft.steps.filter(s => s.title.trim()).map(s => ({ id: newId('s'), title: s.title.trim(), est: s.est || null, done: false, actual: null, doneAt: null }))
   };
   saveTask(t);
+  const plan = state.draft.plan;
+  if (plan) setPlan(t.id, plan.date, plan.at);
   state.layer = null; renderLayer();
   render();
-  toast(`Saved “${t.title}”`);
+  toast(plan ? `Saved “${t.title}” for ${planWords(plan)}` : `Saved “${t.title}”`);
 }
 
 function archiveToast(t, before) {
@@ -4309,7 +4366,18 @@ document.addEventListener('click', e => {
     case 'toggle-step': toggleStep(id, step); break;
     case 'delete-step': deleteStep(id, step); break;
     case 'delete-task': deleteTask(id); break;
-    case 'due-toggle': state.duePick = state.duePick ? null : { month: (dueValue() || dateKey()).slice(0, 7) }; renderDue('#due-toggle'); break;
+    case 'due-toggle': state.duePick = state.duePick && !state.duePick.plan ? null : { month: (dueValue() || dateKey()).slice(0, 7) }; renderDue('#due-toggle'); break;
+    case 'plan-toggle': {
+      const p = planValue();
+      state.duePick = state.duePick?.plan ? null : { plan: true, month: (p?.date || dateKey()).slice(0, 7), time: p?.at ?? null };
+      renderDue('#plan-toggle'); break;
+    }
+    case 'plan-clear': {
+      state.duePick = null;
+      if (state.layer?.type === 'add') state.draft.plan = null;
+      else { setPlan(state.layer.id, null); render(); toast('Taken off your plan'); }
+      renderDue('#plan-toggle'); break;
+    }
     case 'due-month': state.duePick.month = monthKey(state.duePick.month, +v); renderDue(`[data-act="due-month"][data-v="${v}"]`); break;
     case 'due-set': setDue(v || null); break;
     case 'restore': {
@@ -4415,12 +4483,6 @@ document.addEventListener('click', e => {
     }
     case 'hours-del': { const p = dayPlan(); savePlan({ ...p, windows: p.windows.filter((w, i) => i !== +b.dataset.i) }); renderLayer(); render(); break; }
     case 'hours-usual': state.meta.hours = clone(dayPlan().windows); saveMeta(); renderLayer(); toast('These are your usual hours now.'); break;
-    case 'plan-on': {
-      const p = dayPlan();
-      savePlan({ ...p, items: [...p.items, { id: newId('i'), taskId: id, at: null }] });
-      renderLayer(); render(); break;
-    }
-    case 'plan-off': takeOffPlan(id); break;
     case 'plan-reset': resetPlan(); break;
     case 'day-now': railAt = null; renderDay('quiet'); break;
     case 'day-kind': daySel = { ...daySel, kind: v, ids: idsIn(railView.lay, daySel.box.s, daySel.box.e, v) }; renderDay('quiet'); break;
@@ -4527,6 +4589,7 @@ document.addEventListener('input', e => {
 
 document.addEventListener('change', e => {
   const el = e.target;
+  if (el.id === 'plan-time' && state.duePick) { state.duePick.time = el.value === '' ? null : +el.value; return; }
   if (el.dataset.hour) {
     const p = dayPlan(), list = clone(p.windows), w = list[+el.dataset.i], v = parseHHMM(el.value);
     if (w && v != null) w[el.dataset.hour] = v;

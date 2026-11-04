@@ -7,6 +7,7 @@ A to-do list that helps you work at a steady pace and balance work with free tim
 - **Next up**, at the top, names the one thing to start: what's first on your timeline, or else what's due soonest, or else the top of your list. One press of **Start** begins it.
 - If yesterday's timeline left tasks unfinished, the top asks about them first. **Put on today** adds them to today's timeline, and **Not now** leaves them off.
 - **Quick add**, under the My tasks heading, makes a task from one line. End it with minutes and a day, like `chem lab 40m fri`, and the line under the box shows what it understood before you add it. Use **New task** to add several steps at once.
+- **When will you work on it?**, in a task's details or a new task, plans it for a day: today or any later one, with a time if you like. On today it goes on the timeline, starting no sooner than that time. A later day keeps it until that day comes, and your list shows when it's planned.
 - A task past its due date says so once, calmly, with **Move to today** beside it.
 - Press **Start**. Paced counts down each step and stops you at the planned end to decide what's next.
 - Between steps a one-minute clock runs, then the next step starts by itself, so nothing is left un-timed.
