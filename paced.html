@@ -1849,7 +1849,7 @@ function parseQuick(text) {
   return { title: words.join(' ').slice(0, 200), min, due };
 }
 function quickHint(text) {
-  if (!text.trim()) return '';
+  if (!text.trim()) return 'Type a task. Minutes like 40m and a day like fri are optional.';
   const q = parseQuick(text);
   if (!q.title) return 'Type a name for the task';
   return `Adds <b>${esc(q.title)}</b>${q.min ? ` · ${fmtMin(q.min)}` : ' · add minutes like 40m'}${q.due ? ` · due ${esc(fmtFullDay(q.due))}` : ''}`;
@@ -1866,7 +1866,7 @@ function quickAdd() {
   toast(`Added “${t.title}”`, 'Undo', () => { removeTask(t.id); render(); });
 }
 const quickHTML = () => `<form class="quick-add" id="quick-add">
-    <input id="quick-input" class="text-input" autocomplete="off" enterkeyhint="done" value="${esc(state.quick || '')}" placeholder="Quick add, like “lab 40m fri”" aria-label="Quick add a task. End with minutes like 40m and a day like fri or tomorrow." aria-describedby="quick-hint">
+    <input id="quick-input" class="text-input" autocomplete="off" enterkeyhint="done" value="${esc(state.quick || '')}" placeholder="Type a task, like “lab report 40m fri”" aria-label="Quick add a task. End with minutes like 40m and a day like fri or tomorrow." aria-describedby="quick-hint">
     <button type="submit" class="btn ghost">Add</button>
   </form>
   <p class="quick-hint" id="quick-hint" aria-live="polite">${quickHint(state.quick || '')}</p>`;
