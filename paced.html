@@ -2987,7 +2987,8 @@ function stepsPanelHTML(t, s) {
     if (st.done) sub = st.actual ? `Took ${fmtDur(st.actual)}` : 'Done';
     else if (isNow) sub = '<span class="now-tag">Working on this now</span>';
     else sub = esc([st.est ? fmtMin(st.est) : 'No time set', st.spent ? `${fmtDur(st.spent)} done so far` : '', skipped.has(st.id) ? 'Skipped for now' : ''].filter(Boolean).join(' · '));
-    const action = !st.done && !isNow ? `<button class="btn ghost small" data-act="switch-step" data-step="${st.id}">${a ? 'Switch to this' : 'Start'}</button>` : '';
+    const action = !st.done && !isNow ? `<button class="btn ghost small" data-act="switch-step" data-step="${st.id}">${a ? 'Switch to this' : 'Start'}</button>`
+      : st.done ? `<button class="btn ghost small" data-act="reopen-step" data-id="${t.id}" data-step="${st.id}">Go back</button>` : '';
     return `<li class="fstep${st.done ? ' done' : ''}${isNow ? ' now' : ''}"><span class="num">${st.done ? ICON.check : i + 1}</span>
       <div class="fstep-main"><b>${esc(st.title)}</b><span class="muted">${sub}</span></div>${action}</li>`;
   }).join('');
@@ -3734,10 +3735,9 @@ function startFocus(taskId, stepId) {
   const t = state.tasks.get(taskId); if (!t) return;
   expireIdleSession(true);
   const m = state.meta, s = m.session;
-  if (s && s.active) {
+  if (s && s.active && s.active.taskId === taskId) {
     state.layer = null; renderLayer();
     state.focusOpen = true; render();
-    if (s.active.taskId !== taskId) toast('Finish or skip the step you’re on first.');
     return;
   }
   const next = stepsLeft(t).find(st => st.id === stepId) || nextStep(t, s);
@@ -3763,6 +3763,13 @@ function startFocus(taskId, stepId) {
 function startStep(taskId, stepId) {
   const s = state.meta.session, st = findStep(taskId, stepId);
   if (!s || !st) return;
+  // Starting something else sets the running step aside, keeping its time, so it's still there in the list.
+  const a = s.active;
+  if (a && (a.taskId !== taskId || a.stepId !== stepId)) {
+    const was = findStep(a.taskId, a.stepId);
+    setAside(s, 'switch');
+    if (was) toast(`“${was.title}” is saved for later.`);
+  }
   s.taskId = taskId;
   s.skipped = (s.skipped || []).filter(x => x !== stepId);
   if (!st.est) { state.ask = { type: 'estimate', taskId, stepId }; saveMeta(); render(); return; }
@@ -3867,6 +3874,18 @@ function switchStep(stepId) {
   if (s.active && s.active.stepId === stepId) return;
   if (s.active) setAside(s, 'switch');
   startStep(tid, stepId);
+}
+
+// Undo a finished step and start it again. Its earlier time stays on the step, so the timer carries on from there.
+function reopenStep(taskId, stepId) {
+  const t = state.tasks.get(taskId), st = t && t.steps.find(x => x.id === stepId);
+  if (!st || !st.done) return;
+  st.done = false; st.doneAt = null; st.actual = null;
+  if (t.archived) { t.archived = false; t.completedAt = null; } // finishing the last step moved the task to Completed
+  saveTask(t);
+  const s = state.meta.session;
+  if (s) { s.log = s.log.filter(l => l.stepId !== stepId); if (s.active) setAside(s, 'switch'); }
+  startFocus(taskId, stepId);
 }
 
 function skipStep() {
@@ -4332,6 +4351,7 @@ document.addEventListener('click', e => {
     case 'step-pause': togglePause(); break;
     case 'start-step': startStep(id, step); break;
     case 'switch-step': switchStep(step); break;
+    case 'reopen-step': reopenStep(id, step); break;
     case 'skip-step': skipStep(); break;
     case 'split-open': state.ask = { type: 'split' }; renderFocus(); $('#split-name')?.focus(); break;
     case 'split-cancel': state.ask = null; renderFocus(); break;
