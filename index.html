@@ -228,6 +228,22 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 @media (hover: none) {
   .win-edge::after { opacity: 1; }
 }
+/* A fingertip needs about 40px, so on touch screens the small handles reach further than they look.
+   The ends of your hours reach mostly outward, so they don't cover the start of a task. */
+@media (pointer: coarse) {
+  .win-edge { width: 28px; }
+  .win-edge.opens { left: -20px; }
+  .win-edge.opens::after { left: 18px; }
+  .win-edge.closes { right: -20px; }
+  .win-edge.closes::after { left: 6px; }
+  .day { padding-bottom: 20px; }
+  .day-grip { width: 96px; height: 24px; margin-left: -48px; }
+  .day-grip::after { left: 30px; right: 30px; }
+  .task .task-toggle { width: 36px; height: 40px; }
+  /* A short task or break is narrower than a finger, so it can be tapped a little to either side of it too */
+  .tblock.thin { overflow: visible; z-index: 3; }
+  .tblock.thin .tb-open::before { content: ""; position: absolute; top: 0; bottom: 0; left: -10px; right: -10px; }
+}
 
 /* Bar at the bottom while you're working or on a break */
 .mini { position: fixed; left: 0; right: 0; bottom: 0; z-index: 19; padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
@@ -1834,33 +1850,50 @@ function carryYes() {
 
 /* ----- Quick add: "chem lab 40m fri" becomes a task with 40 minutes, due Friday ----- */
 const DAY_WORDS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const MONTH_WORDS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 // Minutes and a day are read only from the end, so a name like "sat prep" stays a name.
 function parseQuick(text) {
   const words = text.trim().split(/\s+/).filter(Boolean), today = dateKey();
   let min = null, due = null;
+  const clean = w => w.toLowerCase().replace(/[.,]$/, '');
+  // A month and day is this year's, or next year's once it has gone by.
+  const dateIn = (mo, d) => {
+    const y = +today.slice(0, 4), k = `${y}-${pad(mo)}-${pad(d)}`;
+    return mo >= 1 && mo <= 12 && d >= 1 && d <= 31 ? (k < today ? `${y + 1}${k.slice(4)}` : k) : null;
+  };
+  const weekday = w => DAY_WORDS.findIndex(d => w === d || (w.length >= 3 && d.startsWith(w.slice(0, 3)) && /^(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)(day|nesday|sday|urday|rsday)?$/.test(w)));
   const dayOf = w => {
-    w = w.toLowerCase().replace(/[.,]$/, '');
+    w = clean(w);
     if (['today', 'tonight', 'tod'].includes(w)) return today;
     if (['tomorrow', 'tmr', 'tmrw', 'tom'].includes(w)) return addDays(today, 1);
-    const i = DAY_WORDS.findIndex(d => w === d || (w.length >= 3 && d.startsWith(w.slice(0, 3)) && /^(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)(day|nesday|sday|urday|rsday)?$/.test(w)));
+    const i = weekday(w);
     if (i >= 0) return addDays(today, (i - keyDate(today).getDay() + 7) % 7);
     const md = w.match(/^(\d{1,2})\/(\d{1,2})$/);
-    if (md) {
-      const y = +today.slice(0, 4), k = `${y}-${pad(+md[1])}-${pad(+md[2])}`;
-      return +md[1] >= 1 && +md[1] <= 12 && +md[2] >= 1 && +md[2] <= 31 ? (k < today ? `${y + 1}${k.slice(4)}` : k) : null;
-    }
+    return md ? dateIn(+md[1], +md[2]) : null;
+  };
+  const monthOf = w => { w = clean(w); return MONTH_WORDS.findIndex(m => w.length >= 3 && (m.startsWith(w) || (w === 'sept' && m === 'september'))) + 1; };
+  const dateNum = w => { const m = clean(w).match(/^(\d{1,2})(st|nd|rd|th)?$/); return m ? +m[1] : 0; };
+  // Dates in two words: "nov 10", "10 nov", and "next fri" for the one a week after this one.
+  const pairOf = (a, b) => {
+    if (monthOf(a) && dateNum(b)) return dateIn(monthOf(a), dateNum(b));
+    if (dateNum(a) && monthOf(b)) return dateIn(monthOf(b), dateNum(a));
+    if (clean(a) === 'next' && weekday(clean(b)) >= 0) return addDays(dayOf(b), 7);
     return null;
   };
   const minOf = w => {
     const m = w.toLowerCase().match(/^(?:(\d+(?:\.\d+)?)(?:h|hr|hrs|hour|hours))?(?:(\d+)(?:m|min|mins|minute|minutes))?$/);
-    return m && (m[1] || m[2]) ? Math.round((+m[1] || 0) * 60 + (+m[2] || 0)) || null : null;
+    const n = m && (m[1] || m[2]) ? Math.round((+m[1] || 0) * 60 + (+m[2] || 0)) : 0;
+    return n > 0 ? Math.min(n, 600) : null; // the same limit as a step's minutes anywhere else
   };
+  // The little words before minutes or a day ("for 30m", "due by fri") aren't part of the name.
+  const dropWord = re => { if (words.length > 1 && re.test(words[words.length - 1])) words.pop(); };
   for (let n = 0; n < 4 && words.length > 1; n++) {
     const w = words[words.length - 1], prev = words[words.length - 2];
     const unit = words.length > 2 && /^\d+(\.\d+)?$/.test(prev) && /^(h|hr|hrs|hour|hours|m|min|mins|minute|minutes)$/i.test(w); // "1 hr", "40 min"
-    if (min == null && unit) { min = minOf(prev + w); words.splice(-2); continue; }
-    if (min == null && minOf(w)) { min = minOf(w); words.pop(); continue; }
-    if (due == null && dayOf(w)) { due = dayOf(w); words.pop(); if (words.length > 1 && /^due$/i.test(words[words.length - 1])) words.pop(); continue; }
+    if (min == null && unit) { min = minOf(prev + w); words.splice(-2); dropWord(/^for$/i); continue; }
+    if (min == null && minOf(w)) { min = minOf(w); words.pop(); dropWord(/^for$/i); continue; }
+    const pair = due == null && words.length > 2 ? pairOf(prev, w) : null;
+    if (due == null && (pair || dayOf(w))) { due = pair || dayOf(w); words.splice(pair ? -2 : -1); dropWord(/^(by|on)$/i); dropWord(/^due$/i); continue; }
     break;
   }
   return { title: words.join(' ').slice(0, 200), min, due };
@@ -1997,7 +2030,7 @@ function blockState(item, kind, lay) {
 
 function pieceHTML(b, piece, i, v) {
   const name = blockName(b), px = (piece.e - piece.s) * v.pxPerMin, item = b.item;
-  const cls = ['job', item.live && 'live', piece.late && 'late', b.guess && !item.live && 'guess', i && 'cont', i < b.pieces.length - 1 && 'cut', ...blockState(item, 'task', v.lay)].filter(Boolean).join(' ');
+  const cls = ['job', item.live && 'live', piece.late && 'late', b.guess && !item.live && 'guess', i && 'cont', i < b.pieces.length - 1 && 'cut', px < 40 && 'thin', ...blockState(item, 'task', v.lay)].filter(Boolean).join(' ');
   const longest = b.pieces.reduce((a, x) => Math.max(a, x.e - x.s), 0); // a block split into short pieces still gets its name on one of them
   const named = x => { const w = (x.e - x.s) * v.pxPerMin; return w >= 64 || (w >= 36 && x.e - x.s === longest); };
   const when = i && named(b.pieces[0]) ? 'continued' : px >= 130 ? rangeWords(b.start, b.end) : clockAt(b.start);
@@ -2010,7 +2043,7 @@ function pieceHTML(b, piece, i, v) {
 
 function breakBlockHTML(b, v) {
   const min = Math.round(b.e - b.s), px = (b.e - b.s) * v.pxPerMin, item = b.item;
-  const cls = [b.live && 'live', ...blockState(item, 'brk', v.lay)].filter(Boolean).join(' ');
+  const cls = [b.live && 'live', px < 40 && 'thin', ...blockState(item, 'brk', v.lay)].filter(Boolean).join(' ');
   const words = px >= 60 ? `<b>Break</b>${px >= 70 ? `<span>${clockAt(b.s)}</span>` : ''}` : px >= 20 ? ICON.cup : '';
   const open = item ? `data-act="day-pick" data-item="${item.id}"` : 'data-act="focus-open"';
   return `<div class="tblock brk ${cls}"${item ? ` data-drag="item" data-item="${item.id}"` : ''} style="${spanStyle(v, b.s, b.e)}" title="Break, ${clockAt(b.s)}, ${fmtMin(min)}">
@@ -2098,7 +2131,7 @@ function optsMenuHTML(p) {
 }
 
 /* ----- the menu for what's selected ----- */
-const chipRow = (list, act, label, on) => `<div class="dm-row">${list.map(n => `<button class="dm-chip${n === on ? ' on' : ''}" data-act="${act}" data-min="${n}" aria-label="${esc(label(n))}">${n > 0 && act === 'sel-move' ? '+' : ''}${n}</button>`).join('')}</div>`;
+const chipRow = (list, act, label, on) => `<div class="dm-row">${list.map(n => `<button class="dm-chip${n === on ? ' on' : ''}" data-act="${act}" data-min="${n}" aria-label="${esc(label(n))}">${n > 0 && act !== 'sel-len' ? '+' : ''}${n}</button>`).join('')}</div>`;
 const menuHead = title => `<div class="dm-head"><b>${esc(title)}</b><button class="icon-btn" data-act="day-close" aria-label="Close this menu">${ICON.x}</button></div>`;
 
 function taskMenuHTML(b, lay) {
@@ -2117,6 +2150,7 @@ function taskMenuHTML(b, lay) {
       ${details}
       <button class="btn danger" data-act="sel-delete">Remove from today</button>
     </div>
+    <div class="dm-label">Time for it today, in minutes</div>${chipRow(NUDGES, 'sel-grow', n => `${Math.abs(n)} minutes ${n < 0 ? 'less' : 'more'} for it today`)}
     ${rows ? `<div class="dm-label">Put a different task here</div><ul class="dm-list">${rows}</ul>` : ''}`;
 }
 
@@ -2426,7 +2460,7 @@ function liveClock(now = Date.now()) {
   if (!s.gap) return null;
   const plan = gapPlan(s), left = (s.gap.until - now) / 1000;
   if (plan.type === 'none') return null;
-  const label = left < 0 ? 'Break’s over' : plan.type === 'step' ? 'Next: ' + plan.next.title : plan.type === 'break' ? 'Break coming up' : 'Pick what’s next';
+  const label = left < 0 ? 'Nothing is running' : plan.type === 'step' ? 'Next: ' + plan.next.title : plan.type === 'break' ? 'Break coming up' : 'Pick what’s next';
   return { label, left, over: left < 0 };
 }
 
@@ -3213,7 +3247,8 @@ function runningHTML() {
   ${stepsPanelHTML(t, s)}`;
 }
 
-const gapText = (plan, left) => left < 0 ? 'Nothing is running' : { step: 'Next step starts in', break: 'Your break starts in', hold: 'Pick what’s next in' }[plan.type];
+// Nothing starts by itself when Paced is waiting for you to choose, so that clock is only until it reminds you.
+const gapText = (plan, left) => left < 0 ? 'Nothing is running' : { step: 'Next step starts in', break: 'Your break starts in', hold: 'Paced reminds you in' }[plan.type];
 
 // The clock between steps, so finishing a step never leaves you with nothing running.
 function gapHTML(s) {
@@ -3524,9 +3559,18 @@ function openDetail(id, focusAdd) {
   renderLayer(true);
   if (focusAdd) $('#detail-step').focus();
 }
+// A step typed into a task's details but never added is still one you meant, so leaving the sheet keeps it.
+function addTypedStep() {
+  const L = state.layer, t = L?.type === 'detail' && state.tasks.get(L.id), name = $('#detail-step'), title = name?.value.trim();
+  if (!t || !title) return;
+  t.steps.push({ id: newId('s'), title, est: parseMin($('#detail-min').value), done: false, actual: null, doneAt: null });
+  name.value = '';
+  saveTask(t);
+}
 function closeLayer() {
   const kept = state.layer?.type === 'add' && draftHas(state.draft);
   if (state.layer?.type === 'notes') pruneNotes();
+  addTypedStep();
   state.layer = null; renderLayer(); render();
   if (kept) toast(`Kept “${state.draft.title.trim() || 'your new task'}” to finish later`);
 }
@@ -3778,6 +3822,7 @@ function gapPlan(s) {
 
 function startFocus(taskId, stepId) {
   const t = state.tasks.get(taskId); if (!t) return;
+  addTypedStep();
   expireIdleSession(true);
   const m = state.meta, s = m.session;
   if (s && s.active && s.active.taskId === taskId) {
@@ -3817,7 +3862,7 @@ function startStep(taskId, stepId) {
   }
   s.taskId = taskId;
   s.skipped = (s.skipped || []).filter(x => x !== stepId);
-  if (!st.est) { state.ask = { type: 'estimate', taskId, stepId }; saveMeta(); render(); return; }
+  if (!st.est) { state.ask = { type: 'estimate', taskId, stepId }; closeGap(s); s.lastAt = Date.now(); saveMeta(); render(); return; }
   state.ask = null;
   closeGap(s);
   const carry = st.spent || 0;
@@ -4498,6 +4543,12 @@ document.addEventListener('click', e => {
     case 'sel-swap': swapTask(id); break;
     case 'sel-delete': deleteSelected(); break;
     case 'sel-len': changeBreaks(i => ({ ...i, brk: min })); break;
+    // The same as dragging a task's right edge, in steps big enough to tap on a phone.
+    case 'sel-grow': {
+      const itemId = daySel?.ids[0], b = layoutDay().blocks.find(y => y.item.id === itemId);
+      if (b) { const to = Math.max(PLAN_SNAP, b.min + min); changePlan(`${fmtMin(to)} for it today`, sizedPlan(dayPlan(), itemId, to)); }
+      break;
+    }
     case 'sel-move': changeBreaks(i => ({ ...i, at: Math.max(soonestBreak(), i.at + min) })); break;
     case 'sel-copy': { const p = dayPlan(), i = p.items.find(x => x.id === daySel?.ids[0]); if (i) { savePlan({ ...p, items: [...p.items, { ...i, id: newId('i'), at: i.at + 60 }] }); render(); } break; }
     case 'sel-now': breakNow(); break;
@@ -4879,7 +4930,10 @@ function tick() {
   watchCheckIn();
   if (document.visibilityState === 'visible') showRecord();
   const m = state.meta;
-  if (m.session && !m.session.active && !m.session.gap) { openGap(m.session, m.session.lastAt); saveAlerts(); render(); }
+  // While Paced asks how long a step will take, you're choosing, so no clock runs out behind the question.
+  const choosing = state.focusOpen && state.ask?.type === 'estimate';
+  if (choosing && m.session?.gap) { closeGap(m.session); m.session.lastAt = Date.now(); saveMeta(); render(); }
+  if (m.session && !m.session.active && !m.session.gap && !choosing) { openGap(m.session, m.session.lastAt); saveAlerts(); render(); }
   if (m.session?.active) tickStep(m.session);
   else if (m.session?.gap) tickGap(m.session);
   if (m.brk) tickBreak(m);
