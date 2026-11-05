@@ -802,7 +802,8 @@ function methodStats() {
   const log = state.meta.methodLog || [];
   return METHODS.map(x => {
     const rs = log.filter(r => r.method === x.id), paces = rs.flatMap(r => r.paces);
-    return { ...x, sessions: rs.length, steps: paces.length, speed: paces.length ? Math.round(paces.reduce((a, b) => a + b, 0) / paces.length * 100) : null };
+    // The middle value, with each step held to 0.25–3 times your guess as in History, so one odd step can't decide it.
+    return { ...x, sessions: rs.length, steps: paces.length, speed: paces.length ? Math.round(median(paces.map(p => clamp(p, 0.25, 3))) * 100) : null };
   });
 }
 
@@ -1871,8 +1872,8 @@ function parseQuick(text) {
   const clean = w => w.toLowerCase().replace(/[.,]$/, '');
   // A month and day is this year's, or next year's once it has gone by.
   const dateIn = (mo, d) => {
-    const y = +today.slice(0, 4), k = `${y}-${pad(mo)}-${pad(d)}`;
-    return mo >= 1 && mo <= 12 && d >= 1 && d <= 31 ? (k < today ? `${y + 1}${k.slice(4)}` : k) : null;
+    const y = +today.slice(0, 4), k = `${y}-${pad(mo)}-${pad(d)}`, out = k < today ? `${y + 1}${k.slice(4)}` : k;
+    return mo >= 1 && mo <= 12 && d >= 1 && dateKey(keyDate(out)) === out ? out : null; // "feb 30" isn't a day
   };
   const weekday = w => DAY_WORDS.findIndex(d => w === d || (w.length >= 3 && d.startsWith(w.slice(0, 3)) && /^(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)(day|nesday|sday|urday|rsday)?$/.test(w)));
   const dayOf = w => {
@@ -1899,12 +1900,18 @@ function parseQuick(text) {
     return n > 0 ? Math.min(n, 600) : null; // the same limit as a step's minutes anywhere else
   };
   // The little words before minutes or a day ("for 30m", "due by fri") aren't part of the name.
+  let addedHours = false;
   const dropWord = re => { if (words.length > 1 && re.test(words[words.length - 1])) words.pop(); };
   for (let n = 0; n < 4 && words.length > 1; n++) {
     const w = words[words.length - 1], prev = words[words.length - 2];
     const unit = words.length > 2 && /^\d+(\.\d+)?$/.test(prev) && /^(h|hr|hrs|hour|hours|m|min|mins|minute|minutes)$/i.test(w); // "1 hr", "40 min"
     if (min == null && unit) { min = minOf(prev + w); words.splice(-2); dropWord(/^for$/i); continue; }
     if (min == null && minOf(w)) { min = minOf(w); words.pop(); dropWord(/^for$/i); continue; }
+    // "1h 30m" and "1 hr 30 min": the hours come just before the minutes already read.
+    const hrs = /^(h|hr|hrs|hour|hours)$/i, hourWord = /^\d+(\.\d+)?(h|hr|hrs|hour|hours)$/i;
+    if (min != null && min < 60 && !addedHours && (hourWord.test(w) || (unit && hrs.test(w)))) {
+      min = Math.min(600, min + minOf(unit ? prev + w : w)); words.splice(unit ? -2 : -1); addedHours = true; dropWord(/^for$/i); continue;
+    }
     const pair = due == null && words.length > 2 ? pairOf(prev, w) : null;
     if (due == null && (pair || dayOf(w))) { due = pair || dayOf(w); words.splice(pair ? -2 : -1); dropWord(/^(by|on)$/i); dropWord(/^due$/i); continue; }
     break;
@@ -2370,8 +2377,9 @@ function taskHTML(t) {
   else if (!done) meta = `${total} ${total === 1 ? 'step' : 'steps'}${left ? ` · about ${fmtMin(left)}` : ''}`;
   else meta = `${done} of ${total} steps done${left ? ` · about ${fmtMin(left)} left` : ''}`;
   const live = state.meta.session?.active?.taskId === t.id, due = dueInfo(t), when = plannedOf(t.id), later = when && when.date > dateKey() ? when : null;
-  const action = !total
-    ? `<button class="btn ghost small" data-act="add-steps" data-id="${t.id}">Add steps</button>`
+  // With nothing left to do there's nothing to start, so the button is for adding more.
+  const action = !total || (!left && !stepsLeft(t).length && !live)
+    ? `<button class="btn ghost small" data-act="add-steps" data-id="${t.id}">${total ? 'Add a step' : 'Add steps'}</button>`
     : `<button class="btn soft small start" data-act="focus-task" data-id="${t.id}" aria-label="${live ? 'Open the timer for' : 'Start working on'} “${esc(t.title)}”">${live ? 'Open timer' : ICON.play + '<span class="start-word">Start</span>'}</button>`;
   const todo = stepsLeft(t), open = openSteps.has(t.id) && todo.length;
   const toggle = todo.length ? `<button class="icon-btn task-toggle" data-act="toggle-steps" data-id="${t.id}" title="${open ? 'Hide steps' : 'Show steps to drag onto the timeline'}" aria-label="${open ? 'Hide' : 'Show'} the steps of “${esc(t.title)}”" aria-expanded="${!!open}">${ICON.chev}</button>` : '';
@@ -2479,6 +2487,11 @@ function liveClock(now = Date.now()) {
 }
 
 /* ---------- sheets ---------- */
+// While a sheet is open the page behind it can't be reached by keyboard, and closing it puts you back where you were.
+let layerOpener = null; // how to find again what you were on when the sheet opened, since the page redraws
+// A way to find a control again after a redraw: its id, or what it does.
+const focusKey = x => { const d = x?.dataset; return !x || x === document.body ? null : x.id ? '#' + CSS.escape(x.id) : d?.act ? `[data-act="${CSS.escape(d.act)}"]${d.v != null ? `[data-v="${CSS.escape(d.v)}"]` : ''}${d.id ? `[data-id="${CSS.escape(d.id)}"]` : ''}` : null; };
+const setBehind = off => ['#topbar', '#next', '#day', '.app', '#mini', '#focus'].forEach(q => { const x = $(q); if (x) x.inert = off; });
 function renderLayer(enter) {
   const el = $('#layer'), L = state.layer;
   const t = L && L.type === 'detail' ? state.tasks.get(L.id) : null;
@@ -2486,12 +2499,21 @@ function renderLayer(enter) {
   if (!L || (L.type === 'detail' && !t) || (L.type === 'record' && !rec)) {
     state.layer = null; el.hidden = true; el.innerHTML = '';
     document.body.classList.toggle('locked', state.focusOpen);
+    setBehind(false);
     return;
   }
+  const ae = document.activeElement, inside = el.contains(ae), keep = inside ? focusKey(ae) : null;
+  if (el.hidden && !inside) layerOpener = focusKey(ae);
   el.hidden = false;
   document.body.classList.add('locked');
+  setBehind(true);
   el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'notes' ? notesHTML(enter) : L.type === 'schedules' ? schedulesHTML(enter) : L.type === 'hours' ? hoursHTML(enter) : L.type === 'import' ? importHTML(enter) : ['gtasks', 'gcal', 'paste'].includes(L.type) ? gtHTML(enter) : L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : L.type === 'record' ? recordHTML(rec, enter) : detailHTML(t, enter));
   autosizeAll(el);
+  // Redrawing replaces what had focus, so it goes back to the same field, or else to the sheet itself.
+  const sheet = el.querySelector('[role="dialog"]');
+  const again = keep && el.querySelector(keep);
+  if (again) again.focus();
+  else if (sheet && !el.contains(document.activeElement)) { sheet.tabIndex = -1; sheet.focus({ preventScroll: true }); }
 }
 const sheetOpen = (enter, label) => `<section class="sheet${enter ? ' enter' : ''}" role="dialog" aria-modal="true" aria-label="${esc(label)}">`;
 const sheetHead = title => `<div class="sheet-head"><h2>${esc(title)}</h2><button class="icon-btn" data-act="close-layer" aria-label="Close">${ICON.x}</button></div>`;
@@ -3573,19 +3595,30 @@ function openDetail(id, focusAdd) {
   renderLayer(true);
   if (focusAdd) $('#detail-step').focus();
 }
-// A step typed into a task's details but never added is still one you meant, so leaving the sheet keeps it.
+// A step typed into New task or a task's details but never added is still one you meant, so leaving the sheet keeps it.
 function addTypedStep() {
-  const L = state.layer, t = L?.type === 'detail' && state.tasks.get(L.id), name = $('#detail-step'), title = name?.value.trim();
+  const L = state.layer;
+  if (L?.type === 'add') {
+    const name = $('#draft-step'), title = name?.value.trim();
+    if (title && state.draft) { state.draft.steps.push({ title, est: parseMin($('#draft-min').value) }); name.value = ''; }
+    return;
+  }
+  const t = L?.type === 'detail' && state.tasks.get(L.id), name = $('#detail-step'), title = name?.value.trim();
   if (!t || !title) return;
   t.steps.push({ id: newId('s'), title, est: parseMin($('#detail-min').value), done: false, actual: null, doneAt: null });
   name.value = '';
   saveTask(t);
 }
 function closeLayer() {
+  // A field you were still editing saves when it loses focus, so let it before the sheet goes.
+  if ($('#layer').contains(document.activeElement)) document.activeElement.blur();
+  addTypedStep();
   const kept = state.layer?.type === 'add' && draftHas(state.draft);
   if (state.layer?.type === 'notes') pruneNotes();
-  addTypedStep();
   state.layer = null; renderLayer(); render();
+  const back = layerOpener && document.activeElement === document.body && document.querySelector(layerOpener);
+  if (back) back.focus();
+  layerOpener = null;
   if (kept) toast(`Kept “${state.draft.title.trim() || 'your new task'}” to finish later`);
 }
 
@@ -3639,10 +3672,13 @@ function saveNewNote() {
 }
 // The first line becomes the task and any other lines become its steps, the same way Paste a list reads lines.
 function noteToTask(id) {
-  const n = state.notes.get(id), [title, ...rest] = n ? pasteLines(n.text) : [];
-  if (!title) return;
-  const t = { id: newId('t'), title: title.slice(0, 200), due: null, createdAt: Date.now(), archived: false, completedAt: null,
-    steps: rest.map(line => ({ id: newId('s'), title: line, est: null, done: false, actual: null, doneAt: null })) };
+  const n = state.notes.get(id), [first, ...rest] = n ? pasteLines(n.text) : [];
+  if (!first) return;
+  // A long first line keeps its start as the name and all of it as a step, so nothing is cut off.
+  const long = first.length > 200, title = long ? first.slice(0, 200).replace(/\s+\S*$/, '') + '…' : first;
+  const lines = long ? [first, ...rest] : rest.length ? rest : [first]; // with no other lines it's one step, like Quick add
+  const t = { id: newId('t'), title, due: null, createdAt: Date.now(), archived: false, completedAt: null,
+    steps: lines.map(line => ({ id: newId('s'), title: line, est: null, done: false, actual: null, doneAt: null })) };
   saveTask(t);
   state.notes.delete(id); Store.write(id, null);
   renderLayer(); render();
@@ -3729,9 +3765,12 @@ function deleteStep(id, sid) {
   const before = clone(t);
   t.steps = t.steps.filter(s => s.id !== sid);
   clearActiveIf(a => a.stepId === sid);
+  // Deleting the only step left to do finishes the task, and that toast's Undo brings the step back too.
+  const finished = maybeArchive(t, before);
+  if (finished) state.layer = null;
   saveTask(t);
   renderLayer(); render();
-  toast('Step deleted', 'Undo', () => { saveTask(before); renderLayer(); render(); });
+  if (!finished) toast('Step deleted', 'Undo', () => { saveTask(before); renderLayer(); render(); });
 }
 
 function deleteTask(id) {
@@ -3848,7 +3887,13 @@ function startFocus(taskId, stepId) {
   if (!next) { openDetail(taskId, true); toast(t.steps.length ? 'All steps are done. Add another step, or mark the task as done.' : 'Add a step first.'); return; }
   state.layer = null; renderLayer();
   state.focusOpen = true;
-  if (m.brk) { render(); return; }
+  if (m.brk) {
+    // Your break stays on, but what you picked is what starts when you're ready.
+    const other = m.brk.taskId !== taskId;
+    m.brk.taskId = taskId; m.brk.stepId = next.id; saveMeta();
+    if (other) toast(`You’re on a break. “${t.title}” starts when you press I’m ready.`);
+    render(); return;
+  }
   if (!s) {
     // Ask "been working a while?" only at your first session of the day. After that Paced can tell:
     // you either only just stopped (carry on where you left off) or you've had a rest (start fresh).
@@ -3985,11 +4030,18 @@ function switchStep(stepId) {
 function reopenStep(taskId, stepId) {
   const t = state.tasks.get(taskId), st = t && t.steps.find(x => x.id === stepId);
   if (!st || !st.done) return;
+  st.spent = Math.max(st.spent || 0, st.actual || 0); // the time already done carries on, as if it had been set aside
   st.done = false; st.doneAt = null; st.actual = null;
   if (t.archived) { t.archived = false; t.completedAt = null; } // finishing the last step moved the task to Completed
   saveTask(t);
   const s = state.meta.session;
-  if (s) { s.log = s.log.filter(l => l.stepId !== stepId); if (s.active) setAside(s, 'switch'); }
+  if (s) {
+    // Its finished entry goes, but the work in it still counts toward your time since a break.
+    const was = s.log.filter(l => l.stepId === stepId);
+    s.partialSec = (s.partialSec || 0) + was.reduce((a, l) => a + (l.worked ?? l.actual ?? 0), 0);
+    s.log = s.log.filter(l => l.stepId !== stepId);
+    if (s.active) setAside(s, 'switch');
+  }
   startFocus(taskId, stepId);
 }
 
@@ -4069,7 +4121,7 @@ function endBreak() {
   const t = b.taskId && state.tasks.get(b.taskId), task = t && !t.archived ? t : null;
   beginSession(task ? task.id : null, 0);
   state.focusOpen = true;
-  const next = task ? nextStep(task, m.session) : null;
+  const next = task ? stepsLeft(task).find(x => x.id === b.stepId) || nextStep(task, m.session) : null;
   if (next) startStep(task.id, next.id);
   else { openGap(m.session); saveMeta(); render(); }
   if (over >= 60) toast(`Your break ran ${fmtDur(over)} over.`);
@@ -4147,7 +4199,7 @@ function movePlanItem(itemId, dir) {
   const p = dayPlan(), tasks = p.items.filter(i => i.taskId), i = tasks.findIndex(x => x.id === itemId), j = i + dir;
   if (i < 0 || j < 0 || j >= tasks.length) return;
   const a = p.items.indexOf(tasks[i]), b = p.items.indexOf(tasks[j]), items = [...p.items];
-  [items[a], items[b]] = [{ ...items[b], at: null }, { ...items[a], at: null }];
+  [items[a], items[b]] = [{ ...items[b], at: items[a].at }, { ...items[a], at: items[b].at }]; // they trade places, times and all
   savePlan({ ...p, items });
   render();
 }
@@ -4162,12 +4214,14 @@ function pickItem(id, add) {
   renderDay('quiet');
 }
 
-// Put another task in this block's place. If that task is already on the timeline, the two swap.
+// Put another task in this block's place. If that task is already on the timeline, even as one of its steps, the two swap.
 function swapTask(taskId) {
-  const p = dayPlan(), id = daySel?.ids[0], item = p.items.find(i => i.id === id), other = p.items.find(i => i.taskId === taskId && !i.stepId), t = state.tasks.get(taskId);
+  const p = dayPlan(), id = daySel?.ids[0], item = p.items.find(i => i.id === id), t = state.tasks.get(taskId);
+  const other = p.items.find(i => i.taskId === taskId && !i.stepId) || p.items.find(i => i.taskId === taskId);
   if (!item || !t) return;
   daySel = null;
-  changePlan(`Changed to “${t.title}”`, { ...p, items: p.items.map(i => i === item ? withExtra({ ...i, taskId }, other?.extra) : i === other ? withExtra({ ...i, taskId: item.taskId }, item.extra) : i) });
+  const as = (i, from) => { const { stepId, ...rest } = i; return withExtra(from.stepId ? { ...rest, taskId: from.taskId, stepId: from.stepId } : { ...rest, taskId: from.taskId }, from.extra); };
+  changePlan(`Changed to “${t.title}”`, { ...p, items: p.items.map(i => i === item ? as(i, other || { taskId }) : i === other ? as(i, item) : i) });
 }
 
 function deleteSelected() {
@@ -4580,7 +4634,8 @@ document.addEventListener('click', e => {
     }
     case 'plan-break': {
       const p = dayPlan(), first = layoutDay().blocks.find(x => !x.item.front);
-      changePlan('Break added', placeItem(p, { id: newId('i'), brk: PLAN_BREAK_MIN, at: 0 }, first ? first.end : minuteNow() + 60));
+      // Rounded up, so the break never lands a moment before the task ends and cuts a sliver off it.
+      changePlan('Break added', placeItem(p, { id: newId('i'), brk: PLAN_BREAK_MIN, at: 0 }, first ? Math.ceil(first.end / PLAN_SNAP) * PLAN_SNAP : minuteNow() + 60));
       break;
     }
     case 'look-theme': case 'look-color': {
@@ -4667,8 +4722,11 @@ document.addEventListener('change', e => {
   }
   if (el.dataset.hour) {
     const p = dayPlan(), list = clone(p.windows), w = list[+el.dataset.i], v = parseHHMM(el.value);
-    if (w && v != null) w[el.dataset.hour] = v;
-    savePlan({ ...p, windows: w && w.e > w.s ? cleanWindows(list) : p.windows });
+    // Typing "5:00 PM" passes through an empty box and 5:00 AM on the way, so those wait for the rest of the typing.
+    if (!w || v == null) return;
+    w[el.dataset.hour] = v;
+    if (w.e <= w.s) return;
+    savePlan({ ...p, windows: cleanWindows(list) });
     renderLayer(); render();
     return;
   }
@@ -4754,7 +4812,8 @@ document.addEventListener('keydown', e => {
     if (edge) {
       e.preventDefault();
       const p = dayPlan(), list = clone(p.windows), w = list[+edge.dataset.i];
-      w[edge.dataset.edge] = clamp(w[edge.dataset.edge] + dir * HOURS_SNAP, 0, 1440);
+      const end = edge.dataset.edge === 'e'; // an end can't pass the other end, or the hours would vanish
+      w[edge.dataset.edge] = clamp(w[edge.dataset.edge] + dir * HOURS_SNAP, end ? w.s + HOURS_SNAP : 0, end ? 1440 : w.e - HOURS_SNAP);
       savePlan({ ...p, windows: cleanWindows(list) });
       render();
       $(`[data-edge="${edge.dataset.edge}"][data-i="${edge.dataset.i}"]`)?.focus();
