@@ -20,6 +20,8 @@ A to-do list that helps you work at a steady pace and balance work with free tim
 - Press the arrow on a task to show its steps, and drag any step onto the timeline on its own. The task's block shrinks to what's left, so one task can be spread across the day. Starting a different task while one is running sets the running step aside with its time kept, and a finished step in the timer's Steps list has **Go back**, which starts it again.
 - **Schedules** under **Options** saves today's hours, breaks and tasks under a name. Load one into today or any later day, and it's waiting when that day comes.
 - Drag **Add break** onto the timeline to plan one, or press it to add one after your next task. Tasks flow around it, and a break you planned comes before any Paced would suggest. When a task ends, the next one on the timeline starts by itself, and Paced alerts you when the first thing on it is due.
+- Coming back after 30 minutes or more away from a paused step, such as overnight, counts as your break, so Paced doesn't ask for another one.
+- While something is running, the bar at the bottom has **Stop**, so you can stop working without opening the timer.
 - It tells you when to take a break once you slow down, or to switch tasks when something is due soon.
 - Sound, notifications and the tab title reach you when you're not looking at Paced. Notifications need the page open in a desktop browser; on most phones you get sound and vibration only.
 - **Pop out timer** opens a small timer window that stays on top of your other apps, with the current step, the time left, and buttons to finish or pause. It turns red when you run over. It works in desktop Zen, Firefox and Chrome, opens only when you press the button, and closes with the Paced tab.

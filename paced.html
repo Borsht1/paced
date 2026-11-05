@@ -590,6 +590,7 @@ body.has-mini .toast { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 }
 @media (max-width: 480px) {
   .mini [data-act="pop-out"] { display: none; }
+  .mini .wide-word { display: none; } /* "Open" is enough on a phone, so the step's name has room */
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -722,6 +723,7 @@ const OVER_ALERTS = [0, 5, 10, 20]; // minutes past the end of a step, or of the
 const BREAK_ALERTS = [0, 2, 5, 10]; // minutes past the end of a break
 const AUTO_STOP_MIN = 30; // a step's timer stops this long past its end if nobody answers
 const AWAY_MIN = 10; // a jump this long in the clock means Paced was closed or the device slept
+const REST_MIN = 30; // this long away from a paused step counts as a real rest, like sleep, so the work before it stops adding up
 const SNOOZE_MIN = 10; // how long "Not now" holds off a break
 const BREAK_GIVE_UP_MIN = 60; // a break this far past its end counts as over
 const IDLE_MIN = 5; // minutes without using the computer before a step pauses, unless you change it in Settings
@@ -1115,6 +1117,17 @@ function clearActiveIf(pred) {
    Starting speed = average pace of the first two steps after a break,
    or the median of past fresh starts when you began already tired.
    Efficiency = average pace of your last two steps / starting speed. Under 90% means it's break time. */
+// Everything worked in this session, rests included.
+const rawWorkSec = (s, now = Date.now()) => (s.priorMin || 0) * 60 + (s.partialSec || 0)
+  + s.log.reduce((x, l) => x + (l.worked ?? l.actual ?? 0), 0)
+  + (s.active ? elapsedSec(s.active, now) - (s.active.carry || 0) : 0);
+// Coming back after a long time away counts as having had your break, so Paced doesn't ask for another.
+function markRested() {
+  const m = state.meta, s = m.session;
+  if (!s) return;
+  s.restSec = rawWorkSec(s); s.markAt = 0; s.snoozeUntil = 0;
+  m.lastBreakEnd = Date.now();
+}
 function assess(meta, now = Date.now()) {
   const s = meta.session || { log: [], priorMin: 0 };
   const counted = s.log.filter(l => l.pace != null && !l.excluded);
@@ -1135,9 +1148,9 @@ function assess(meta, now = Date.now()) {
   else if (eff == null && last && last.feel) { eff = last.feel === 'focused' ? 100 : 94; from = 'feel'; }
   if (eff != null) eff = Math.round(clamp(eff, 40, 130));
 
-  const workSec = (s.priorMin || 0) * 60 + (s.partialSec || 0)
-    + s.log.reduce((x, l) => x + (l.worked ?? l.actual ?? 0), 0)
-    + (s.active ? elapsedSec(s.active, now) - (s.active.carry || 0) : 0);
+  // Work since your last real rest. A step that's been paused long enough is already a rest.
+  const resting = s.active?.pausedAt && now - s.active.pausedAt >= REST_MIN * 60e3;
+  const workSec = resting ? 0 : Math.max(0, rawWorkSec(s, now) - (s.restSec || 0));
   const workMin = workSec / 60;
   const slipping = counted.length >= 3 && counted[counted.length - 1].pace < counted[counted.length - 2].pace;
   const breakMin = clamp(Math.round(workMin * 0.2 / 5) * 5, 5, 20);
@@ -2440,8 +2453,9 @@ function renderMini() {
   const plan = !m.brk && s && !s.active && s.gap ? gapPlan(s) : null;
   const act = c?.over && m.brk ? '<button class="btn small" data-act="end-break">Back to work</button>'
     : c?.over && plan?.type === 'step' ? `<button class="btn small" data-act="start-step" data-id="${plan.t.id}" data-step="${plan.next.id}">${ICON.play}Start next step</button>`
-    : '<button class="btn small" data-act="focus-open">Open timer</button>';
-  el.innerHTML = `<div class="mini-in">${dot}<span class="mini-title">${title}</span>${time}${popOutButton()}${act}</div>`;
+    : '<button class="btn small" data-act="focus-open" aria-label="Open timer">Open<span class="wide-word"> timer</span></button>';
+  const stop = s ? '<button class="btn small" data-act="end-session" title="Stop working and save this session">Stop</button>' : '';
+  el.innerHTML = `<div class="mini-in">${dot}<span class="mini-title">${title}</span>${time}${popOutButton()}${act}${stop}</div>`;
 }
 
 // The one clock that matters right now, for the tab title and the bar at the bottom. A negative "left" is time past the end.
@@ -3872,6 +3886,7 @@ function startStep(taskId, stepId) {
 }
 
 function resumeStep(a) {
+  if (a.pausedAt && Date.now() - a.pausedAt >= REST_MIN * 60e3) markRested();
   logPause(a);
   if (a.pausedAt) { a.pausedMs += Date.now() - a.pausedAt; a.pausedAt = null; }
   a.autoStopped = false; a.idlePaused = false;
@@ -4472,6 +4487,7 @@ document.addEventListener('click', e => {
     case 'forgot-go': correctTime(parseMin($('#forgot-min').value), true); break;
     case 'away-keep': if (s && s.active) { s.active.pausedAt = null; s.active.okSec = elapsedSec(s.active); } state.ask = null; saveMeta(); render(); break;
     case 'away-drop': {
+      if (state.ask?.sec >= REST_MIN * 60) markRested(); // time away you didn't work was a rest
       if (s && s.active) { const left = elapsedSec(s.active); s.active.pausedAt = null; shortenStep(s.active, left); }
       state.ask = null; saveMeta(); render(); break;
     }
