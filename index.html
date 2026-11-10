@@ -103,7 +103,7 @@ button.check:hover > span { border-color: var(--zone); color: var(--zone); }
 .check.sm { width: 38px; height: 38px; }
 .check.sm > span { width: 22px; height: 22px; }
 .task-body { min-width: 0; text-align: left; background: none; border: none; padding: 12px 6px; display: grid; gap: 4px; }
-.task-title { font-weight: 600; font-size: 17px; line-height: 1.3; overflow-wrap: break-word; }
+.task-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; font-weight: 600; font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
 .task-meta { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .badge { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--accent); }
 .badge .dot, .mini-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; animation: pulse 1.6s ease-in-out infinite; }
@@ -120,6 +120,7 @@ button.check:hover > span { border-color: var(--zone); color: var(--zone); }
 .task-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
 .task-steps { grid-column: 1 / -1; list-style: none; margin: 2px 0 4px; padding: 0; display: grid; gap: 2px; }
 .tstep { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 5px 8px 5px 0; border-radius: 8px; background: var(--bg); font-size: 14px; cursor: grab; }
+.tstep > span { min-width: 0; overflow-wrap: anywhere; }
 .tstep small { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .task-slot { grid-column: 1 / -1; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 2px -12px -6px 0; padding: 6px 14px; border-radius: 0 0 var(--r) var(--r); background: var(--zone-soft); color: var(--zone); font-size: 13px; font-variant-numeric: tabular-nums; }
 .task-slot b { font-weight: 700; }
@@ -205,7 +206,7 @@ body.dragging .day { position: sticky; top: env(safe-area-inset-top, 0px); }
 .dm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .dm-head b { font-size: 15px; overflow-wrap: anywhere; }
 .dm-head .icon-btn { width: 28px; height: 28px; margin: -4px -6px -4px 0; }
-.dm-sub { margin: -6px 0 0; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dm-sub { margin: -6px 0 0; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .dm-label { margin: 2px 0 -2px; font-size: 12px; font-weight: 700; color: var(--muted); }
 .dm-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .dm-row .btn { padding: 6px 12px; font-size: 13px; }
@@ -254,9 +255,9 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .next { max-width: 632px; margin: 0 auto; padding: 6px var(--side-r) 4px var(--side-l); }
 .next-card { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; padding: 14px 14px 14px 18px; border-radius: var(--r); background: var(--accent-soft); }
 .next-card.carry { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
-.next-text { flex: 1 1 240px; min-width: 0; display: grid; gap: 2px; }
+.next-text { flex: 1 1 240px; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
 .next-kicker { font-size: 13px; font-weight: 700; color: var(--accent); }
-.next-text b { font: 700 19px/1.25 var(--font-display); overflow-wrap: break-word; }
+.next-text b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; font: 700 19px/1.25 var(--font-display); }
 .next-text span:last-child { font-size: 14px; color: var(--muted); }
 .next-card .row-actions { gap: 8px; margin-left: auto; }
 /* Quick add: one line, read as you type */
@@ -422,13 +423,16 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .sched > div:first-child { display: grid; gap: 2px; min-width: 0; }
 .sched small { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .sched .cal { flex-basis: 100%; margin-top: 0; }
+.sched-ask { flex-basis: 100%; display: grid; gap: 6px; }
+.sched-ask p { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
 .step-add { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
 .step-add > .text-input { flex: 1 1 130px; width: auto; }
 
 /* Working screen */
 .focus { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow-y: auto; padding: env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(16px, env(safe-area-inset-left, 0px)); animation: fade .2s ease-out; }
 @keyframes fade { from { opacity: 0; } }
-.focus-in { max-width: 560px; margin: 0 auto; padding-block: 14px 56px; display: grid; gap: 18px; }
+.focus-in:focus { outline: none; }
+.focus-in { max-width: 560px; margin: 0 auto; padding-block: 14px 56px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
 .fbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 40px; }
 .fbar-end { display: flex; gap: 8px; }
 .fbar-title { text-align: center; font-weight: 600; color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -466,7 +470,7 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .ask-card { background: var(--accent-soft); border-radius: var(--r); padding: 20px; display: grid; gap: 10px; }
 .ask-card.warn { background: var(--warn-soft); }
 .ask-card h2 { font: 700 21px/1.25 var(--font-display); margin: 0; text-wrap: balance; overflow-wrap: anywhere; }
-.ask-card p { margin: 0; color: var(--muted); }
+.ask-card p { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
 .ask-card .label { margin: 4px 0 0; }
 .ask-links { display: flex; flex-wrap: wrap; gap: 18px; }
 .gap-clock { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--accent-soft); border-radius: var(--r); padding: 14px 18px; }
@@ -487,7 +491,7 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .picklist { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .pick { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; border: 1px solid var(--line); background: var(--bg); border-radius: 12px; padding: 12px 16px; }
 .pick:hover { border-color: var(--accent); }
-.pick > span:first-child { display: grid; min-width: 0; }
+.pick > span:first-child { display: grid; min-width: 0; overflow-wrap: anywhere; }
 .pick .muted { font-size: 13px; }
 .pick-go { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--accent); flex: none; }
 .breakscreen { display: grid; justify-items: center; text-align: center; gap: 14px; padding-top: 10vh; }
@@ -582,8 +586,10 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
   padding: 10px 10px 10px 16px; font-size: 14px; box-shadow: 0 8px 28px rgba(0, 0, 0, .25);
   animation: rise .2s ease-out;
 }
+.toast > span { min-width: 0; overflow-wrap: anywhere; }
 body.has-mini .toast { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
-.toast-act { background: transparent; border: none; color: var(--bg); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; padding: 6px 8px; }
+.toast-act { flex: none; white-space: nowrap; background: transparent; border: none; color: var(--bg); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; padding: 6px 8px; }
+.toast-x { flex: none; display: grid; place-items: center; min-width: 32px; min-height: 32px; background: transparent; border: none; color: var(--bg); opacity: .8; border-radius: 8px; padding: 0; }
 
 @media (max-width: 420px) {
   .btn.big { padding: 14px 22px; }
@@ -713,17 +719,27 @@ const byDue = (a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.cr
 const activeTasks = () => [...state.tasks.values()].filter(t => !t.archived).sort(byDue);
 const archivedTasks = () => [...state.tasks.values()].filter(t => t.archived).sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
 const stepsLeft = t => t.steps.filter(s => !s.done);
-const minLeft = t => stepsLeft(t).reduce((a, s) => a + (s.est || 0), 0);
 const findStep = (tid, sid) => state.tasks.get(tid)?.steps.find(s => s.id === sid);
 const elapsedSec = (a, now = Date.now()) => (a.carry || 0) + ((a.pausedAt || now) - a.startedAt - (a.pausedMs || 0)) / 1000;
 // When the running step is meant to end, in seconds of work. Asking for more time moves it.
 const targetSec = (a, st) => a.target ?? (st && st.est ? st.est * 60 : null);
+// The minutes a step still needs: its plan, less the time already worked on it. The running step goes by its timer.
+const stepBegun = st => !!st.spent || state.meta.session?.active?.stepId === st.id;
+function stepMinLeft(st) {
+  if (!st.est) return 0;
+  const a = state.meta.session?.active, live = a && a.stepId === st.id;
+  const sec = live ? targetSec(a, st) - elapsedSec(a) : st.est * 60 - (st.spent || 0);
+  return stepBegun(st) ? Math.max(1, Math.ceil(sec / 60)) : st.est;
+}
+const stepMinWords = st => fmtMin(stepMinLeft(st)) + (stepBegun(st) ? ' left' : '');
+const minLeft = t => stepsLeft(t).reduce((a, s) => a + stepMinLeft(s), 0);
 
 const GAP_SEC = 60; // the pause between steps before the next one starts by itself
 const OVER_ALERTS = [0, 5, 10, 20]; // minutes past the end of a step, or of the pause between steps
 const BREAK_ALERTS = [0, 2, 5, 10]; // minutes past the end of a break
 const AUTO_STOP_MIN = 30; // a step's timer stops this long past its end if nobody answers
 const AWAY_MIN = 10; // a jump this long in the clock means Paced was closed or the device slept
+const GONE_MIN = 180; // a step stopped for this long means you left, so the session ends where it stopped
 const REST_MIN = 30; // this long away from a paused step counts as a real rest, like sleep, so the work before it stops adding up
 const SNOOZE_MIN = 10; // how long "Not now" holds off a break
 const BREAK_GIVE_UP_MIN = 60; // a break this far past its end counts as over
@@ -1083,7 +1099,7 @@ function dropFinishedStep() {
 }
 // A session with no step running and nothing done for 30 minutes counts as stopped, so yesterday's
 // hours don't carry into today. Left alone while you're looking at the working screen, unless forced.
-// A break nobody came back from closes the same way.
+// A break nobody came back from closes the same way, and so does a step left paused for hours.
 function expireIdleSession(force) {
   const m = state.meta, s = m.session, now = Date.now();
   if (m.brk && now - m.brk.until >= BREAK_GIVE_UP_MIN * 60e3) {
@@ -1097,6 +1113,9 @@ function expireIdleSession(force) {
   }
   // Steps ticked off with no timer running make a record too, once they've stopped coming.
   if (m.run && !s && !m.brk && now - runEnd(m.run.events) >= 30 * 60e3) { endRun(); saveMeta(); return true; }
+  // A step paused for hours is a session you walked away from. One Paced stopped itself still has its question to ask.
+  const a = s && s.active;
+  if (a && a.pausedAt && !a.autoStopped && !m.brk && now - a.pausedAt >= GONE_MIN * 60e3) { endLeftSession(); return true; }
   if (!s || s.active || m.brk || (state.focusOpen && !force)) return false;
   const last = s.lastAt || s.startedAt || 0;
   if (now - last < 30 * 60e3) return false;
@@ -1325,9 +1344,12 @@ function nextPlanned(exceptId) {
 }
 const dueBreak = (now = minuteNow()) => dayPlan().items.find(i => i.brk && i.at <= now && i.at + i.brk + BREAK_GIVE_UP_MIN > now) || null;
 const plannedBreakSoon = () => dayPlan().items.some(i => i.brk && i.at > minuteNow() && i.at <= minuteNow() + BREAK_NEAR_MIN);
-// Taking a break uses up the planned one it stands in for, and keeps that one's length.
+// Taking a break uses up the planned one it stands in for, and keeps that one's length: the one that's due, or else one
+// coming up soon. A planned break you missed long ago is off the timeline, so it can't take over a later break.
 function usePlannedBreak(min) {
-  const p = dayPlan(), i = p.items.findIndex(x => x.brk && x.at <= minuteNow() + BREAK_NEAR_MIN);
+  const p = dayPlan(), now = minuteNow();
+  const due = p.items.findIndex(x => x.brk && x.at <= now && x.at + x.brk + BREAK_GIVE_UP_MIN > now);
+  const i = due >= 0 ? due : p.items.findIndex(x => x.brk && x.at > now && x.at <= now + BREAK_NEAR_MIN);
   if (i < 0) return min;
   const [used] = p.items.splice(i, 1);
   state.meta.plan = p;
@@ -1360,6 +1382,7 @@ function render() {
   renderDay();
   showPip();
   paintClock();
+  leaveFocus();
 }
 
 function renderMain() {
@@ -1726,7 +1749,8 @@ function gtAdd() {
   const picks = g.lists.flatMap(l => l.tasks).filter(t => g.picked.has(t.id) && !added.has(t.id));
   const made = picks.map((p, i) => ({
     id: newId('t'), title: p.title, due: p.due, createdAt: now + i, archived: false, completedAt: null, ...(fromGoogle ? { googleTaskId: p.id } : {}),
-    steps: p.subs.map(title => ({ id: newId('s'), title, est: null, done: false, actual: null, doneAt: null }))
+    // With no steps, the task is one step of its own, so Start works straight away.
+    steps: (p.subs.length ? p.subs : [p.title]).map(title => ({ id: newId('s'), title, est: null, done: false, actual: null, doneAt: null }))
   }));
   made.forEach(saveTask);
   state.gt = null; state.layer = null; renderLayer(); render();
@@ -1847,7 +1871,7 @@ function nextHTML() {
   if (!x || !x.st) return '';
   const step = x.t.steps.length > 1 ? `${x.st.title} · ` : '';
   return `<div class="next-card"><div class="next-text"><span class="next-kicker">Next up</span><b>${esc(x.t.title)}</b>
-      <span>${esc(step)}${x.st.est ? fmtMin(x.st.est) : 'No minutes yet'} · ${esc(x.why)}</span></div>
+      <span>${esc(step)}${x.st.est ? stepMinWords(x.st) : 'No minutes yet'} · ${esc(x.why)}</span></div>
     <button class="btn primary" data-act="sel-start" data-id="${x.t.id}" data-step="${x.st.id}">${ICON.play}Start</button></div>`;
 }
 function renderNext() {
@@ -1942,12 +1966,15 @@ const quickHTML = () => `<form class="quick-add" id="quick-add">
   <div class="quick-foot"><p class="quick-hint" id="quick-hint" aria-live="polite">${quickHint(state.quick || '')}</p>
     <button type="button" class="link" data-act="open-add">${draftHas(state.draft) ? 'Finish your draft' : 'More details'}</button></div>`;
 
+function homeSub(list) {
+  const left = list.reduce((a, t) => a + minLeft(t), 0);
+  return `${list.length} ${list.length === 1 ? 'task' : 'tasks'}${left ? ` · about ${fmtMin(left)} of work` : ''}`;
+}
 function homeHTML() {
   const list = activeTasks(), done = archivedTasks().length;
   const doneLink = done ? `<button class="link done-link" data-act="show-archive">${ICON.check}Completed tasks<span class="count">${done}</span></button>` : '';
-  const left = list.reduce((a, t) => a + minLeft(t), 0);
   return `<div class="title-row"><h1>My tasks</h1>${list.length ? `<div class="row-actions"><button class="btn ghost small" data-act="open-import">Import</button></div>` : ''}</div>
-  ${list.length ? `<p class="sub">${list.length} ${list.length === 1 ? 'task' : 'tasks'}${left ? ` · about ${fmtMin(left)} of work` : ''}</p>
+  ${list.length ? `<p class="sub" data-left="all">${homeSub(list)}</p>
   ${quickHTML()}
   <ul class="tasks">${list.map(taskHTML).join('')}</ul>
   ${doneLink}
@@ -2317,6 +2344,7 @@ function schedulesHTML(enter) {
         <button class="icon-btn" data-act="sched-del" data-id="${x.id}" title="Delete" aria-label="Delete “${esc(x.name)}”">${ICON.trash}</button>
       </div>
       ${state.schedLoad === x.id && state.duePick ? calHTML(null, true) : ''}
+      ${state.schedAsk?.id === x.id ? schedAskHTML(x) : ''}
     </li>`).join('')}</ul>` : '<p class="help">Nothing saved yet. Name today’s schedule above to keep it.</p>'}
     ${soon.length ? `<h3 class="label">Coming up</h3><ul class="scheds">${soon.map(d => `<li class="sched">
       <div><b>${esc(fmtFullDay(d.date))}</b><small>${esc(d.name || 'Your plan')} · ${esc(schedWords(d))}</small></div>
@@ -2332,10 +2360,32 @@ function saveSchedule(name) {
   saveMeta(); renderLayer();
   toast(old ? `Updated “${old.name}”` : `Saved “${label}”`);
 }
+// What a day already has planned, in words, or nothing when loading a schedule there would replace nothing.
+function dayHas(date) {
+  if (date !== dateKey()) { const d = comingUp().find(y => y.date === date); return d ? `${d.name ? `“${d.name}”, ` : ''}${schedWords(d)}` : ''; }
+  const now = minuteNow(), items = dayPlan().items.filter(i => i.brk ? i.at + i.brk + BREAK_GIVE_UP_MIN > now : onTimeline(i));
+  const n = items.filter(i => !i.brk).length, b = items.length - n;
+  return [n && `${n} ${n === 1 ? 'task' : 'tasks'}`, b && `${b} ${b === 1 ? 'break' : 'breaks'}`].filter(Boolean).join(' and ');
+}
+function schedAskHTML(x) {
+  const date = state.schedAsk.date;
+  return `<div class="sched-ask">
+    <p>${esc(`${dayName(date)} already has a plan: ${dayHas(date)}. Loading “${x.name}” replaces it.`)}</p>
+    <div class="chips"><button class="btn ghost small" data-act="sched-no">Cancel</button><button class="btn primary small" data-act="sched-yes">Replace it</button></div>
+  </div>`;
+}
 // A schedule is a copy, so what you change on the day doesn't change it. Tasks finished since it was saved are left out.
-function loadSchedule(id, date) {
+// Loading onto a day that already has a plan replaces that plan, so Paced asks first.
+function loadSchedule(id, date, sure) {
   const x = schedules().find(y => y.id === id), today = dateKey();
   if (!x) return;
+  if (!sure && dayHas(date)) {
+    state.duePick = null; state.schedLoad = null; state.schedAsk = { id, date };
+    renderLayer();
+    $('#layer [data-act="sched-no"]')?.focus();
+    return;
+  }
+  state.schedAsk = null;
   const items = clone(x.items.filter(i => i.brk || onTimeline(i))).map(i => ({ ...i, id: newId('i') })), gone = x.items.length - items.length;
   const note = gone ? ` ${gone} finished ${gone === 1 ? 'task' : 'tasks'} left out.` : '';
   state.duePick = null; state.schedLoad = null;
@@ -2370,12 +2420,23 @@ function hoursHTML(enter) {
 }
 
 const openSteps = new Set(); // the tasks showing their steps in the list
+// "left" once any of it is done or begun, so a half-worked task doesn't read as untouched.
+function taskMeta(t) {
+  const total = t.steps.length, todo = stepsLeft(t), done = total - todo.length, left = minLeft(t);
+  if (!total) return 'No steps yet';
+  if (!done) return `${total} ${total === 1 ? 'step' : 'steps'}${left ? ` · about ${fmtMin(left)}${todo.some(stepBegun) ? ' left' : ''}` : ''}`;
+  return `${done} of ${total} steps done${left ? ` · about ${fmtMin(left)} left` : ''}`;
+}
+// While a step runs, the minutes left on its task count down in the list too.
+function showMinLeft() {
+  const a = state.meta.session?.active, t = a && state.tasks.get(a.taskId), row = t && $(`#main [data-left="${t.id}"]`);
+  if (!row) return;
+  row.textContent = taskMeta(t);
+  const sub = $('#main [data-left="all"]');
+  if (sub) sub.textContent = homeSub(activeTasks());
+}
 function taskHTML(t) {
-  const total = t.steps.length, done = total - stepsLeft(t).length, left = minLeft(t);
-  let meta;
-  if (!total) meta = 'No steps yet';
-  else if (!done) meta = `${total} ${total === 1 ? 'step' : 'steps'}${left ? ` · about ${fmtMin(left)}` : ''}`;
-  else meta = `${done} of ${total} steps done${left ? ` · about ${fmtMin(left)} left` : ''}`;
+  const total = t.steps.length, done = total - stepsLeft(t).length, left = minLeft(t), meta = taskMeta(t);
   const live = state.meta.session?.active?.taskId === t.id, due = dueInfo(t), when = plannedOf(t.id), later = when && when.date > dateKey() ? when : null;
   // With nothing left to do there's nothing to start, so the button is for adding more.
   const action = !total || (!left && !stepsLeft(t).length && !live)
@@ -2387,7 +2448,7 @@ function taskHTML(t) {
   const steps = open ? `<ul class="task-steps">${todo.map(st => {
     const on = lay.blocks.find(b => b.step?.id === st.id);
     return `<li class="tstep" data-drag="step" data-id="${t.id}" data-step="${st.id}" title="Drag onto the timeline">
-      <span class="grip">${ICON.grip}</span><span>${esc(st.title)}</span><small>${on ? clockAt(on.start) : st.est ? fmtMin(st.est) : ''}</small>
+      <span class="grip">${ICON.grip}</span><span>${esc(st.title)}</span><small>${on ? clockAt(on.start) : st.est ? stepMinWords(st) : ''}</small>
     </li>`;
   }).join('')}</ul>` : '';
   return `<li class="task can-plan" data-drag="task" data-id="${t.id}">
@@ -2395,7 +2456,7 @@ function taskHTML(t) {
     <button class="check" data-act="complete-task" data-id="${t.id}" title="Mark the whole task as done" aria-label="Mark “${esc(t.title)}” as done"><span>${ICON.check}</span></button>
     <button class="task-body" data-act="open-task" data-id="${t.id}">
       <span class="task-title">${esc(t.title)}</span>
-      <span class="task-meta">${meta}${t.due && !due?.past ? ' · ' + dueHTML(t) : ''}${later ? ` · Planned ${esc(planWords(later))}` : ''}</span>
+      <span class="task-meta"><span data-left="${t.id}">${meta}</span>${t.due && !due?.past ? ' · ' + dueHTML(t) : ''}${later ? ` · Planned ${esc(planWords(later))}` : ''}</span>
       ${live ? '<span class="badge"><span class="dot"></span>Working on this now</span>' : ''}
       ${done ? `<span class="bar" aria-hidden="true"><i style="width:${Math.round(done / total * 100)}%"></i></span>` : ''}
     </button>
@@ -2487,11 +2548,16 @@ function liveClock(now = Date.now()) {
 }
 
 /* ---------- sheets ---------- */
-// While a sheet is open the page behind it can't be reached by keyboard, and closing it puts you back where you were.
+// While a sheet or the timer screen is open the page behind it can't be reached by keyboard, and closing it puts you back where you were.
 let layerOpener = null; // how to find again what you were on when the sheet opened, since the page redraws
+let focusOpener = null, focusBack = null; // the same for the timer screen, and where to go once it has closed
 // A way to find a control again after a redraw: its id, or what it does.
 const focusKey = x => { const d = x?.dataset; return !x || x === document.body ? null : x.id ? '#' + CSS.escape(x.id) : d?.act ? `[data-act="${CSS.escape(d.act)}"]${d.v != null ? `[data-v="${CSS.escape(d.v)}"]` : ''}${d.id ? `[data-id="${CSS.escape(d.id)}"]` : ''}` : null; };
-const setBehind = off => ['#topbar', '#next', '#day', '.app', '#mini', '#focus'].forEach(q => { const x = $(q); if (x) x.inert = off; });
+function setBehind() {
+  const sheet = !!state.layer, covered = sheet || (state.focusOpen && state.ready);
+  ['#topbar', '#next', '#day', '.app', '#mini'].forEach(q => { const x = $(q); if (x) x.inert = covered; });
+  $('#focus').inert = sheet;
+}
 function renderLayer(enter) {
   const el = $('#layer'), L = state.layer;
   const t = L && L.type === 'detail' ? state.tasks.get(L.id) : null;
@@ -2499,14 +2565,14 @@ function renderLayer(enter) {
   if (!L || (L.type === 'detail' && !t) || (L.type === 'record' && !rec)) {
     state.layer = null; el.hidden = true; el.innerHTML = '';
     document.body.classList.toggle('locked', state.focusOpen);
-    setBehind(false);
+    setBehind();
     return;
   }
   const ae = document.activeElement, inside = el.contains(ae), keep = inside ? focusKey(ae) : null;
   if (el.hidden && !inside) layerOpener = focusKey(ae);
   el.hidden = false;
   document.body.classList.add('locked');
-  setBehind(true);
+  setBehind();
   el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'notes' ? notesHTML(enter) : L.type === 'schedules' ? schedulesHTML(enter) : L.type === 'hours' ? hoursHTML(enter) : L.type === 'import' ? importHTML(enter) : ['gtasks', 'gcal', 'paste'].includes(L.type) ? gtHTML(enter) : L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : L.type === 'record' ? recordHTML(rec, enter) : detailHTML(t, enter));
   autosizeAll(el);
   // Redrawing replaces what had focus, so it goes back to the same field, or else to the sheet itself.
@@ -2565,12 +2631,13 @@ const planValue = () => state.layer?.type === 'add' ? state.draft?.plan || null 
 const dayName = k => k === dateKey() ? 'Today' : k === addDays(dateKey(), 1) ? 'Tomorrow' : fmtFullDay(k);
 const planWords = p => `${dayName(p.date)}, ${p.at != null ? clockAt(p.at) : 'any time'}`;
 // Under the days: a start time once there's a day, and Done. Each choice counts as soon as you make it.
+const timePassed = (date, at) => at != null && date === dateKey() && at <= minuteNow();
 function planTimeHTML(p) {
   const cur = p?.at ?? '', opts = Array.from({ length: 96 }, (_, i) => (i * 15 + 360) % 1440); // from 6 AM, with the small hours last
   return `<div class="cal-foot">
       <label class="cal-time">Start at <select id="plan-time" class="text-input" aria-label="Start at (optional)"${p ? '' : ' disabled'}>
         <option value=""${cur === '' ? ' selected' : ''}>Any time</option>
-        ${opts.map(m => `<option value="${m}"${cur === m ? ' selected' : ''}>${clockAt(m)}</option>`).join('')}
+        ${opts.map(m => `<option value="${m}"${cur === m ? ' selected' : ''}${p && timePassed(p.date, m) ? ' disabled' : ''}>${clockAt(m)}</option>`).join('')}
       </select></label>
       ${p ? '' : '<span class="muted">Pick a day first</span>'}
       <button type="button" class="btn small" data-act="plan-done">Done</button>
@@ -2612,9 +2679,11 @@ function setPlan(taskId, date, at) {
   state.meta.dayPlans = days.filter(d => d.name || d.items.length).sort((a, b) => a.date.localeCompare(b.date));
   savePlan(todayPlan); // saves the days ahead too
 }
-// Picking a day keeps the picker open, so a time can follow. A time already chosen moves with it.
+// Picking a day keeps the picker open, so a time can follow. A time already chosen moves with it,
+// unless moving to today puts it in the past: then the day is kept and the time is asked for again.
 function setPlanWhen(date, at) {
-  const L = state.layer;
+  const L = state.layer, late = timePassed(date, at);
+  if (late) { toast(`${clockAt(at)} has already passed today, so pick a later time.`); at = null; }
   if (L.type === 'add') state.draft.plan = { date, at };
   else { setPlan(L.id, date, at); render(); }
 }
@@ -2723,6 +2792,7 @@ function eventText(e) {
     case 'gap': return `Nothing running for ${len}`;
     case 'checkin': return 'Answered “Still working?”';
     case 'ticked': return `Ticked off ${e.title}, no time recorded`;
+    case 'left': return 'You were away for hours, so your session ended here';
   }
   return '';
 }
@@ -2958,17 +3028,36 @@ function detailHTML(t, enter) {
 /* ---------- working screen ---------- */
 function renderFocus() {
   const el = $('#focus');
+  // The idle question is asked on the timer screen when that's open, and goes when its step does.
+  if (toastAction === idleKeep && (state.focusOpen || !state.meta.session?.active?.idleGap)) hideToast();
   if (!state.focusOpen || !state.ready) {
+    if (!el.hidden) { focusBack = focusOpener || '#mini [data-act="focus-open"]'; focusOpener = null; }
     el.hidden = true; el.innerHTML = '';
     document.body.classList.toggle('locked', !!state.layer);
+    setBehind();
     return;
   }
-  const ae = document.activeElement;
-  if (!el.hidden && ae && el.contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+  const ae = document.activeElement, opening = el.hidden, inside = el.contains(ae);
+  if (!opening && inside && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+  const keep = inside ? focusKey(ae) : null;
+  if (opening) { focusOpener = $('#layer').contains(ae) ? layerOpener : focusKey(ae); focusBack = null; }
   el.hidden = false;
   document.body.classList.add('locked');
-  el.innerHTML = `<div class="focus-in">${focusBody()}</div>`;
+  setBehind();
+  el.innerHTML = `<div class="focus-in" tabindex="-1">${focusBody()}</div>`;
   autosizeAll(el);
+  // The keyboard comes to this screen when it opens, and a redraw puts it back on the same button.
+  const again = keep && el.querySelector(keep);
+  if (again) again.focus({ preventScroll: true });
+  else if ((opening || inside) && !state.layer) el.firstElementChild.focus({ preventScroll: true });
+}
+// Once the timer screen has closed and the list is drawn again, the keyboard goes back to what opened it.
+function leaveFocus() {
+  const q = focusBack;
+  focusBack = null;
+  if (!q || state.layer || document.activeElement !== document.body) return;
+  const back = document.querySelector(q) || $('#mini [data-act="focus-open"]');
+  if (back) back.focus({ preventScroll: true });
 }
 
 const focusTaskId = () => { const s = state.meta.session; return s ? (s.active ? s.active.taskId : s.taskId) : null; };
@@ -3248,6 +3337,20 @@ function awayHTML(st) {
     </section>`;
 }
 
+// After a short idle pause the timer carries on by itself, and this asks about the minutes it left out.
+// It doesn't get in the way of the step, and it stays until you answer.
+function idleAskHTML(a, st) {
+  if (!a.idleGap) return '';
+  return `<section class="ask-card warn">
+      <h2>Paced paused the timer for ${fmtDur(a.idleGap.sec)}</h2>
+      <p>It couldn’t tell you were there, so that time isn’t counted. Were you working on “${esc(st.title)}”?</p>
+      <div class="chips">
+        <button class="chip" data-act="idle-keep">Yes, add it back</button>
+        <button class="chip" data-act="idle-drop">No, leave it off</button>
+      </div>
+    </section>`;
+}
+
 function runningHTML() {
   const m = state.meta, s = m.session, a = s.active;
   const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
@@ -3264,7 +3367,7 @@ function runningHTML() {
     <div class="est-line" data-tick="estline">${planLine(el, target, paused)}</div>
     ${target ? `<span class="bar" aria-hidden="true"><i data-tick="prog" class="${over ? 'over' : ''}" style="width:${pct.toFixed(1)}%"></i></span>` : ''}`;
   const type = state.ask?.type;
-  if (type === 'timeup') return `<div class="hero">${hero}</div>${timeUpHTML(s, st, canSkip, target)}`;
+  if (type === 'timeup') return `<div class="hero">${hero}</div>${timeUpHTML(s, st, canSkip, target)}${idleAskHTML(a, st)}`;
   if (type === 'forgot') return `<div class="hero">${hero}</div>${forgotHTML(target)}`;
   if (type === 'away') return `<div class="hero">${hero}</div>${awayHTML(st)}`;
   return `<div class="hero">${hero}
@@ -3277,6 +3380,7 @@ function runningHTML() {
       <button class="link" data-act="split-open">${ICON.split}Split into two steps</button>
     </div>`}
   </div>
+  ${idleAskHTML(a, st)}
   ${type === 'split' ? splitHTML(st, el) : jotHTML()}
   ${statusHTML(as, s)}
   ${breakArea(as, s)}
@@ -3353,7 +3457,7 @@ function pickHTML(t, noSession) {
   const body = others.length
     ? `<h3 class="pick-q">What do you want to work on next?</h3><ul class="picklist">${others.map(x => {
         const n = x.steps.find(s => !s.done);
-        return `<li><button class="pick" data-act="pick-task" data-id="${x.id}"><span><b>${esc(x.title)}</b><span class="muted">Next step: ${esc(n.title)}${n.est ? ` · ${fmtMin(n.est)}` : ''}${x.due ? ` · ${esc(dueInfo(x).text)}` : ''}</span></span><span class="pick-go">${ICON.play}Start</span></button></li>`;
+        return `<li><button class="pick" data-act="pick-task" data-id="${x.id}"><span><b>${esc(x.title)}</b><span class="muted">Next step: ${esc(n.title)}${n.est ? ` · ${stepMinWords(n)}` : ''}${x.due ? ` · ${esc(dueInfo(x).text)}` : ''}</span></span><span class="pick-go">${ICON.play}Start</span></button></li>`;
       }).join('')}</ul>`
     : `<p class="muted" style="margin:0">That was everything on your list. Nice work!</p><div class="row"><button class="btn primary" data-act="${noSession ? 'focus-min' : 'end-session'}">${ICON.back}Back to my tasks</button></div>`;
   return `<section class="panel">${head}${body}</section>`;
@@ -3366,22 +3470,23 @@ function breakHTML() {
     <h2 class="step-name">${over ? 'Break’s over' : 'Break time'}</h2>
     <div class="timer${left < 0 ? ' over' : ''}" data-tick="break" role="timer" aria-label="Break time left">${clockHTML(left)}</div>
     <p class="muted">${over ? 'Time to get back. Paced will measure your speed fresh from here.' : `Stand up, stretch, and get some water. Back at ${fmtTime(b.until)}.`}</p>
-    ${next ? `<p>Up next: <b>${esc(next.title)}</b>${next.est ? ` · ${fmtMin(next.est)}` : ''}</p>` : ''}
+    ${next ? `<p>Up next: <b>${esc(next.title)}</b>${next.est ? ` · ${stepMinWords(next)}` : ''}</p>` : ''}
     <button class="btn ${over ? 'primary' : 'ghost'} big" data-act="end-break">${over ? ICON.play + 'Back to work' : 'I’m ready, start now'}</button>
   </div>`;
 }
 
 /* ---------- toast ---------- */
-let toastTimer = null, toastAction = null;
-function toast(msg, actLabel, fn) {
+let toastTimer = null, toastAction = null, toastClose = null;
+// With "onClose" the message waits for an answer instead of fading, and its × runs that.
+function toast(msg, actLabel, fn, onClose) {
   const el = $('#toast');
-  el.innerHTML = `<span>${esc(msg)}</span>${actLabel ? `<button class="toast-act">${esc(actLabel)}</button>` : ''}`;
+  el.innerHTML = `<span>${esc(msg)}</span>${actLabel ? `<button class="toast-act">${esc(actLabel)}</button>` : ''}${onClose ? `<button class="toast-x" aria-label="Dismiss">${ICON.x}</button>` : ''}`;
   el.hidden = false;
-  toastAction = fn || null;
+  toastAction = fn || null; toastClose = onClose || null;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(hideToast, fn ? 7000 : 3800);
+  toastTimer = onClose ? null : setTimeout(hideToast, fn ? 7000 : 3800);
 }
-function hideToast() { $('#toast').hidden = true; toastAction = null; }
+function hideToast() { $('#toast').hidden = true; toastAction = toastClose = null; }
 
 /* ---------- alerts: reaching you when you're not looking at Paced ---------- */
 const Alert = {
@@ -3509,6 +3614,7 @@ const seesOwnInput = window.matchMedia('(pointer: fine)').matches;
 function goIdle(at) {
   const a = state.meta.session?.active;
   if (!idleMin() || !a || a.pausedAt || Date.now() < syncUntil || state.ask?.type === 'forgot') return;
+  if (findStep(a.taskId, a.stepId)?.noIdle) return; // you said you work on this one away from the keyboard
   a.pausedAt = clamp(at, a.startedAt + (a.pausedMs || 0), Date.now());
   a.idlePaused = true;
   a.alerts = 0; a.okSec = 0;
@@ -3516,25 +3622,48 @@ function goIdle(at) {
 }
 
 function backFromIdle() {
-  const a = state.meta.session?.active;
+  const m = state.meta, s = m.session, a = s?.active;
   if (!a || !a.idlePaused) return;
   if (Date.now() < syncUntil) { backWaiting = true; return; } // this tab may be out of date until your account catches up
-  const sec = (Date.now() - a.pausedAt) / 1000, stepId = a.stepId, from = a.pausedAt;
-  if (sec > IDLE_RESUME_MIN * 60) a.idlePaused = false;
-  else resumeStep(a);
-  saveMeta(); render();
-  if (a.pausedAt || sec < 60) return;
-  // A thought or a phone call can look idle, so you can put the time back.
-  const addBack = () => {
-    const now = state.meta.session?.active;
-    if (!now || now.stepId !== stepId) return;
-    now.pausedMs -= sec * 1000;
-    if (state.meta.run) state.meta.run.events = state.meta.run.events.filter(e => !(e.type === 'pause' && e.at === from));
+  const sec = (Date.now() - a.pausedAt) / 1000, from = a.pausedAt;
+  if (sec >= GONE_MIN * 60) { leftSession(sec); return; }
+  if (sec > IDLE_RESUME_MIN * 60) {
+    // Too long to carry on by itself, so it asks the same question as coming back to a closed tab.
+    a.idlePaused = false;
+    state.ask = { type: 'away', sec };
+    state.focusOpen = true;
     saveMeta(); render();
-  };
-  const say = () => toast(`Paused for ${fmtDur(sec)} while you were idle.`, 'I was working', addBack);
-  if (document.visibilityState === 'visible') say();
-  else document.addEventListener('visibilitychange', say, { once: true });
+    return;
+  }
+  // Reading, a phone call or work on paper can look idle, so the time can go back. The question waits
+  // on the step until you answer it, and adds up if the step pauses again first.
+  const old = a.idleGap;
+  const rest = sec >= REST_MIN * 60 ? { restSec: s.restSec || 0, markAt: s.markAt || 0, snoozeUntil: s.snoozeUntil || 0, lastBreakEnd: m.lastBreakEnd ?? null } : null;
+  resumeStep(a);
+  if (sec >= 60) a.idleGap = { sec: (old?.sec || 0) + sec, from: [...(old?.from || []), from], rest: old?.rest || rest };
+  saveMeta(); render();
+  // The list has no card to ask on, so there the message stays up instead.
+  if (a.idleGap && !state.focusOpen) toast(`Paced paused your timer for ${fmtDur(a.idleGap.sec)} while you were idle.`, 'I was working', idleKeep, idleDrop);
+}
+
+// "I was working": the minutes go back on the step, and this step isn't paused for being idle again.
+function idleKeep() {
+  const m = state.meta, s = m.session, a = s?.active, g = a?.idleGap;
+  if (!g) return;
+  const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
+  a.pausedMs -= g.sec * 1000;
+  if (m.run) m.run.events = m.run.events.filter(e => !(e.type === 'pause' && g.from.includes(e.at)));
+  if (g.rest) { s.restSec = g.rest.restSec; s.markAt = g.rest.markAt; s.snoozeUntil = g.rest.snoozeUntil; m.lastBreakEnd = g.rest.lastBreakEnd; } // it wasn't a rest after all
+  delete a.idleGap;
+  if (st) { st.noIdle = true; saveTask(t); }
+  saveMeta(); render();
+  toast(`Added ${fmtDur(g.sec)} back. Paced won’t pause this step again while you’re idle.`);
+}
+function idleDrop() {
+  const a = state.meta.session?.active;
+  if (!a?.idleGap) return;
+  delete a.idleGap;
+  saveMeta(); render();
 }
 
 function noteInput() {
@@ -3563,6 +3692,7 @@ function watchCheckIn() {
   if (checkIn && (!a || a.stepId !== checkIn.stepId || !!a.pausedAt !== !!checkIn.paused)) endCheckIn();
   if (!a || a.pausedAt || !idleMin() || !checkMin() || document.hasFocus()) return;
   const st = findStep(a.taskId, a.stepId), stepId = a.stepId;
+  if (st?.noIdle) return;
   if (checkIn) {
     if (now - checkIn.at < CHECK_WAIT_MIN * 60e3) return;
     goIdle(checkIn.at);
@@ -3719,12 +3849,17 @@ function saveNew() {
     steps: (steps.length ? steps : [{ title, est: state.draft.min || null }]).map(s => ({ id: newId('s'), ...s, done: false, actual: null, doneAt: null }))
   };
   saveTask(t);
-  const plan = state.draft.plan;
+  // A draft can wait a while, so the day or time picked for it may have gone by. The message says where it really went.
+  const ask = state.draft.plan, plan = ask && ask.date >= dateKey() ? ask : null;
   if (plan) setPlan(t.id, plan.date, plan.at);
+  const got = plan && plannedOf(t.id);
+  let msg = `Saved “${t.title}”${got ? ` for ${planWords(got)}` : ''}`;
+  if (ask && !got) msg += `. ${fmtFullDay(ask.date)} has passed, so it isn’t on your timeline.`;
+  else if (got && plan.at != null && got.at == null) msg += timePassed(plan.date, plan.at) ? `. ${clockAt(plan.at)} has already passed, so it has no start time.` : `. Something else is on at ${clockAt(plan.at)}, so it starts right after.`;
   state.draft = null;
   state.layer = null; renderLayer();
   render();
-  toast(plan ? `Saved “${t.title}” for ${planWords(plan)}` : `Saved “${t.title}”`);
+  toast(msg);
 }
 
 function archiveToast(t, before) {
@@ -3909,6 +4044,17 @@ function startFocus(taskId, stepId) {
   startStep(taskId, next.id);
 }
 
+// The time you gave this step's block on the timeline, if you changed its length there, as seconds of work
+// on the step in all (like a.target). Time added to a block with more steps to come is for those steps.
+function blockTarget(t, st, carry) {
+  const p = dayPlan(), item = p.items.find(i => i.stepId === st.id) || p.items.find(i => i.taskId === t.id && !i.stepId);
+  if (!item || !item.extra) return null;
+  const steps = itemSteps(item, t, p);
+  if (!steps.includes(st)) return null;
+  const mine = taskRoom(t, [st]).min, min = Math.max(PLAN_SNAP, taskRoom(t, steps).min + item.extra);
+  return steps.length > 1 && min >= mine ? null : carry + min * 60;
+}
+
 function startStep(taskId, stepId) {
   const s = state.meta.session, st = findStep(taskId, stepId);
   if (!s || !st) return;
@@ -3924,9 +4070,10 @@ function startStep(taskId, stepId) {
   if (!st.est) { state.ask = { type: 'estimate', taskId, stepId }; closeGap(s); s.lastAt = Date.now(); saveMeta(); render(); return; }
   state.ask = null;
   closeGap(s);
-  const carry = st.spent || 0;
+  const carry = st.spent || 0, set = blockTarget(state.tasks.get(taskId), st, carry);
   // Time already spent comes off the plan. A step that's already past its plan gets 10 more minutes.
-  s.active = { taskId, stepId, startedAt: Date.now(), pausedMs: 0, pausedAt: null, carry, target: carry >= st.est * 60 ? carry + 600 : null, alerts: 0, estLow: false };
+  // A block you made longer or shorter on the timeline runs for the time you gave it, and stays out of your speed.
+  s.active = { taskId, stepId, startedAt: Date.now(), pausedMs: 0, pausedAt: null, carry, target: set ?? (carry >= st.est * 60 ? carry + 600 : null), alerts: 0, estLow: set != null };
   s.lastAt = Date.now();
   saveMeta(); render();
 }
@@ -3976,6 +4123,7 @@ function shortenStep(a, sec) {
 function correctTime(min, keepGoing) {
   const a = state.meta.session?.active; if (!a || !min) return;
   const st = findStep(a.taskId, a.stepId), sec = shortenStep(a, min * 60);
+  delete a.idleGap; // the time you gave covers any idle minutes
   state.ask = null;
   if (document.activeElement) document.activeElement.blur();
   if (!keepGoing) { finishStep(); return; }
@@ -4138,6 +4286,26 @@ function endSession() {
   saveMeta(); render();
   if (m.recordToShow) showRecord();
   else if (worked >= 1) toast(`Nice work! You worked for ${fmtMin(worked)}.`);
+}
+
+// Hours with a step stopped and nobody here: the session ends at the moment the step stopped, and the
+// step keeps the time it had. So yesterday's timer isn't waiting for you today, asking to count the night.
+function endLeftSession() {
+  const m = state.meta, s = m.session, a = s.active, at = a.pausedAt;
+  const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
+  m.lastStop = { at, workMin: Math.round(assess(m, at).workMin) };
+  recordSession(s, at);
+  if (st) { st.spent = Math.round(elapsedSec(a)); saveTask(t); logStepTime('aside', a, st, t, elapsedSec(a) - (a.carry || 0), { why: 'end', end: at }); }
+  logEvent('left', { at });
+  m.session = null; state.ask = null; state.focusOpen = false; state.fEdit = false;
+  endRun();
+  saveMeta();
+}
+function leftSession(sec) {
+  endLeftSession();
+  render();
+  // The session's record opens next and says why it ended. With under a minute worked there is no record, so this says it.
+  if (!state.meta.recordToShow) toast(`You were away for ${fmtDur(sec)}, so your session ended when you left.`, null, null, () => {}); // it stays up until you've seen it
 }
 
 function minimizeFocus() {
@@ -4425,6 +4593,7 @@ document.addEventListener('click', e => { if (skipClick) { e.stopPropagation(); 
 /* ---------- events ---------- */
 document.addEventListener('click', e => {
   if (e.target.closest('.toast-act')) { const f = toastAction; hideToast(); if (f) f(); return; }
+  if (e.target.closest('.toast-x')) { const f = toastClose; hideToast(); if (f) f(); return; }
   const b = e.target.closest('[data-act]');
   if (!b || b.disabled) return;
   // Finish any edit in progress first (this saves it), so the screen can redraw after the action.
@@ -4541,6 +4710,8 @@ document.addEventListener('click', e => {
     case 'timeup-back': state.ask = { type: 'timeup' }; renderFocus(); break;
     case 'forgot-go': correctTime(parseMin($('#forgot-min').value), true); break;
     case 'away-keep': if (s && s.active) { s.active.pausedAt = null; s.active.okSec = elapsedSec(s.active); } state.ask = null; saveMeta(); render(); break;
+    case 'idle-keep': idleKeep(); break;
+    case 'idle-drop': idleDrop(); break;
     case 'away-drop': {
       if (state.ask?.sec >= REST_MIN * 60) markRested(); // time away you didn't work was a rest
       if (s && s.active) { const left = elapsedSec(s.active); s.active.pausedAt = null; shortenStep(s.active, left); }
@@ -4578,9 +4749,17 @@ document.addEventListener('click', e => {
     case 'open-notes': openNotes(); break;
     case 'note-task': noteToTask(id); break;
     case 'note-del': deleteNote(id); break;
-    case 'open-schedules': state.layer = { type: 'schedules' }; state.duePick = null; state.schedLoad = null; renderLayer(true); break;
+    case 'open-schedules': state.layer = { type: 'schedules' }; state.duePick = null; state.schedLoad = null; state.schedAsk = null; renderLayer(true); break;
+    case 'sched-yes': if (state.schedAsk) loadSchedule(state.schedAsk.id, state.schedAsk.date, true); break;
+    case 'sched-no': {
+      const q = state.schedAsk;
+      state.schedAsk = null; renderLayer();
+      if (q) $(`#layer [data-act="sched-load"][data-id="${q.id}"]`)?.focus();
+      break;
+    }
     case 'sched-load': {
       const open = state.schedLoad === id;
+      state.schedAsk = null;
       state.schedLoad = open ? null : id;
       state.duePick = open ? null : { month: dateKey().slice(0, 7) };
       renderLayer(); break;
@@ -4850,6 +5029,7 @@ function checkAway(now = Date.now()) {
   if (now - seenSaved > 15e3) { seenSaved = now; try { localStorage.setItem(SEEN_KEY, now); } catch (e) {} }
   if (!a || a.pausedAt || gone < AWAY_MIN * 60e3) return;
   a.pausedAt = clamp(now - gone, a.startedAt + (a.pausedMs || 0), now);
+  if (gone >= GONE_MIN * 60e3) { leftSession(gone / 1000); return; } // nobody works on one step that long, so don't offer to count it
   state.ask = { type: 'away', sec: gone / 1000 };
   state.focusOpen = true;
   saveMeta(); render();
@@ -5022,6 +5202,7 @@ function tick() {
     if (m.session?.active && !m.session.active.pausedAt) checkBreakDue(m.session);
     tickPlan(m);
     if (!drag && !daySel) renderDay('quiet'); // an open menu keeps its place until you're done with it
+    showMinLeft();
     if (state.focusOpen && (m.session || m.brk)) renderFocus();
   }
 }
