@@ -284,14 +284,16 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .mini-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; font-size: 14px; }
 .mini-time { font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; }
 .mini .btn { background: var(--bg); color: var(--ink); }
-.mini.over .mini-in { background: var(--stop); color: var(--surface); }
+.mini.over .mini-in { background: var(--warn); color: var(--surface); }
+.mini.late .mini-in { background: var(--stop); }
 .mini.over .mini-dot { color: var(--surface); }
 .pip { margin: 0; height: 100vh; box-sizing: border-box; padding: 10px 12px; display: flex; flex-direction: column; justify-content: center; gap: 6px; overflow: hidden; background: var(--surface); color: var(--ink); }
 .pip-top, .pip-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .pip-time { flex: 1; font: 500 24px var(--font-mono); font-variant-numeric: tabular-nums; }
 .pip-acts { display: flex; gap: 6px; }
 .pip .btn.small { padding: 6px 12px; }
-.pip.over { background: var(--stop); color: var(--surface); }
+.pip.over { background: var(--warn); color: var(--surface); }
+.pip.late { background: var(--stop); }
 .pip.over .mini-dot { color: var(--surface); }
 .pip.over .btn { background: var(--surface); color: var(--ink); }
 
@@ -441,7 +443,8 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .timer { font: 500 clamp(64px, 19vw, 100px)/1 var(--font-mono); letter-spacing: -.04em; font-variant-numeric: tabular-nums; margin-top: 14px; }
 .timer .colon { display: inline-block; margin: 0 -.16em; transform: translateY(-.05em); }
 .timer.paused { color: var(--muted); }
-.timer.over { color: var(--stop); }
+.timer.over { color: var(--warn); }
+.timer.late { color: var(--stop); }
 .est-line { color: var(--muted); font-size: 15px; }
 .hero .bar { width: 100%; max-width: 360px; height: 6px; margin-top: 10px; }
 .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
@@ -476,8 +479,8 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .gap-clock > div { display: grid; justify-items: start; min-width: 0; }
 .gap-text { font-weight: 600; }
 .gap-time { font: 600 26px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
-.gap-clock.over { background: var(--stop-soft); }
-.gap-clock.over .gap-text, .gap-clock.over .gap-time { color: var(--stop); }
+.gap-clock.over { background: var(--warn-soft); }
+.gap-clock.over .gap-text, .gap-clock.over .gap-time { color: var(--warn); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 10px 16px; font-weight: 600; font-size: 15px; }
 .chip:hover { border-color: var(--accent); color: var(--accent); }
@@ -534,6 +537,13 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .fstep.now { background: var(--accent-soft); border-radius: 10px; padding-inline: 6px; border-bottom-color: transparent; }
 .now-tag { font-weight: 600; color: var(--accent); }
 .fstep.editing { grid-template-columns: 26px minmax(0, 1fr); align-items: start; }
+.fstep.check-row { grid-template-columns: 38px minmax(0, 1fr); gap: 6px; padding-block: 4px; }
+.panel-head h3 { min-width: 0; overflow-wrap: anywhere; }
+.list-switch { display: flex; align-items: flex-start; gap: 10px; margin: 4px 0 10px; font-size: 14px; cursor: pointer; }
+.list-switch input { width: 18px; height: 18px; margin: 2px 0 0; flex: none; accent-color: var(--accent); }
+.list-switch span { display: grid; gap: 2px; }
+.list-switch small { color: var(--muted); font-size: 13px; }
+.progress-ask { width: 100%; max-width: 420px; text-align: left; }
 .fstep-edit { display: grid; gap: 6px; min-width: 0; }
 .fstep-edit .step-title { border-color: var(--line); background: var(--bg); }
 .fstep-tools { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
@@ -718,25 +728,40 @@ const byDue = (a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.cr
 const activeTasks = () => [...state.tasks.values()].filter(t => !t.archived).sort(byDue);
 const archivedTasks = () => [...state.tasks.values()].filter(t => t.archived).sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
 const stepsLeft = t => t.steps.filter(s => !s.done);
+// A task of quick steps runs as one checklist: one timer for all of it, and you tick steps off as you go, with no
+// stop after each one. Steps under 10 minutes, or with none set, make one. The switch in its details decides otherwise.
+const isList = t => !!t && (t.list ?? (t.steps.length >= 2 && t.steps.every(st => !st.est || st.est < 10)));
+const LIST_STEP_MIN = 5; // the time a checklist plans for a step with no minutes
 const findStep = (tid, sid) => state.tasks.get(tid)?.steps.find(s => s.id === sid);
 const elapsedSec = (a, now = Date.now()) => (a.carry || 0) + ((a.pausedAt || now) - a.startedAt - (a.pausedMs || 0)) / 1000;
-// When the running step is meant to end, in seconds of work. Asking for more time moves it.
-const targetSec = (a, st) => a.target ?? (st && st.est ? st.est * 60 : null);
+// When the running step is meant to end, in seconds of work: your guess at the speed you really work (a.f, from
+// when it started). Asking for more time, or a block you sized on the timeline, sets its own.
+const targetSec = (a, st) => a.target ?? (!a.list && st && st.est ? (planOf(st) ?? st.est * (a.f || 1)) * 60 : null);
+// The time you said yes to at a break, in minutes. Changing the guess afterwards goes back to the guess.
+const planOf = st => st?.plan && st.plan.est === st.est ? st.plan.min : null;
+// Past the end the clock turns amber, and red only well past it: a quarter of the plan, at least 5 minutes.
+const calmSec = target => Math.max(300, target * 0.25);
+// Reminders past the end grow with the step: one at the end and one more, then the timer stops itself.
+const overAlerts = target => [0, Math.max(5, Math.round(target / 60 * 0.15))];
+const stopAfterMin = target => Math.max(AUTO_STOP_MIN, Math.round(target / 60 * 0.25));
 // The minutes a step still needs: its plan, less the time already worked on it. The running step goes by its timer.
 const stepBegun = st => !!st.spent || state.meta.session?.active?.stepId === st.id;
 function stepMinLeft(st) {
   if (!st.est) return 0;
-  const a = state.meta.session?.active, live = a && a.stepId === st.id;
-  const sec = live ? targetSec(a, st) - elapsedSec(a) : st.est * 60 - (st.spent || 0);
+  const a = state.meta.session?.active, live = a && a.stepId === st.id && !a.list;
+  // Once begun, what's left goes by the time the timer will give it, so the list and the timer agree.
+  const sec = live ? targetSec(a, st) - elapsedSec(a) : (planOf(st) ?? st.est * timeFactor()) * 60 - (st.spent || 0);
   return stepBegun(st) ? Math.max(1, Math.ceil(sec / 60)) : st.est;
 }
 const stepMinWords = st => fmtMin(stepMinLeft(st)) + (stepBegun(st) ? ' left' : '');
-const minLeft = t => stepsLeft(t).reduce((a, s) => a + stepMinLeft(s), 0);
+// A running checklist counts down as a whole.
+const listLeft = (a, t) => a?.list && a.taskId === t.id && a.target != null ? Math.max(1, Math.ceil((a.target - elapsedSec(a)) / 60)) : null;
+const minLeft = t => listLeft(state.meta.session?.active, t) ?? stepsLeft(t).reduce((a, s) => a + (s.est || !isList(t) ? stepMinLeft(s) : LIST_STEP_MIN), 0);
 
 const GAP_SEC = 60; // the pause between steps before the next one starts by itself
-const OVER_ALERTS = [0, 5, 10, 20]; // minutes past the end of a step, or of the pause between steps
-const BREAK_ALERTS = [0, 2, 5, 10]; // minutes past the end of a break
-const AUTO_STOP_MIN = 30; // a step's timer stops this long past its end if nobody answers
+const GAP_ALERTS = [0]; // minutes past the end of the pause between steps: one reminder is enough
+const BREAK_ALERTS = [0, 5]; // minutes past the end of a break
+const AUTO_STOP_MIN = 30; // a step's timer stops at least this long past its end if nobody answers. Long steps get longer
 const AWAY_MIN = 10; // a jump this long in the clock means Paced was closed or the device slept
 const GONE_MIN = 180; // a step stopped for this long means you left, so the session ends where it stopped
 const REST_MIN = 30; // this long away from a paused step counts as a real rest, like sleep, so the work before it stops adding up
@@ -744,7 +769,8 @@ const SNOOZE_MIN = 10; // how long "Not now" holds off a break
 const BREAK_GIVE_UP_MIN = 60; // a break this far past its end counts as over
 const IDLE_MIN = 5; // minutes without using the computer before a step pauses, unless you change it in Settings
 const IDLE_RESUME_MIN = 60; // idle for longer than this and you've moved on, so the step stays paused
-const CHECK_MIN = 15; // minutes between "Still working?" notifications, unless you change it in Settings
+const CHECK_MIN = 0; // minutes between "Still working?" notifications. Off unless you turn it on in Settings
+const PROGRESS_MIN = 45; // a step planned this long or longer is a long one: its break asks how far along you are
 const CHECK_WAIT_MIN = 3; // how long a "Still working?" notification waits for an answer
 
 function dueInfo(t) {
@@ -766,7 +792,7 @@ function timeFactor() {
   const since = Date.now() - 60 * 864e5, samples = [];
   for (const t of state.tasks.values())
     for (const s of t.steps)
-      if (s.done && s.est && s.actual && (s.doneAt || 0) >= since) samples.push([s.doneAt, clamp(s.actual / 60 / s.est, 0.5, 3)]);
+      if (s.done && s.est && s.actual && !s.rough && (s.doneAt || 0) >= since) samples.push([s.doneAt, clamp(s.actual / 60 / s.est, 0.5, 3)]);
   samples.sort((a, b) => a[0] - b[0]);
   const recent = samples.slice(-30).map(x => x[1]);
   const f = recent.length >= 5 ? Math.round(median(recent) * 20) / 20 : 1;
@@ -1123,7 +1149,7 @@ function expireIdleSession(force) {
   recordSession(s, last);
   m.session = null;
   endRun();
-  if (state.ask && state.ask.type !== 'history') state.ask = null;
+  state.ask = null;
   saveMeta();
   return true;
 }
@@ -1148,9 +1174,19 @@ function markRested() {
   s.restSec = rawWorkSec(s); s.markAt = 0; s.snoozeUntil = 0;
   m.lastBreakEnd = Date.now();
 }
+// Each stretch between "how far along?" answers on a long step counts like a finished step.
+function markPaces(st) {
+  const out = [], marks = st?.est ? st.marks || [] : [];
+  marks.forEach((x, i) => {
+    const p = marks[i - 1] || { el: 0, v: 0 };
+    if (x.el - p.el >= 300 && x.v > p.v) out.push({ pace: clamp((x.v - p.v) * st.est * 60 / (x.el - p.el), 0.25, 3) });
+  });
+  return out;
+}
 function assess(meta, now = Date.now()) {
-  const s = meta.session || { log: [], priorMin: 0 };
-  const counted = s.log.filter(l => l.pace != null && !l.excluded);
+  const s = meta.session || { log: [], priorMin: 0 }, a = s.active, ast = a && !a.list ? findStep(a.taskId, a.stepId) : null;
+  const counted = [...s.log.filter(l => l.pace != null && !l.excluded), ...markPaces(ast)];
+  const long = !!ast && (targetSec(a, ast) || 0) >= PROGRESS_MIN * 60; // one long step: time worked is what's real to go on
   const fresh = meta.fresh || [];
   let base = null;
   if (counted.length >= 2 && !(s.priorMin >= 30 && fresh.length >= 2)) base = (counted[0].pace + counted[1].pace) / 2;
@@ -1162,10 +1198,10 @@ function assess(meta, now = Date.now()) {
     from = 'pace';
   }
   const paceReady = from === 'pace';
-  const last = s.log[s.log.length - 1];
+  const last = s.log[s.log.length - 1], felt = [...s.log].reverse().find(l => l.feel); // you're asked once a day
   const hard = !!(last && last.feel === 'struggling');
   if (hard) { eff = eff == null ? 82 : Math.min(eff, 85); from = from || 'feel'; }
-  else if (eff == null && last && last.feel) { eff = last.feel === 'focused' ? 100 : 94; from = 'feel'; }
+  else if (eff == null && felt) { eff = felt.feel === 'focused' ? 100 : 94; from = 'feel'; }
   if (eff != null) eff = Math.round(clamp(eff, 40, 130));
 
   // Work since your last real rest. A step that's been paused long enough is already a rest.
@@ -1181,6 +1217,7 @@ function assess(meta, now = Date.now()) {
   else if (workMin >= 90) [kind, why] = ['now', `You’ve been working for ${fmtMin(workMin)} without a break.`];
   else if (eff != null && eff < 95 && slipping) [kind, why] = ['soon', `You’re starting to slow down (${eff}% of your starting speed).`];
   else if (workMin >= 60) [kind, why] = ['soon', `You’ve been working for ${fmtMin(workMin)}.`];
+  else if (eff == null && long) [kind, why] = ['go', 'On one long step, Paced goes by how long you’ve worked, and suggests a break at about an hour and a half.'];
   else if (eff == null) [kind, why] = ['learning', counted.length ? 'Finish one more step and Paced will start tracking how fast you’re going.' : 'Finish two steps and Paced will start tracking how fast you’re going.'];
   else if (from === 'feel') [kind, why] = ['go', 'Based on how you said that step went.'];
   else if (eff > 100) [kind, why] = ['go', `You’re working faster than when you started (${eff}%).`];
@@ -1233,12 +1270,13 @@ const sameHours = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 // The room a task takes: what's left of it, at the speed you really work rather than the speed you guess.
 function taskRoom(t, steps = stepsLeft(t)) {
   if (!t.steps.length) return { min: NO_STEPS_MIN, guess: true };
-  const a = state.meta.session?.active, f = timeFactor();
+  const a = state.meta.session?.active, f = timeFactor(), list = steps.some(st => st.id === a?.stepId) && listLeft(a, t);
+  if (list) return { min: list, guess: false };
   let min = 0, guess = false;
   for (const st of steps) {
     if (a && a.stepId === st.id) { const el = elapsedSec(a); min += Math.max(0, (targetSec(a, st) ?? el) - el) / 60; }
-    else if (st.est) min += Math.max(1, st.est * f - (st.spent || 0) / 60);
-    else { min += NO_EST_MIN; guess = true; }
+    else if (st.est) min += Math.max(1, (planOf(st) ?? st.est * f) - (st.spent || 0) / 60);
+    else { min += isList(t) ? LIST_STEP_MIN * f : NO_EST_MIN; guess = true; } // a checklist plans a little for each
   }
   return { min: Math.max(1, Math.ceil(min)), guess };
 }
@@ -1985,7 +2023,7 @@ function homeHTML() {
     <ol class="how-list">
       <li>Type a task in the box above, with how long it will take, like “essay 40m”.</li>
       <li>Press <b>Start</b>. Paced times it and tells you when it’s time for a break.</li>
-      <li>For a big task, use <b>More details</b> to split it into steps, each with its own timer.</li>
+      <li>If you like, use <b>More details</b> to split a big task into steps. Quick steps run as one checklist with a single timer.</li>
     </ol>
     <div class="row"><button class="btn ghost" data-act="open-import">Import tasks from elsewhere</button></div>
   </section>
@@ -2515,6 +2553,7 @@ function renderMini() {
   el.hidden = false;
   const c = liveClock();
   el.classList.toggle('over', !!(c && c.over));
+  el.classList.toggle('late', !!(c && c.late));
   const dot = `<span class="mini-dot${m.brk || (c && c.paused) ? ' still' : ''}"></span>`;
   const title = c ? esc(c.label) + (c.paused ? ' (paused)' : '') : 'Ready for your next step';
   const time = c ? `<span class="mini-time" data-tick="mini">${fmtClock(c.left)}</span>` : '';
@@ -2528,22 +2567,23 @@ function renderMini() {
 }
 
 // The one clock that matters right now, for the tab title and the bar at the bottom. A negative "left" is time past the end.
+// "over" is past the end, which shows calmly; "late" is well past it.
 function liveClock(now = Date.now()) {
   const m = state.meta, s = m.session;
   if (m.brk) {
     const left = (m.brk.until - now) / 1000;
-    return { label: left > 0 ? 'On a break' : 'Break’s over', left, over: left < 0 };
+    return { label: left > 0 ? 'On a break' : 'Break’s over', left, over: left < 0, late: left < -300 };
   }
   if (!s) return null;
   if (s.active) {
     const a = s.active, st = findStep(a.taskId, a.stepId), el = elapsedSec(a, now), target = targetSec(a, st);
-    return { label: st ? st.title : 'Working', left: target == null ? el : target - el, over: target != null && el > target, paused: !!a.pausedAt && !a.autoStopped };
+    return { label: a.list ? state.tasks.get(a.taskId)?.title || 'Working' : st ? st.title : 'Working', left: target == null ? el : target - el, over: target != null && el > target, late: target != null && el > target + calmSec(target), paused: !!a.pausedAt && !a.autoStopped };
   }
   if (!s.gap) return null;
   const plan = gapPlan(s), left = (s.gap.until - now) / 1000;
   if (plan.type === 'none') return null;
   const label = left < 0 ? 'Nothing is running' : plan.type === 'step' ? 'Next: ' + plan.next.title : plan.type === 'break' ? 'Break coming up' : 'Pick what’s next';
-  return { label, left, over: left < 0 };
+  return { label, left, over: left < 0, late: left < -300 };
 }
 
 /* ---------- sheets ---------- */
@@ -2740,7 +2780,7 @@ function idleHTML() {
   return `<h3 class="label">Pause when you’re away</h3>
     <p class="help">If you stop using your computer for this long, Paced pauses the step and takes that time off. It carries on when you’re back.</p>
     <div class="seg four">${btn(0, 'Off')}${btn(5, '5 min')}${btn(10, '10 min')}${btn(15, '15 min')}</div>
-    <p class="help">Paced can only see this window, and not phones. In other apps it asks “Still working?” instead.</p>
+    <p class="help">Paced can only see this window, and not phones. Time in other apps counts, and when a step ends after a long time away from Paced, it asks once whether all of it was work.</p>
     ${cur ? checkInHTML() : ''}`;
 }
 
@@ -2748,7 +2788,7 @@ function checkInHTML() {
   const cur = checkMin();
   const btn = (v, label) => `<button class="seg-btn${cur === v ? ' on' : ''}" data-act="check-min" data-v="${v}" aria-pressed="${cur === v}">${label}</button>`;
   return `<h3 class="label">“Still working?” check-ins</h3>
-    <p class="help">When you’re in another app, Paced can’t tell if you’re there, so it asks this often with a notification. Click it to keep going. With no answer in ${CHECK_WAIT_MIN} minutes, the step pauses from when Paced asked.</p>
+    <p class="help">Off unless you want them. When you’re in another app, Paced can ask this often with a notification. Click it to keep going. With no answer in ${CHECK_WAIT_MIN} minutes, the step pauses from when Paced asked.</p>
     <div class="seg four">${btn(0, 'Off')}${btn(10, '10 min')}${btn(15, '15 min')}${btn(25, '25 min')}</div>
     ${Alert.notifyState() === 'on' ? '' : '<p class="help">Check-ins need notifications, so they won’t run until those are on.</p>'}`;
 }
@@ -2792,6 +2832,7 @@ function eventText(e) {
     case 'checkin': return 'Answered “Still working?”';
     case 'ticked': return `Ticked off ${e.title}, no time recorded`;
     case 'left': return 'You were away for hours, so your session ended here';
+    case 'progress': return `About ${{ 0.25: 'a quarter', 0.5: 'halfway', 0.75: 'three quarters' }[e.v] || 'part'} through ${e.title}`;
   }
   return '';
 }
@@ -2806,6 +2847,7 @@ function recordHTML(rec, enter) {
   return `${sheetOpen(enter, 'Your session')}${sheetHead('Your session')}
     <p class="sub">${day === dateKey() ? '' : esc(fmtDayShort(day)) + ', '}${fmtTime(rec.startedAt)} to ${fmtTime(rec.endedAt)}</p>
     <p class="record-total">${esc(totals.join(' · '))}</p>
+    ${extraPct() ? `<p class="help">Paced now plans your steps ${extraPct()}% longer than your guesses, to match how you really work.</p>` : ''}
     <ol class="record">${rec.events.map(e => `<li><time>${fmtTime(e.at)}</time><span>${esc(eventText(e))}</span></li>`).join('')}</ol>
     ${jotted.length ? `<h3 class="label">Thoughts you jotted</h3><ul class="jots">${jotted.map(n => `<li><span>${esc(n.text)}</span><button class="link small" data-act="note-task" data-id="${n.id}">Make it a task</button></li>`).join('')}</ul>` : ''}
     <label class="label" for="record-note">Note <span class="muted">(optional)</span></label>
@@ -3010,13 +3052,14 @@ function detailHTML(t, enter) {
     <div id="date-cal">${dateCalHTML()}</div>
     <h3 class="label">Steps</h3>
     <p class="help">${t.steps.length ? 'Change any name or minutes right here. Tick a step when it’s finished.' : 'No steps yet. Add the first one below.'}</p>
+    ${t.steps.length >= 2 ? `<label class="list-switch"><input type="checkbox" id="list-mode" data-id="${t.id}"${isList(t) ? ' checked' : ''}><span><b>One timer for the whole list</b><small>Tick steps off as you go, with no stop after each one. Best for quick steps.</small></span></label>` : ''}
     ${t.steps.length ? `<ol class="steps">${rows}</ol>` : ''}
     <form class="step-add" id="detail-add">
       <input id="detail-step" class="text-input" placeholder="New step name" autocomplete="off" aria-label="New step name">
       <label class="min-field"><input id="detail-min" type="number" min="1" max="600" inputmode="numeric" aria-label="Minutes for the new step"><span>min</span></label>
       <button type="submit" class="btn small">${ICON.plus}Add</button>
     </form>
-    <p class="tip" id="detail-tip"${missingMinutes(t) ? '' : ' hidden'}>Tip: give every step a number of minutes. Paced uses them to tell when you’re slowing down.</p>
+    <p class="tip" id="detail-tip"${missingMinutes(t) && !isList(t) ? '' : ' hidden'}>Tip: give every step a number of minutes. Paced uses them to tell when you’re slowing down.</p>
     <div class="sheet-foot">
       <button class="btn danger" data-act="delete-task" data-id="${t.id}">${ICON.trash}Delete task</button>
       ${primary}
@@ -3072,7 +3115,6 @@ function fbar(title, withStop) {
 function focusBody() {
   const m = state.meta, s = m.session;
   if (m.brk) return fbar('', false) + breakHTML();
-  if (state.ask?.type === 'history') return fbar(state.tasks.get(state.ask.taskId)?.title, false) + historyHTML();
   if (!s) return fbar('', false) + pickHTML(null, true);
   const title = state.tasks.get(focusTaskId())?.title;
   if (state.ask?.type === 'estimate') return fbar(title, true) + estimateHTML();
@@ -3088,18 +3130,6 @@ function methodPickHTML(s) {
     <p>Try each one a few times. Paced compares how fast you work with each, so you can see what suits you.</p>
     <div class="methods">${METHODS.map(x => `<button class="method-opt${x.id === cur ? ' on' : ''}" data-act="method-pick" data-v="${x.id}" aria-pressed="${x.id === cur}"><b>${esc(x.name)}</b><span>${esc(x.short)}</span></button>`).join('')}</div>
     <div class="row"><button class="btn ghost" data-act="method-cancel">Keep the one I’m using</button></div>
-  </section>`;
-}
-
-function historyHTML() {
-  return `<section class="ask-card">
-    <h2>Have you already been working for a while?</h2>
-    <p>This helps Paced know how fresh you are.</p>
-    <div class="chips">
-      <button class="chip" data-act="history" data-min="0">No, I’m just starting</button>
-      <button class="chip" data-act="history" data-min="30">Yes, about 30 minutes</button>
-      <button class="chip" data-act="history" data-min="60">Yes, an hour or more</button>
-    </div>
   </section>`;
 }
 
@@ -3119,10 +3149,17 @@ function estimateHTML() {
   </section>`;
 }
 
-function planLine(el, target, paused) {
+// Past the end of a long step it says how small the difference is, since a few minutes over hours of work is normal.
+function planLine(a, st, el = elapsedSec(a)) {
+  const target = targetSec(a, st);
   if (target == null) return 'No time planned for this step';
-  if (el > target) return `${fmtMin(Math.max(1, Math.floor((el - target) / 60)))} over the ${fmtMin(target / 60)} you planned`;
-  return `Planned: ${fmtMin(target / 60)}${paused ? '' : ` · done by ${fmtTime(Date.now() + (target - el) * 1000)}`}`;
+  const what = a.list ? ' for the whole list' : '';
+  if (el > target) {
+    const past = el - target, share = Math.max(1, Math.round(past / target * 100));
+    return `${fmtMin(Math.max(1, Math.floor(past / 60)))} past the ${fmtMin(target / 60)} plan${target >= 3600 && past <= calmSec(target) ? `, about ${share}%. That’s normal` : ''}`;
+  }
+  const real = planOf(st) ? `. You planned this at your break` : a.target == null && (a.f || 1) > 1 ? `. You guessed ${fmtMin(st.est)}, and your steps usually take ${Math.round((a.f - 1) * 100)}% longer` : '';
+  return `Planned: ${fmtMin(target / 60)}${what}${a.pausedAt ? '' : ` · done by ${fmtTime(Date.now() + (target - el) * 1000)}`}${real}`;
 }
 
 // What to suggest once a break is due. When Paced picks the moment: a normal break, or, when a deadline is close, switching
@@ -3184,6 +3221,7 @@ function statusHTML(as, s) {
     <p class="why">${esc(why)}</p>
     ${buttons ? `<div class="row">${buttons}</div>` : ''}
     <p class="worked">Worked since your last break: <b>${fmtMin(as.workMin)}</b></p>
+    ${s.firstToday && !s.priorMin && Date.now() - s.startedAt < 15 * 60e3 ? `<p class="worked">Already working before this? <button class="link small" data-act="prior" data-min="30">About 30 min</button> · <button class="link small" data-act="prior" data-min="60">An hour or more</button></p>` : ''}
     <p class="worked">Way of working: <b>${esc(method.name)}</b> · <button class="link small" data-act="method-open">Change</button></p>
     <details class="how"${state.howOpen ? ' open' : ''}>
       <summary>How does Paced decide?</summary>
@@ -3284,22 +3322,25 @@ function timeUpHTML(s, st, canSkip, target) {
       <div class="chips">
         <button class="chip" data-act="take-break" data-min="${as.breakMin}" data-force="1">Take a ${as.breakMin}-minute break</button>
         ${canSkip ? '<button class="chip" data-act="skip-step">Skip it for now</button>' : ''}
-        <button class="chip" data-act="split-open">Split into two steps</button>
+        ${a.list ? '' : '<button class="chip" data-act="split-open">Split into two steps</button>'}
       </div>
       <div class="ask-links"><button class="link small" data-act="timeup-back">Back</button></div>
     </section>`;
-  const why = a.autoStopped ? `You didn’t answer for ${AUTO_STOP_MIN} minutes, so the timer stopped there.`
-    : a.extended ? 'Your extra time is up.' : `You planned ${fmtMin(target / 60)} for this step.`;
-  const more = a.extended
-    ? `<p>You’ve already added time once. Save what’s left as a new step so your plan stays real.</p>
-      <div class="chips"><button class="chip" data-act="split-open">Split into two steps</button></div>`
-    : `<div class="chips">${[5, 10, 15].map(n => `<button class="chip" data-act="extend" data-min="${n}">${n} more min</button>`).join('')}</div>`;
+  const why = a.autoStopped ? `Paced didn’t hear from you for ${fmtMin(stopAfterMin(target))} after the plan ended, so it stopped the timer there.`
+    : a.extended ? 'Your extra time is up.' : `You planned ${fmtMin(target / 60)} for this ${a.list ? 'list' : 'step'}.`;
+  const more = `<div class="chips">${(target >= 3600 ? [15, 30, 60] : [5, 10, 15]).map(n => `<button class="chip" data-act="extend" data-min="${n}">${fmtMin(n)} more</button>`).join('')}</div>`;
+  // Paced doesn't check in while you work in other apps, so this is where a forgotten timer gets put right.
+  const unseen = unseenMuch(a) ? `<p>Paced couldn’t see you for ${fmtDur(a.unseen)} of this, while you were in other apps. If you stopped working before now, say how long you really worked.</p>
+      <div class="chips"><button class="chip" data-act="timeup-forgot">I stopped earlier</button></div>` : '';
+  const t = state.tasks.get(a.taskId), left = a.list && t ? stepsLeft(t).length : 0;
   return `<section class="ask-card warn">
       <div class="eyebrow">Time’s up</div>
-      <h2>${a.autoStopped ? 'Paced stopped your timer' : 'Did you finish?'}</h2>
+      <h2>${a.autoStopped ? 'Paced stopped your timer' : a.list ? 'Did you finish the list?' : 'Did you finish?'}</h2>
       <p>${esc(why)}</p>
+      ${unseen}
       ${planCostHTML()}
-      <div class="row"><button class="btn primary" data-act="step-done">${ICON.check}Yes, it’s done</button></div>
+      ${a.list ? `<p>${left} still to tick off.</p>` : ''}
+      <div class="row"><button class="btn primary" data-act="${a.list ? 'list-all' : 'step-done'}">${ICON.check}${a.list ? 'Yes, all done' : 'Yes, it’s done'}</button></div>
       <h3 class="label">Not yet?</h3>
       ${more}
       <div class="ask-links">
@@ -3310,18 +3351,21 @@ function timeUpHTML(s, st, canSkip, target) {
 }
 
 function forgotHTML(target) {
-  const min = state.ask.min ?? Math.max(1, Math.round(target / 60));
-  return `<section class="ask-card warn">
-      <h2>How long did you really work on this?</h2>
-      <p>Paced will use this number instead of the timer, and this step won’t count toward your speed.</p>
+  // At Stop it's about this stretch only: time from before a break is already settled.
+  const a = state.meta.session.active, stop = !!state.ask.stop, el = elapsedSec(a), run = el - (a.carry || 0);
+  const min = state.ask.min ?? Math.max(1, Math.round((stop ? run : Math.min(el, target ?? el)) / 60));
+  return `<section class="ask-card${stop ? '' : ' warn'}">
+      <h2>${stop ? 'Did you work the whole time?' : 'How long did you really work on this?'}</h2>
+      <p>${stop ? `Paced couldn’t see you for ${fmtDur(a.unseen)} of this, while you were in other apps. Count all ${fmtDur(run)}, or say how long you really worked.` : 'Paced will use this number instead of the timer.'}</p>
+      ${stop ? '<div class="row"><button class="btn primary" data-act="unseen-all">Count all of it</button></div>' : ''}
       <form class="split-form" id="forgot-form">
         <div class="row">
           <label class="min-field"><input id="forgot-min" type="number" min="1" max="600" inputmode="numeric" value="${min}" aria-label="Minutes you really worked"><span>min</span></label>
-          <button type="submit" class="btn primary">Save, it’s done</button>
-          <button type="button" class="btn ghost" data-act="forgot-go">Save, keep going</button>
+          ${stop ? '<button type="submit" class="btn ghost">Save and stop</button>' : `<button type="submit" class="btn primary">Save, it’s done</button>
+          <button type="button" class="btn ghost" data-act="forgot-go">Save, keep going</button>`}
         </div>
       </form>
-      <div class="ask-links"><button class="link small" data-act="timeup-back">Back</button></div>
+      <div class="ask-links"><button class="link small" data-act="${stop ? 'unseen-back' : 'timeup-back'}">${stop ? 'Keep working' : 'Back'}</button></div>
     </section>`;
 }
 
@@ -3358,32 +3402,50 @@ function runningHTML() {
   const as = assess(m);
   const target = targetSec(a, st);
   const pct = target ? Math.min(100, el / target * 100) : 0;
-  const over = target != null && el > target;
-  const canSkip = !!nextStep(t, s, st.id);
-  const hero = `<div class="eyebrow">Step ${idx} of ${t.steps.length}${paused ? (a.idlePaused ? ' · Paused while you’re idle' : ' · Paused') : ''}</div>
+  const over = target != null && el > target, late = over && el > target + calmSec(target);
+  const canSkip = !a.list && !!nextStep(t, s, st.id);
+  const where = a.list ? `Checklist · ${t.steps.filter(x => x.done).length} of ${t.steps.length} done` : `Step ${idx} of ${t.steps.length}`;
+  const hero = `<div class="eyebrow">${where}${paused ? (a.idlePaused ? ' · Paused while you’re idle' : ' · Paused') : ''}</div>
     <h2 class="step-name">${esc(st.title)}</h2>
-    <div class="timer${paused ? ' paused' : ''}${over ? ' over' : ''}" data-tick="timer" role="timer" aria-label="Time left on this step">${clockHTML(target == null ? el : target - el)}</div>
-    <div class="est-line" data-tick="estline">${planLine(el, target, paused)}</div>
+    <div class="timer${paused ? ' paused' : ''}${over ? ' over' : ''}${late ? ' late' : ''}" data-tick="timer" role="timer" aria-label="Time left on this step">${clockHTML(target == null ? el : target - el)}</div>
+    <div class="est-line" data-tick="estline">${planLine(a, st, el)}</div>
     ${target ? `<span class="bar" aria-hidden="true"><i data-tick="prog" class="${over ? 'over' : ''}" style="width:${pct.toFixed(1)}%"></i></span>` : ''}`;
   const type = state.ask?.type;
-  if (type === 'timeup') return `<div class="hero">${hero}</div>${timeUpHTML(s, st, canSkip, target)}${idleAskHTML(a, st)}`;
+  if (type === 'timeup') return `<div class="hero">${hero}</div>${timeUpHTML(s, st, canSkip, target)}${idleAskHTML(a, st)}${a.list ? listPanelHTML(t, a) : ''}`;
   if (type === 'forgot') return `<div class="hero">${hero}</div>${forgotHTML(target)}`;
   if (type === 'away') return `<div class="hero">${hero}</div>${awayHTML(st)}`;
   return `<div class="hero">${hero}
     <div class="actions">
-      <button class="btn primary big" data-act="step-done">${ICON.check}Done with this step</button>
+      <button class="btn primary big" data-act="step-done">${ICON.check}${a.list ? 'Done with this one' : 'Done with this step'}</button>
       <button class="btn ghost big" data-act="step-pause">${paused ? ICON.play + 'Resume' : ICON.pause + 'Pause'}</button>
     </div>
-    ${type === 'split' ? '' : `<div class="hero-more">
+    ${type === 'split' || a.list ? '' : `<div class="hero-more">
       ${canSkip ? `<button class="link" data-act="skip-step">${ICON.skip}Skip for now</button>` : ''}
       <button class="link" data-act="split-open">${ICON.split}Split into two steps</button>
     </div>`}
   </div>
   ${idleAskHTML(a, st)}
+  ${a.list ? listPanelHTML(t, a) : ''}
   ${type === 'split' ? splitHTML(st, el) : jotHTML()}
   ${statusHTML(as, s)}
   ${breakArea(as, s)}
-  ${stepsPanelHTML(t, s)}`;
+  ${a.list ? '' : stepsPanelHTML(t, s)}`;
+}
+
+// A checklist's steps, each ticked off with one press, in any order.
+function listPanelHTML(t, a) {
+  if (state.fEdit) return stepsPanelHTML(t, state.meta.session);
+  const rows = t.steps.map(st => {
+    const now = !st.done && st.id === a.stepId, label = st.done ? 'Mark as not done' : 'Tick off';
+    const sub = st.done ? (st.actual ? `Took about ${fmtDur(st.actual)}` : 'Done') : now ? '<span class="now-tag">Up now</span>' : st.est ? fmtMin(st.est) : '';
+    return `<li class="fstep check-row${st.done ? ' done' : ''}${now ? ' now' : ''}">
+      <button class="check sm${st.done ? ' on' : ''}" data-act="toggle-step" data-id="${t.id}" data-step="${st.id}" aria-pressed="${st.done}" aria-label="${label}: ${esc(st.title)}"><span>${ICON.check}</span></button>
+      <div class="fstep-main"><b>${esc(st.title)}</b>${sub ? `<span class="muted">${sub}</span>` : ''}</div></li>`;
+  }).join('');
+  return `<section class="panel steps-panel">
+    <div class="panel-head"><h3>${esc(t.title)}</h3><button class="link small" data-act="fedit-toggle">${ICON.edit}Edit steps</button></div>
+    <ol class="fsteps">${rows}</ol>
+  </section>`;
 }
 
 // Nothing starts by itself when Paced is waiting for you to choose, so that clock is only until it reminds you.
@@ -3470,8 +3532,47 @@ function breakHTML() {
     <div class="timer${left < 0 ? ' over' : ''}" data-tick="break" role="timer" aria-label="Break time left">${clockHTML(left)}</div>
     <p class="muted">${over ? 'Time to get back. Paced will measure your speed fresh from here.' : `Stand up, stretch, and get some water. Back at ${fmtTime(b.until)}.`}</p>
     ${next ? `<p>Up next: <b>${esc(next.title)}</b>${next.est ? ` · ${stepMinWords(next)}` : ''}</p>` : ''}
+    ${progressHTML(b)}
     <button class="btn ${over ? 'primary' : 'ghost'} big" data-act="end-break">${over ? ICON.play + 'Back to work' : 'I’m ready, start now'}</button>
   </div>`;
+}
+
+// One tap while you're on a break anyway. Paced works out the pace from it and offers the time that fits, once.
+function progressHTML(b) {
+  const q = b.progress, st = q && findStep(b.taskId, q.stepId);
+  if (!st || st.done || q.done) return '';
+  if (q.need == null) return `<section class="ask-card progress-ask">
+      <h2>About how far along are you?</h2>
+      <p>On “${esc(st.title)}”, after ${fmtDur(q.el)}. This helps Paced plan the rest.</p>
+      <div class="chips">${[['¼', 0.25], ['½', 0.5], ['¾', 0.75]].map(([l, v]) => `<button class="chip" data-act="progress" data-v="${v}" aria-label="${v * 100}% done">${l}</button>`).join('')}</div>
+      <div class="ask-links"><button class="link small" data-act="progress-skip">Skip</button></div>
+    </section>`;
+  const need = Math.max(PLAN_SNAP, Math.round(q.need / 60 / PLAN_SNAP) * PLAN_SNAP);
+  return `<section class="ask-card progress-ask">
+      <h2>At this pace, about ${fmtMin(need)} in all</h2>
+      <p>You planned ${fmtMin(q.target / 60)}${need > q.target / 60 ? ', so that’s a little more. Better to know now than at the end' : ''}.</p>
+      <div class="chips"><button class="chip" data-act="progress-plan">Plan ${fmtMin(need)}</button><button class="chip" data-act="progress-skip">Keep ${fmtMin(q.target / 60)}</button></div>
+    </section>`;
+}
+// The answer counts toward your speed for this step, the way a finished step would.
+function progressAnswer(v) {
+  const b = state.meta.brk, q = b?.progress, t = q && state.tasks.get(b.taskId), st = t?.steps.find(x => x.id === q.stepId);
+  if (!st) return;
+  q.v = v; q.need = q.el / v;
+  st.marks = [...(st.marks || []), { el: Math.round(q.el), v }].slice(-8);
+  logEvent('progress', { at: Date.now(), title: st.title, v });
+  // Close to the plan is nothing to decide.
+  if (Math.abs(q.need - q.target) < Math.max(300, q.target * 0.1)) { q.done = true; toast('You’re on track.'); }
+  saveTask(t); saveMeta(); renderFocus();
+}
+function progressPlan() {
+  const b = state.meta.brk, q = b?.progress, t = q && state.tasks.get(b.taskId), st = t?.steps.find(x => x.id === q.stepId);
+  if (!st || q.need == null) return;
+  const min = Math.max(PLAN_SNAP, Math.round(q.need / 60 / PLAN_SNAP) * PLAN_SNAP);
+  st.plan = { min, est: st.est };
+  q.done = true;
+  saveTask(t); saveMeta(); render();
+  toast(`“${st.title}” is planned for ${fmtMin(min)} now.`);
 }
 
 /* ---------- toast ---------- */
@@ -3592,6 +3693,7 @@ function showPip() {
   if (!pip) return;
   const m = state.meta, a = m.session?.active, c = liveClock(), d = pip.document;
   d.body.classList.toggle('over', !!(c && c.over));
+  d.body.classList.toggle('late', !!(c && c.late));
   d.querySelector('.mini-dot').classList.toggle('still', !c || !!m.brk || !!c.paused);
   d.querySelector('.mini-title').textContent = !c ? 'Nothing running' : c.label + (c.paused ? ' (paused)' : '');
   d.querySelector('.pip-time').textContent = c ? fmtClock(c.left) : '';
@@ -3606,6 +3708,23 @@ let lastInput = Date.now(), backWaiting = false;
 let checkIn = null; // the "Still working?" notification that's waiting for you
 const idleMin = () => state.meta.idleMin ?? IDLE_MIN; // 0 means off
 const checkMin = () => state.meta.checkMin ?? CHECK_MIN; // 0 means off
+// Time a step ran while Paced's window wasn't in front. Paced doesn't interrupt you about it: the end of the step asks once.
+let unseenAt = 0;
+function trackUnseen(a, now) {
+  const gap = unseenAt ? Math.min(now - unseenAt, 120e3) : 0; // a hidden tab ticks slowly, and a longer jump is time away
+  unseenAt = now;
+  const seen = (document.hasFocus() && document.visibilityState === 'visible') || !!pip?.document.hasFocus();
+  if (!a || a.pausedAt || seen) return;
+  a.unseen = (a.unseen || 0) + gap / 1000;
+}
+const unseenMuch = a => !checkMin() && (a.unseen || 0) >= 600 && a.unseen >= (elapsedSec(a) - (a.carry || 0)) * 0.5;
+// Stopping after a long stretch Paced couldn't see asks once whether all of it was work.
+function askUnseen() {
+  const a = state.meta.session?.active;
+  if (!a || !unseenMuch(a)) return false;
+  state.ask = { type: 'forgot', stop: true }; state.focusOpen = true; render();
+  return true;
+}
 // A phone can sit untouched beside you while you work, so only a mouse and keyboard count here.
 const seesOwnInput = window.matchMedia('(pointer: fine)').matches;
 
@@ -3704,7 +3823,7 @@ function watchCheckIn() {
   const target = targetSec(a, st);
   if (target != null && target - elapsedSec(a) <= CHECK_WAIT_MIN * 60) return; // "Time's up" is about to ask anyway
   if (now - Math.max(lastInput, a.startedAt) < checkMin() * 60e3) return;
-  const note = Alert.ask('Still working?', `Click to keep the timer going on “${st.title}”.`, () => { logEvent('checkin'); saveMeta(); noteInput(); });
+  const note = Alert.ask('Still working?', `Click to keep the timer going on “${st.title}”.`, () => { logEvent('checkin'); a.unseen = 0; saveMeta(); noteInput(); });
   if (note) checkIn = { note, stepId, at: now };
 }
 
@@ -3874,6 +3993,8 @@ function maybeArchive(t, before) {
 function toggleStep(id, sid) {
   const t = state.tasks.get(id), st = t && t.steps.find(s => s.id === sid);
   if (!st) return;
+  const a = state.meta.session?.active;
+  if (a?.list && a.taskId === id && !st.done) { listTick(sid); if (t.archived) state.layer = null; renderLayer(); return; }
   // Checking off the step you're timing is the same as pressing Done, so its time counts.
   if (state.meta.session?.active?.stepId === sid) {
     finishStep();
@@ -3882,6 +4003,9 @@ function toggleStep(id, sid) {
     return;
   }
   const before = clone(t);
+  // Unticking a step on the running checklist hands its time back, so the next tick gets it.
+  const ticked = a?.list && a.taskId === id && st.done && state.meta.run?.events.find(e => e.type === 'done' && e.stepId === sid);
+  if (ticked) a.mark = Math.max(a.carry || 0, (a.mark || 0) - ticked.took);
   st.done = !st.done;
   st.doneAt = st.done ? Date.now() : null;
   if (!st.done) st.actual = null;
@@ -3898,6 +4022,8 @@ function deleteStep(id, sid) {
   const t = state.tasks.get(id); if (!t) return;
   const before = clone(t);
   t.steps = t.steps.filter(s => s.id !== sid);
+  const a = state.meta.session?.active;
+  if (a?.list && a.taskId === t.id && a.stepId === sid && stepsLeft(t).length) a.stepId = stepsLeft(t)[0].id; // the checklist carries on
   clearActiveIf(a => a.stepId === sid);
   // Deleting the only step left to do finishes the task, and that toast's Undo brings the step back too.
   const finished = maybeArchive(t, before);
@@ -4029,15 +4155,15 @@ function startFocus(taskId, stepId) {
     render(); return;
   }
   if (!s) {
-    // Ask "been working a while?" only at your first session of the day. After that Paced can tell:
-    // you either only just stopped (carry on where you left off) or you've had a rest (start fresh).
+    // Paced can tell whether you only just stopped (carry on where you left off) or have had a rest (start fresh).
+    // The first session of the day starts fresh too, and the status panel lets you add time from before, without asking.
     const now = Date.now(), today = dateKey();
     const sameDay = ts => !!ts && dateKey(new Date(ts)) === today;
     const stop = m.lastStop && sameDay(m.lastStop.at) ? m.lastStop : null;
     const brokeAt = sameDay(m.lastBreakEnd) ? m.lastBreakEnd : 0;
     if (stop && now - stop.at < 15 * 60e3 && brokeAt < stop.at) { beginSession(taskId, stop.workMin || 0); startStep(taskId, next.id); }
     else if (stop || brokeAt) { beginSession(taskId, 0); startStep(taskId, next.id); }
-    else { state.ask = { type: 'history', taskId, stepId: next.id }; render(); }
+    else { beginSession(taskId, 0); m.session.firstToday = true; startStep(taskId, next.id); }
     return;
   }
   startStep(taskId, next.id);
@@ -4055,8 +4181,9 @@ function blockTarget(t, st, carry) {
 }
 
 function startStep(taskId, stepId) {
-  const s = state.meta.session, st = findStep(taskId, stepId);
+  const s = state.meta.session, st = findStep(taskId, stepId), t = state.tasks.get(taskId);
   if (!s || !st) return;
+  if (s.active?.list && s.active.taskId === taskId) return; // the checklist is already running
   // Starting something else sets the running step aside, keeping its time, so it's still there in the list.
   const a = s.active;
   if (a && (a.taskId !== taskId || a.stepId !== stepId)) {
@@ -4066,16 +4193,61 @@ function startStep(taskId, stepId) {
   }
   s.taskId = taskId;
   s.skipped = (s.skipped || []).filter(x => x !== stepId);
+  if (isList(t)) { startList(t, st); return; }
   if (!st.est) { state.ask = { type: 'estimate', taskId, stepId }; closeGap(s); s.lastAt = Date.now(); saveMeta(); render(); return; }
   state.ask = null;
   closeGap(s);
-  const carry = st.spent || 0, set = blockTarget(state.tasks.get(taskId), st, carry);
+  const carry = st.spent || 0, set = blockTarget(state.tasks.get(taskId), st, carry), f = timeFactor(), plan = (planOf(st) ?? st.est * f) * 60;
   // Time already spent comes off the plan. A step that's already past its plan gets 10 more minutes.
   // A block you made longer or shorter on the timeline runs for the time you gave it, and stays out of your speed.
-  s.active = { taskId, stepId, startedAt: Date.now(), pausedMs: 0, pausedAt: null, carry, target: set ?? (carry >= st.est * 60 ? carry + 600 : null), alerts: 0, estLow: set != null };
+  s.active = { taskId, stepId, startedAt: Date.now(), pausedMs: 0, pausedAt: null, carry, f, target: set ?? (carry >= plan ? carry + 600 : null), alerts: 0, estLow: set != null };
   s.lastAt = Date.now();
   saveMeta(); render();
 }
+
+// One timer for the steps left. Time already spent on them carries in, and "mark" is where the last tick was.
+function startList(t, st) {
+  const s = state.meta.session, left = stepsLeft(t), f = timeFactor();
+  const carry = left.reduce((x, y) => x + (y.spent || 0), 0), min = left.reduce((x, y) => x + (y.est || LIST_STEP_MIN), 0);
+  state.ask = null;
+  closeGap(s);
+  s.active = { taskId: t.id, stepId: st.id, list: true, mark: carry, startedAt: Date.now(), pausedMs: 0, pausedAt: null, carry, f, target: carry + min * 60 * f, alerts: 0, estLow: true };
+  s.lastAt = Date.now();
+  saveMeta(); render();
+}
+// Ticking a step off a running checklist: it takes the time since the last tick, and the timer carries on.
+function listTick(sid) {
+  const a = state.meta.session?.active, t = a && state.tasks.get(a.taskId), st = t?.steps.find(x => x.id === sid);
+  if (!a?.list || !st || st.done) return;
+  const before = clone(t), el = elapsedSec(a), took = Math.max(1, Math.round(el - (a.mark || 0)));
+  a.mark = el;
+  st.done = true; st.actual = took + (st.spent || 0); st.doneAt = Date.now(); st.rough = true; delete st.spent; // a tick is only roughly when it was done
+  logEvent('done', { at: Date.now() - took * 1000, end: Date.now(), task: t.title, title: st.title, stepId: st.id, est: st.est, took, noSpeed: true });
+  const next = stepsLeft(t).find(x => x.id === a.stepId) || stepsLeft(t)[0];
+  if (next) { a.stepId = next.id; saveTask(t); saveMeta(); render(); return; }
+  endList(t, before);
+}
+// "All done" ticks off the rest, sharing out the time since the last tick.
+function listAll() {
+  const a = state.meta.session?.active, t = a && state.tasks.get(a.taskId), left = t ? stepsLeft(t) : [];
+  if (!a?.list || !left.length) return;
+  const el = elapsedSec(a), share = Math.max(0, el - (a.mark || 0)) / left.length;
+  state.ask = null;
+  left.forEach(st => { a.mark = el - share; listTick(st.id); });
+}
+function endList(t, before) {
+  const s = state.meta.session, a = s.active, sec = Math.max(1, Math.round(elapsedSec(a)));
+  s.log.push({ taskId: t.id, stepId: a.stepId, title: t.title, est: null, actual: sec, worked: Math.max(0, sec - (a.carry || 0)), pace: null, excluded: true, feel: null });
+  logPause(a);
+  s.active = null; s.taskId = t.id; s.lastAt = Date.now();
+  openGap(s);
+  state.ask = null;
+  maybeArchive(t, before);
+  saveTask(t); saveMeta(); render();
+}
+// What a step keeps when it's put aside: all its time, or on a checklist, its own time and what ran since the last tick.
+const asideSpent = (a, st, el) => a.list ? (st.spent || 0) + el - (a.mark || 0) : el;
+const asideTook = (a, el) => el - (a.list ? a.mark || 0 : a.carry || 0);
 
 function resumeStep(a) {
   if (a.pausedAt && Date.now() - a.pausedAt >= REST_MIN * 60e3) markRested();
@@ -4103,7 +4275,7 @@ function extendStep(min) {
   state.ask = null;
   logEvent('extend', { title: findStep(a.taskId, a.stepId)?.title, min });
   saveMeta(); render();
-  toast(`Okay, ${fmtMin(min)} more. This step won’t count against your speed.`);
+  toast(`Okay, ${fmtMin(min)} more.`);
 }
 
 // Take time off the running step, as if the timer had been paused for it. Returns the new time.
@@ -4121,11 +4293,13 @@ function shortenStep(a, sec) {
 // "I forgot the timer": use the time you say you worked.
 function correctTime(min, keepGoing) {
   const a = state.meta.session?.active; if (!a || !min) return;
-  const st = findStep(a.taskId, a.stepId), sec = shortenStep(a, min * 60);
+  const st = findStep(a.taskId, a.stepId), sec = shortenStep(a, (keepGoing === 'stop' ? a.carry || 0 : 0) + min * 60);
   delete a.idleGap; // the time you gave covers any idle minutes
+  a.unseen = 0;
   state.ask = null;
   if (document.activeElement) document.activeElement.blur();
-  if (!keepGoing) { finishStep(); return; }
+  if (keepGoing === 'stop') { endSession(); return; }
+  if (!keepGoing) { if (a.list) listAll(); else finishStep(); return; }
   resumeStep(a);
   if (sec >= targetSec(a, st)) a.target = sec + 600;
   saveMeta(); render();
@@ -4134,6 +4308,7 @@ function correctTime(min, keepGoing) {
 function finishStep() {
   const m = state.meta, s = m.session, a = s && s.active;
   if (!a) return;
+  if (a.list) { listTick(a.stepId); return; } // on a checklist, Done ticks off the one that's up
   const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
   if (!st) { s.active = null; saveMeta(); render(); return; }
   const before = clone(t);
@@ -4149,7 +4324,10 @@ function finishStep() {
   openGap(s);
   const countedN = s.log.filter(l => l.pace != null && !l.excluded).length;
   if (counts && (s.priorMin || 0) < 30 && countedN <= 2) m.fresh = [...(m.fresh || []), pace].slice(-12);
-  state.ask = assess(m).paceReady ? null : { type: 'feel' };
+  // Until Paced has timed a couple of steps it asks how one went, but only once a day, since a break starts a new session.
+  const feel = m.felt !== dateKey() && !assess(m).paceReady;
+  if (feel) m.felt = dateKey();
+  state.ask = feel ? { type: 'feel' } : null;
   maybeArchive(t, before);
   saveTask(t); saveMeta(); render();
 }
@@ -4160,7 +4338,7 @@ function setAside(s, why) {
   const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
   const el = elapsedSec(a);
   logPause(a);
-  if (st) { st.spent = Math.round(el); saveTask(t); logStepTime('aside', a, st, t, el - (a.carry || 0), { why }); }
+  if (st) { st.spent = Math.round(asideSpent(a, st, el)); saveTask(t); logStepTime('aside', a, st, t, asideTook(a, el), { why }); }
   s.partialSec = (s.partialSec || 0) + Math.max(0, el - (a.carry || 0));
   s.active = null; s.lastAt = Date.now();
 }
@@ -4233,7 +4411,7 @@ function stashActive(s, why) {
   const a = s.active; if (!a) return;
   const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
   logPause(a);
-  if (st) { st.spent = Math.round(elapsedSec(a)); saveTask(t); logStepTime('aside', a, st, t, elapsedSec(a) - (a.carry || 0), { why }); }
+  if (st) { const el = elapsedSec(a); st.spent = Math.round(asideSpent(a, st, el)); saveTask(t); logStepTime('aside', a, st, t, asideTook(a, el), { why }); }
   s.active = null;
 }
 
@@ -4247,13 +4425,20 @@ function requestBreak(min, force) {
   renderFocus();
 }
 
+// A long step can't be timed by finished steps, so its break asks how far along you are, once. Not a checklist,
+// and not before 10 minutes of it.
+function progressAsk(a) {
+  const st = a && !a.list && findStep(a.taskId, a.stepId), target = st && targetSec(a, st), el = a && elapsedSec(a);
+  return st && st.est && target >= PROGRESS_MIN * 60 && el - (a.carry || 0) >= 600 ? { stepId: st.id, el, target } : null;
+}
 function takeBreak(min) {
-  const m = state.meta, s = m.session;
+  const m = state.meta, s = m.session, progress = progressAsk(s?.active);
   if (s && s.method === 'pomodoro') { const p = m.pomo && m.pomo.date === dateKey() ? m.pomo : { date: dateKey(), n: 0 }; m.pomo = { date: p.date, n: p.n + 1 }; }
   if (s) recordSession(s);
   if (s) { closeGap(s); stashActive(s, 'break'); }
   min = usePlannedBreak(min);
   m.brk = { startedAt: Date.now(), until: Date.now() + min * 60e3, min, taskId: s ? s.taskId : null, alerts: 0 };
+  if (progress) { m.brk.stepId = progress.stepId; m.brk.progress = progress; }
   m.session = null; state.ask = null; state.focusOpen = true;
   saveMeta(); render();
 }
@@ -4271,7 +4456,6 @@ function endBreak() {
   const next = task ? stepsLeft(task).find(x => x.id === b.stepId) || nextStep(task, m.session) : null;
   if (next) startStep(task.id, next.id);
   else { openGap(m.session); saveMeta(); render(); }
-  if (over >= 60) toast(`Your break ran ${fmtDur(over)} over.`);
 }
 
 function endSession() {
@@ -4294,7 +4478,7 @@ function endLeftSession() {
   const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
   m.lastStop = { at, workMin: Math.round(assess(m, at).workMin) };
   recordSession(s, at);
-  if (st) { st.spent = Math.round(elapsedSec(a)); saveTask(t); logStepTime('aside', a, st, t, elapsedSec(a) - (a.carry || 0), { why: 'end', end: at }); }
+  if (st) { const el = elapsedSec(a); st.spent = Math.round(asideSpent(a, st, el)); saveTask(t); logStepTime('aside', a, st, t, asideTook(a, el), { why: 'end', end: at }); }
   logEvent('left', { at });
   m.session = null; state.ask = null; state.focusOpen = false; state.fEdit = false;
   endRun();
@@ -4340,6 +4524,8 @@ function deleteFocusStep(sid) {
   const t = state.tasks.get(focusTaskId()); if (!t) return;
   const before = clone(t), st = t.steps.find(s => s.id === sid);
   t.steps = t.steps.filter(s => s.id !== sid);
+  const a = state.meta.session?.active;
+  if (a?.list && a.taskId === t.id && a.stepId === sid && stepsLeft(t).length) a.stepId = stepsLeft(t)[0].id; // the checklist carries on
   clearActiveIf(a => a.stepId === sid);
   saveTask(t); render();
   toast(`Deleted “${st ? st.title : 'step'}”`, 'Undo', () => { saveTask(before); render(); });
@@ -4603,7 +4789,7 @@ document.addEventListener('click', e => {
   const min = parseInt(b.dataset.min, 10);
   const s = state.meta.session;
   Alert.unlock();
-  if (['focus-task', 'sel-start', 'start-step', 'pick-task', 'history'].includes(act)) Alert.askPermission();
+  if (['focus-task', 'sel-start', 'start-step', 'pick-task'].includes(act)) Alert.askPermission();
   switch (act) {
     case 'open-add': { const q = (state.quick || '').trim(); state.quick = ''; openAdd(q ? parseQuick(q) : null); break; }
     case 'add-cancel': state.draft = null; closeLayer(); break;
@@ -4678,17 +4864,16 @@ document.addEventListener('click', e => {
     case 'focus-min': minimizeFocus(); break;
     case 'focus-open': state.focusOpen = true; render(); break;
     case 'pop-out': popOut(); break;
-    case 'end-session': endSession(); break;
-    case 'history': {
-      const ask = state.ask || {};
-      state.ask = null; beginSession(ask.taskId, min);
-      const t = state.tasks.get(ask.taskId);
-      const n = t && ((ask.stepId && t.steps.find(x => x.id === ask.stepId && !x.done)) || t.steps.find(x => !x.done));
-      if (n) startStep(ask.taskId, n.id); else render();
-      break;
-    }
+    case 'end-session': if (!askUnseen()) endSession(); break;
+    case 'unseen-all': if (s?.active) s.active.unseen = 0; state.ask = null; endSession(); break;
+    case 'unseen-back': state.ask = null; renderFocus(); break;
+    case 'prior': if (s) { s.priorMin = min; saveMeta(); render(); toast(`Okay, Paced counts ${fmtMin(min)} of work from before.`); } break;
     case 'est-pick': setEstimateAndStart(min); break;
     case 'step-done': finishStep(); break;
+    case 'list-all': listAll(); break;
+    case 'progress': progressAnswer(+v); break;
+    case 'progress-plan': progressPlan(); break;
+    case 'progress-skip': if (state.meta.brk?.progress) { state.meta.brk.progress.done = true; saveMeta(); renderFocus(); } break;
     case 'step-pause': togglePause(); break;
     case 'start-step': startStep(id, step); break;
     case 'switch-step': switchStep(step); break;
@@ -4844,7 +5029,7 @@ document.addEventListener('submit', e => {
   }
   else if (f.id === 'est-form') setEstimateAndStart(parseMin($('#est-input').value));
   else if (f.id === 'split-form') splitStep($('#split-name').value.trim(), parseMin($('#split-min').value));
-  else if (f.id === 'forgot-form') correctTime(parseMin($('#forgot-min').value), false);
+  else if (f.id === 'forgot-form') correctTime(parseMin($('#forgot-min').value), state.ask?.stop ? 'stop' : false);
   else if (f.id === 'detail-add' || f.id === 'fstep-add') {
     const inFocus = f.id === 'fstep-add';
     const t = state.tasks.get(inFocus ? focusTaskId() : state.layer && state.layer.id); if (!t) return;
@@ -4893,6 +5078,11 @@ document.addEventListener('input', e => {
 
 document.addEventListener('change', e => {
   const el = e.target;
+  if (el.id === 'list-mode') {
+    const t = state.tasks.get(el.dataset.id);
+    if (t) { t.list = el.checked; saveTask(t); renderLayer(); $('#list-mode')?.focus(); }
+    return;
+  }
   if (el.id === 'plan-time') {
     const p = planValue();
     if (p) { setPlanWhen(p.date, el.value === '' ? null : +el.value); renderDue('#plan-time'); }
@@ -4943,7 +5133,7 @@ document.addEventListener('change', e => {
   }
   saveTask(t);
   $('#detail-sum').innerHTML = detailSummary(t);
-  $('#detail-tip').hidden = !missingMinutes(t);
+  $('#detail-tip').hidden = !missingMinutes(t) || isList(t);
   render();
 });
 
@@ -5039,23 +5229,24 @@ function tickStep(s) {
   if (target == null) return;
   let el = elapsedSec(a);
   // Nobody answered: stop the timer so a forgotten step can't run for hours.
-  const stopAt = Math.max(target, a.okSec || 0) + AUTO_STOP_MIN * 60;
+  const stopAt = Math.max(target, a.okSec || 0) + stopAfterMin(target) * 60, alerts = overAlerts(target);
   if (!a.pausedAt && el > stopAt) {
     a.pausedAt = Date.now() - (el - stopAt) * 1000;
     a.autoStopped = true;
-    a.alerts = OVER_ALERTS.length;
+    a.alerts = alerts.length;
     el = stopAt;
     saveAlerts();
-    Alert.send('Paced stopped your timer', `“${st.title}” ran ${AUTO_STOP_MIN} minutes over.`);
+    Alert.send('Paced stopped your timer', `No answer about “${st.title}”, so it stopped. Your time is kept.`);
   }
   const up = el >= target && (!a.pausedAt || a.autoStopped);
   if (!up) {
     if (state.ask?.type === 'timeup') { state.ask = null; renderFocus(); }
     return;
   }
-  if (dueAlert(a, (el - target) / 60, OVER_ALERTS)) {
+  if (dueAlert(a, (el - target) / 60, alerts)) {
     saveAlerts();
-    Alert.send(a.extended ? 'Your extra time is up' : 'Time’s up', `Did you finish “${st.title}”?`);
+    const name = a.list ? state.tasks.get(a.taskId)?.title : st.title;
+    Alert.send(a.alerts > 1 ? `Still on “${name}”?` : a.extended ? 'Your extra time is up' : 'Time’s up', a.alerts > 1 ? `If you’ve stopped, Paced stops the timer in ${fmtMin(stopAfterMin(target) - alerts[1])}.` : `Did you finish “${name}”?`);
   }
   if (!state.ask) {
     state.ask = { type: 'timeup' };
@@ -5073,10 +5264,10 @@ function tickGap(s) {
   if (plan.type !== 'hold' && past < 90) {
     if (!free) return;
     if (plan.type === 'break') { Alert.send('Break time', `Your ${plan.min}-minute break is starting.`); takeBreak(plan.min); }
-    else { Alert.send(`Starting: ${plan.next.title}`, `${fmtMin(plan.next.est)} planned.`); startStep(plan.t.id, plan.next.id); }
+    else startStep(plan.t.id, plan.next.id); // the tab title shows it, so it needs no notification
     return;
   }
-  if (dueAlert(s.gap, past / 60, OVER_ALERTS)) {
+  if (dueAlert(s.gap, past / 60, GAP_ALERTS)) {
     saveAlerts();
     Alert.send('Nothing is running', 'Start your next step, or take a break.');
     renderFocus(); renderMini();
@@ -5096,6 +5287,8 @@ function tickBreak(m) {
 
 // Break-time reminders, for when the working screen isn't what you're looking at.
 function checkBreakDue(s) {
+  const a = s.active, target = targetSec(a, findStep(a.taskId, a.stepId));
+  if (target != null && elapsedSec(a) >= target) return; // "Time's up" is asking already, and it shows the break
   const bp = breakPlan(assess(state.meta), s);
   if (!bp) { s.dueAlerted = false; return; }
   if (s.dueAlerted) return;
@@ -5108,6 +5301,7 @@ function showClocks() {
   const m = state.meta, s = m.session, a = s && s.active, c = liveClock();
   if (c) document.querySelectorAll('[data-tick="mini"]').forEach(n => { n.textContent = fmtClock(c.left); });
   $('#mini').classList.toggle('over', !!(c && c.over));
+  $('#mini').classList.toggle('late', !!(c && c.late));
   const title = !c ? BASE_TITLE : c.paused ? `Paused · ${c.label}` : `${fmtClock(c.left)} ${c.label}`;
   if (document.title !== title) document.title = title;
   if (a) {
@@ -5116,9 +5310,10 @@ function showClocks() {
     document.querySelectorAll('[data-tick="timer"]').forEach(n => {
       if (n.textContent !== fmtClock(v)) n.innerHTML = clockHTML(v);
       n.classList.toggle('over', target != null && el > target);
+      n.classList.toggle('late', target != null && el > target + calmSec(target));
     });
     const line = $('[data-tick="estline"]');
-    if (line) line.textContent = planLine(el, target, !!a.pausedAt);
+    if (line) line.textContent = planLine(a, st, el);
     const bar = $('[data-tick="prog"]');
     if (bar && target) { bar.style.width = Math.min(100, el / target * 100).toFixed(1) + '%'; bar.classList.toggle('over', el > target); }
   }
@@ -5178,6 +5373,7 @@ function tick() {
   if (now < syncUntil) { showClocks(); return; }
   dropFinishedStep();
   checkAway();
+  trackUnseen(state.meta.session?.active, now);
   tickCalendar();
   if (backWaiting) { backWaiting = false; backFromIdle(); }
   watchIdle();
