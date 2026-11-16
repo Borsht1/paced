@@ -45,7 +45,7 @@ When it runs as a Claude artifact on claude.ai, tasks are saved to your Claude a
 
 ## Website (GitHub Pages)
 
-`index.html` is the version for the website. After changing `paced.html`, rebuild it with:
+The site is at https://khaserlfuiaweo.github.io/paced/. `index.html` is the version for the website. After changing `paced.html`, rebuild it with:
 
 ```sh
 sh build-pages.sh
@@ -62,6 +62,6 @@ Sign-in and saving across devices use Firebase, on the website only.
 
 `PACED_GOOGLE_CLIENT_ID` in `firebase-config.js` turns on Google Tasks and Google Calendar. While it's `null`, both are hidden.
 
-The client ID comes from the `paced-5dbc5` project in the [Google Cloud console](https://console.cloud.google.com/). The project needs the Google Tasks API and Google Calendar API turned on, the `tasks.readonly` and `calendar.readonly` scopes on its sign-in screen, and a web client that allows `https://borsht1.github.io`.
+The client ID comes from the `paced-5dbc5` project in the [Google Cloud console](https://console.cloud.google.com/). The project needs the Google Tasks API and Google Calendar API turned on, the `tasks.readonly` and `calendar.readonly` scopes on its sign-in screen, and a web client that allows `https://khaserlfuiaweo.github.io`. Firebase Authentication needs the same domain in its authorized domains.
 
 While the sign-in screen is in Testing, only the people added as test users can connect, up to 100, and they see an "unverified app" warning. Removing the warning for everyone takes Google's verification, which can take months. Publishing without verification lets anyone connect, but only 100 people ever can, and that limit can't be reset.
