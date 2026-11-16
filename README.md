@@ -65,3 +65,15 @@ Sign-in and saving across devices use Firebase, on the website only.
 The client ID comes from the `paced-5dbc5` project in the [Google Cloud console](https://console.cloud.google.com/). The project needs the Google Tasks API and Google Calendar API turned on, the `tasks.readonly` and `calendar.readonly` scopes on its sign-in screen, and a web client that allows `https://khaserlfuiaweo.github.io`. Firebase Authentication needs the same domain in its authorized domains.
 
 While the sign-in screen is in Testing, only the people added as test users can connect, up to 100, and they see an "unverified app" warning. Removing the warning for everyone takes Google's verification, which can take months. Publishing without verification lets anyone connect, but only 100 people ever can, and that limit can't be reset.
+
+## Testers
+
+People testing Paced can leave notes in a shared **Tester notes** panel, with a tab for each tester and an **All** tab. Open it on the website with `?debug` at the end of the address (https://khaserlfuiaweo.github.io/paced/?debug), or press Ctrl+Shift+D (⌘⇧D on a Mac). Each note also saves what was on screen, the window and screen size, the browser, light or dark, the build and any recent errors. It saves nothing from your tasks, and no email. Testers can delete only their own notes. Anyone who isn't a tester sees nothing.
+
+To set it up once, in the [Firebase console](https://console.firebase.google.com/) for `paced-5dbc5`:
+
+1. **Firestore → Rules**: paste in `firestore.rules` from this folder and press **Publish**. Pushing to GitHub doesn't change the rules.
+2. **Firestore → Data**: add a collection called `testers`. For each tester, add a document whose **document ID is the email they sign in with**, with a field `name` (text) for their tab. Add yourself too.
+
+To remove a tester, delete their document. Their notes stay.
+

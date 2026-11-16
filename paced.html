@@ -349,6 +349,20 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .note-foot small { min-width: 0; overflow-wrap: anywhere; }
 .note-acts { display: flex; align-items: center; gap: 4px; flex: none; }
 .note-foot .icon-btn { width: 32px; height: 32px; }
+.debug-on { margin: 6px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+.debug-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.debug-tabs .seg-btn { padding: 6px 12px; font-size: 14px; max-width: 100%; overflow-wrap: anywhere; }
+.debug-tabs .count { color: var(--muted); font-weight: 500; margin-left: 2px; }
+.debug-notes { margin-top: 12px; }
+.debug-notes .note-foot { align-items: flex-start; }
+.debug-meta { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.debug-meta b { min-width: 0; overflow-wrap: anywhere; }
+.debug-text { margin: 4px 0 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.debug-details { min-width: 0; flex: 1; font-size: 13px; }
+.debug-details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.debug-details dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 10px; margin: 6px 0 4px; }
+.debug-details dt { color: var(--muted); }
+.debug-details dd { margin: 0; overflow-wrap: anywhere; }
 .jot { display: flex; align-items: center; gap: 8px; background: var(--surface); border-radius: var(--r); padding: 6px 6px 6px 14px; box-shadow: var(--shadow); color: var(--muted); }
 .jot:focus-within { box-shadow: 0 0 0 2px var(--accent); }
 .jot input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 8px 0; font-size: 15px; color: var(--ink); }
@@ -1063,6 +1077,7 @@ const Account = {
     };
     await Store.connect();
     if (Store.mode === 'cloud') this.moveLocalTasks();
+    Tester.start(user); // doesn't hold up opening your tasks
   },
 
   // Tasks made in this browser before signing in move into the account, so nothing is left behind.
@@ -1099,6 +1114,7 @@ const Account = {
     try { Store.unsub && Store.unsub(); } catch (e) {}
     await this.fb.signOut(this.auth);
     this.user = null; Store.col = null; Store.unsub = null; Store.queue.clear();
+    Tester.stop();
     Store.mode = 'signin';
     state.auth = { mode: 'signin', email: '' };
     this.clearScreen();
@@ -1116,6 +1132,49 @@ const Account = {
     this.clearScreen();
   }
 };
+
+/* ---------- tester notes: a shared panel for people testing Paced. Open it with ?debug in the address or Ctrl+Shift+D ----------
+   Only accounts listed under "testers" in Firebase can read or write them (see firestore.rules). */
+const Tester = {
+  status: 'off', // off: not signed in · checking · no: not a tester · unset: Firebase isn't set up for it yet · on
+  me: null, notes: [], api: null, unsub: null, wantOpen: false,
+
+  // The Firestore calls this needs, from the functions Account already loaded.
+  firestore() {
+    const f = Account.fb, db = Account.db, col = f.collection(db, 'testerNotes');
+    return {
+      me: async email => { const d = await f.getDoc(f.doc(db, 'testers', email)); return d.exists() ? d.data() : null; },
+      watch: (next, err) => f.onSnapshot(f.query(col, f.orderBy('createdAt', 'desc'), f.limit(500)), snap => next(snap.docs.map(d => ({ id: d.id, ...d.data() }))), err),
+      put: (id, data) => f.setDoc(f.doc(col, id), data),
+      remove: id => f.deleteDoc(f.doc(col, id))
+    };
+  },
+
+  async start(user, api) {
+    this.stop();
+    this.status = 'checking';
+    let me = null;
+    try { this.api = api || this.firestore(); me = user.email ? await this.api.me(user.email) : null; }
+    catch (e) { this.status = 'unset'; this.afterCheck(); return; } // the rules aren't published yet, so even your own entry can't be read
+    if (!me) { this.status = 'no'; this.afterCheck(); return; }
+    this.me = { uid: user.uid, name: me.name || 'Tester' };
+    this.status = 'on';
+    this.unsub = this.api.watch(list => { this.notes = list; renderDebugList(); }, () => { this.status = 'unset'; if (state.layer?.type === 'debug') renderLayer(); });
+    this.afterCheck();
+  },
+  afterCheck() { if (this.wantOpen) { this.wantOpen = false; openDebug(); } },
+  stop() {
+    try { this.unsub && this.unsub(); } catch (e) {}
+    this.unsub = null; this.me = null; this.notes = []; this.status = 'off';
+    if (state.layer?.type === 'debug') { state.layer = null; renderLayer(); }
+  }
+};
+
+// The last few errors on this page, so a tester's note can say what went wrong without them having to.
+const recentErrors = [];
+const keepError = msg => { recentErrors.push(String(msg).slice(0, 200)); recentErrors.splice(0, Math.max(0, recentErrors.length - 5)); };
+window.addEventListener('error', e => keepError(`${e.message || 'Error'}${e.lineno ? ` (line ${e.lineno})` : ''}`));
+window.addEventListener('unhandledrejection', e => keepError(`Promise: ${e.reason?.message || e.reason || 'rejected'}`));
 
 function authError(e) {
   return {
@@ -2639,7 +2698,7 @@ function renderLayer(enter) {
   el.hidden = false;
   document.body.classList.add('locked');
   setBehind();
-  el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'notes' ? notesHTML(enter) : L.type === 'schedules' ? schedulesHTML(enter) : L.type === 'hours' ? hoursHTML(enter) : L.type === 'import' ? importHTML(enter) : ['gtasks', 'gcal', 'paste'].includes(L.type) ? gtHTML(enter) : L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : L.type === 'record' ? recordHTML(rec, enter) : detailHTML(t, enter));
+  el.innerHTML = '<button class="scrim" data-act="close-layer" aria-label="Close" tabindex="-1"></button>' + (L.type === 'notes' ? notesHTML(enter) : L.type === 'debug' ? debugHTML(enter) : L.type === 'schedules' ? schedulesHTML(enter) : L.type === 'hours' ? hoursHTML(enter) : L.type === 'import' ? importHTML(enter) : ['gtasks', 'gcal', 'paste'].includes(L.type) ? gtHTML(enter) : L.type === 'add' ? addHTML(enter) : L.type === 'look' ? lookHTML(enter) : L.type === 'record' ? recordHTML(rec, enter) : detailHTML(t, enter));
   autosizeAll(el);
   // Redrawing replaces what had focus, so it goes back to the same field, or else to the sheet itself.
   const sheet = el.querySelector('[role="dialog"]');
@@ -4161,6 +4220,120 @@ function notesHTML(enter) {
     </li>`).join('')}</ul>` : '<p class="help" style="margin-top:16px">Nothing here yet. On a computer, press N anywhere in Paced to open this.</p>'}
   </section>`;
 }
+/* ----- tester notes panel ----- */
+// What was on screen, in words, for a tester's note.
+function screenWords() {
+  const m = state.meta, a = m.session?.active, L = state.layer;
+  if (L && L.type !== 'debug') return { detail: 'Task details', add: 'New task', notes: 'Notes', schedules: 'Schedules', hours: 'Work hours', import: 'Import', gtasks: 'Google Tasks', gcal: 'Google Calendar', paste: 'Paste a list', look: 'Settings', record: 'Session summary' }[L.type] || L.type;
+  if (state.focusOpen) {
+    if (m.brk) return 'Timer: on a break';
+    if (!a) return 'Timer: between steps';
+    const ask = { timeup: 'time’s up', forgot: 'how long did you work', away: 'back from away', feel: 'how did it go', estimate: 'how long will it take', split: 'split a step', method: 'way of working', breakcheck: 'break check' }[state.ask?.type];
+    return `Timer: ${ask || (a.list ? 'checklist running' : 'step running')}`;
+  }
+  return state.view === 'history' ? `History (${perfNow().span})` : state.view === 'archive' ? 'Completed tasks' : 'My tasks';
+}
+function browserWords(ua = navigator.userAgent) {
+  const [name, pat] = [['Edge', /Edg\/(\d+)/], ['Firefox', /Firefox\/(\d+)/], ['Chrome', /Chrome\/(\d+)/], ['Safari', /Version\/(\d+).*Safari/]].find(([, re]) => re.test(ua)) || ['Browser', /$^/];
+  const os = /iPhone|iPad/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'macOS' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : '';
+  const v = (ua.match(pat) || [])[1];
+  return [name + (v ? ' ' + v : ''), os].filter(Boolean).join(' on ');
+}
+// Saved with each note. Nothing from your tasks, and no email.
+function pageDetails() {
+  const m = state.meta, a = m.session?.active;
+  return {
+    screen: state.debugFrom || screenWords(),
+    window: `${innerWidth} × ${innerHeight}`,
+    display: `${screen.width} × ${screen.height} at ${Math.round(devicePixelRatio * 100) / 100}x`,
+    browser: browserWords(),
+    theme: document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') + ' (auto)',
+    timer: m.brk ? 'On a break' : a ? (a.pausedAt ? 'Step paused' : 'Step running') : m.session ? 'Between steps' : 'Not working',
+    build: window.PACED_BUILT || 'local',
+    errors: recentErrors.slice(),
+    agent: navigator.userAgent
+  };
+}
+const DETAIL_ROWS = [['screen', 'Screen'], ['window', 'Window'], ['display', 'Display'], ['browser', 'Browser'], ['theme', 'Theme'], ['timer', 'Timer'], ['build', 'Build'], ['errors', 'Recent errors'], ['agent', 'User agent']];
+const detailRows = d => DETAIL_ROWS.filter(([k]) => d[k] != null).map(([k, l]) => `<dt>${l}</dt><dd>${esc(Array.isArray(d[k]) ? d[k].join(' · ') || 'None' : d[k])}</dd>`).join('');
+const debugWhen = ms => (dateKey(new Date(ms)) === dateKey() ? '' : fmtDayShort(dateKey(new Date(ms))) + ', ') + fmtTime(ms);
+
+function openDebug() {
+  const st = Tester.status;
+  if (st === 'checking') { Tester.wantOpen = true; return; }
+  if (st === 'no') return; // only testers know it's here
+  if (st === 'off') { toast('The tester panel needs a tester account.'); return; }
+  state.debugFrom = screenWords(); // what you were looking at, before this sheet covers it
+  state.debugTab = state.debugTab || 'all';
+  state.layer = { type: 'debug' };
+  renderLayer(true);
+  $('#debug-new')?.focus();
+}
+function debugHTML(enter) {
+  const head = `${sheetOpen(enter, 'Tester notes')}${sheetHead('Tester notes')}`;
+  if (Tester.status !== 'on') return `${head}<p class="help" style="margin-top:6px">Tester notes aren’t set up yet. Publish the tester rules in Firebase, and add yourself to “testers”. The README says how.</p></section>`;
+  return `${head}
+    <p class="help" style="margin-top:6px">Shared with everyone testing Paced. Each note also saves what was on screen, your browser and any recent errors.</p>
+    <form class="notes-add" id="debug-form">
+      <textarea id="debug-new" class="text-input note-input" rows="2" maxlength="4000" placeholder="What did you notice?" aria-label="New tester note">${esc(state.debugDraft || '')}</textarea>
+      <button type="submit" class="btn primary">Save</button>
+    </form>
+    <p class="debug-on muted">Saving as ${esc(Tester.me.name)} · from ${esc(state.debugFrom || screenWords())} · ⌘ or Ctrl + Enter saves</p>
+    <div id="debug-list">${debugListHTML()}</div>
+  </section>`;
+}
+// A tab for everyone, then one for each tester who has written something, and always one for you.
+function debugListHTML() {
+  const me = Tester.me, all = Tester.notes, by = new Map([[me.uid, { name: me.name, n: 0 }]]);
+  for (const n of all) { const x = by.get(n.author) || { name: n.name || 'Tester', n: 0 }; x.n++; by.set(n.author, x); }
+  const tab = state.debugTab === 'all' || by.has(state.debugTab) ? state.debugTab || 'all' : 'all';
+  const list = tab === 'all' ? all : all.filter(n => n.author === tab);
+  const tabs = [['all', 'All', all.length], ...[...by].map(([uid, x]) => [uid, uid === me.uid ? `${x.name} (you)` : x.name, x.n])];
+  return `<div class="debug-tabs" role="tablist" aria-label="Whose notes">${tabs.map(([k, l, c]) => `<button class="seg-btn${k === tab ? ' on' : ''}" role="tab" aria-selected="${k === tab}" data-act="debug-tab" data-v="${esc(k)}">${esc(l)} <span class="count">${c}</span></button>`).join('')}</div>
+    ${list.length ? `<ul class="notes debug-notes">${list.map(n => `<li class="note">
+      <div class="debug-meta"><b>${esc(n.name || 'Tester')}</b><small class="muted">${esc(debugWhen(n.createdAt))}</small></div>
+      <p class="debug-text">${esc(n.text)}</p>
+      <div class="note-foot">${n.details && Object.keys(n.details).length ? `<details class="debug-details"><summary>Page details</summary><dl>${detailRows(n.details)}</dl></details>` : '<span></span>'}
+        ${n.author === me.uid ? `<button class="icon-btn" data-act="debug-del" data-id="${esc(n.id)}" title="Delete" aria-label="Delete this note">${ICON.trash}</button>` : ''}</div>
+    </li>`).join('')}</ul>` : `<p class="help">${tab === 'all' ? 'No notes yet. Be the first.' : 'No notes from this tester yet.'}</p>`}`;
+}
+// Only the tabs and list redraw, so a note you're halfway through writing stays put.
+function renderDebugList() {
+  const el = $('#debug-list');
+  if (!el || state.layer?.type !== 'debug' || Tester.status !== 'on') return;
+  const ae = document.activeElement, keep = el.contains(ae) ? focusKey(ae) : null;
+  el.innerHTML = debugListHTML();
+  if (keep) el.querySelector(keep)?.focus();
+}
+async function saveDebugNote() {
+  const box = $('#debug-new'), text = (box?.value || '').trim();
+  if (!text || !Tester.me) { box?.focus(); return; }
+  const id = newId('tn'), note = { text: text.slice(0, 4000), author: Tester.me.uid, name: Tester.me.name, createdAt: Date.now(), details: pageDetails() };
+  Tester.notes = [{ id, ...note }, ...Tester.notes]; // shows straight away, and the live list confirms it
+  if (state.debugTab !== 'all') state.debugTab = Tester.me.uid; // on someone else's tab, you'd lose sight of your own note
+  state.debugDraft = '';
+  box.value = '';
+  renderDebugList();
+  box.focus();
+  try { await Tester.api.put(id, note); }
+  catch (e) {
+    Tester.notes = Tester.notes.filter(x => x.id !== id);
+    state.debugDraft = text; if ($('#debug-new')) $('#debug-new').value = text;
+    renderDebugList();
+    toast('That note didn’t save. Check your connection and try again.');
+  }
+}
+async function deleteDebugNote(id) {
+  const n = Tester.notes.find(x => x.id === id);
+  if (!n || n.author !== Tester.me?.uid) return;
+  const back = () => { Tester.notes = [...Tester.notes.filter(x => x.id !== id), n].sort((a, b) => b.createdAt - a.createdAt); renderDebugList(); };
+  Tester.notes = Tester.notes.filter(x => x.id !== id);
+  renderDebugList();
+  try { await Tester.api.remove(id); } catch (e) { back(); toast('That note couldn’t be deleted.'); return; }
+  const { id: _, ...data } = n;
+  toast('Note deleted.', 'Undo', () => { back(); Tester.api.put(id, data).catch(() => { Tester.notes = Tester.notes.filter(x => x.id !== id); renderDebugList(); toast('That note couldn’t be brought back.'); }); });
+}
+
 function saveNote(n) { state.notes.set(n.id, n); Store.write(n.id, n); }
 function addNote(text) {
   text = String(text || '').trim();
@@ -5198,6 +5371,8 @@ document.addEventListener('click', e => {
     case 'open-notes': openNotes(); break;
     case 'note-task': noteToTask(id); break;
     case 'note-del': deleteNote(id); break;
+    case 'debug-tab': state.debugTab = v; renderDebugList(); break;
+    case 'debug-del': deleteDebugNote(id); break;
     case 'open-schedules': state.layer = { type: 'schedules' }; state.duePick = null; state.schedLoad = null; state.schedAsk = null; renderLayer(true); break;
     case 'sched-yes': if (state.schedAsk) loadSchedule(state.schedAsk.id, state.schedAsk.date, true); break;
     case 'sched-no': {
@@ -5287,6 +5462,7 @@ document.addEventListener('submit', e => {
   else if (f.id === 'quick-add') quickAdd();
   else if (f.id === 'sched-form') saveSchedule($('#sched-name').value.trim());
   else if (f.id === 'note-form') saveNewNote();
+  else if (f.id === 'debug-form') saveDebugNote();
   else if (f.id === 'jot-form') {
     if (!addNote($('#jot').value)) { $('#jot').focus(); return; }
     state.jot = ''; $('#jot').value = ''; $('#jot').blur(); // back to the timer, which can't update while you're typing
@@ -5320,6 +5496,7 @@ document.addEventListener('input', e => {
     autosize(el);
   }
   if (el.id === 'note-new') { state.noteDraft = el.value; autosize(el); }
+  if (el.id === 'debug-new') state.debugDraft = el.value;
   else if (el.id === 'jot') state.jot = el.value;
   else if (el.matches('textarea.note-text')) {
     const n = state.notes.get(el.dataset.id);
@@ -5409,6 +5586,13 @@ document.addEventListener('toggle', e => {
 
 document.addEventListener('keydown', e => {
   const el = e.target;
+  // Ctrl+Shift+D (or ⌘⇧D) opens the tester panel. For everyone else it stays the browser's own shortcut.
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'd' && Tester.status !== 'no') {
+    e.preventDefault();
+    if (state.layer?.type === 'debug') closeLayer(); else openDebug();
+    return;
+  }
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && el.id === 'debug-new') { e.preventDefault(); saveDebugNote(); return; }
   // N opens Notes from anywhere, unless you're typing somewhere else.
   if (e.key.toLowerCase() === 'n' && !e.metaKey && !e.ctrlKey && !e.altKey && !state.layer && state.ready && Store.mode !== 'signin' && !el.closest?.('input, textarea, select, [contenteditable]')) { e.preventDefault(); openNotes(); return; }
   if (e.key === 'Enter' && !e.shiftKey && el.id === 'note-new') { e.preventDefault(); saveNewNote(); return; }
@@ -5674,5 +5858,6 @@ Store.init().then(() => {
   clearStale();
   state.ready = true;
   render();
+  if (new URLSearchParams(location.search).has('debug')) openDebug(); // waits for the tester check if it's still going
 });
 </script>
