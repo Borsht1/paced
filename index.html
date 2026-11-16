@@ -516,6 +516,32 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .bar-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 46px; gap: 10px; align-items: center; font-size: 14px; }
 .bar-row small { display: block; color: var(--muted); font-size: 12px; }
 .bar-row .value { text-align: right; font-variant-numeric: tabular-nums; }
+.perf { position: relative; display: grid; gap: 12px; margin-top: 12px; }
+.perf-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.perf-span { margin: 0; min-width: 180px; }
+.perf-nav { display: flex; align-items: center; gap: 6px; }
+.perf-nav b { min-width: 7.5em; text-align: center; font-variant-numeric: tabular-nums; }
+.perf-say { display: grid; gap: 4px; }
+.perf-say p { margin: 0; font-size: 15px; line-height: 1.45; }
+.stat .delta { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.chart-card h3 { margin: 0; font: 700 17px/1.3 var(--font-display); }
+.chart-card h3 .muted { font: 400 13px var(--font-body, inherit); margin-left: 6px; }
+.chart { display: block; width: 100%; height: auto; overflow: visible; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .plan { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; }
+.chart .ax { fill: var(--muted); font-size: 11px; }
+.chart .val { fill: var(--ink); font-size: 12px; font-weight: 600; }
+.chart .col { fill: var(--accent); }
+.chart .pace-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+.chart .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.chart .brk-band { fill: var(--zone-soft); }
+.chart .hit { fill: transparent; cursor: default; outline: none; }
+.chart .hit:focus-visible { fill: var(--accent); fill-opacity: .14; }
+.chart-tip { position: absolute; z-index: 5; max-width: min(280px, 90%); padding: 6px 10px; border-radius: 8px; background: var(--ink); color: var(--surface); font-size: 13px; line-height: 1.35; pointer-events: none; box-shadow: var(--shadow); }
+.chart-table summary { cursor: pointer; color: var(--accent); font-size: 14px; font-weight: 600; }
+.chart-table table { width: 100%; margin-top: 8px; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.chart-table th, .chart-table td { text-align: left; padding: 4px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.chart-table td:last-child, .chart-table th:last-child { text-align: right; padding-left: 12px; white-space: nowrap; }
 .bar-row.best .label-text, .bar-row.best .value { font-weight: 700; }
 .bar-track { position: relative; height: 10px; }
 .bar-track i { display: block; height: 10px; background: var(--accent); border-radius: 0 4px 4px 0; }
@@ -1432,6 +1458,7 @@ function renderMain() {
   if (!state.ready) { main.innerHTML = '<div class="loading"><span class="pulse"></span>Loading your tasks…</div>'; return; }
   if (Store.mode === 'signin') { main.innerHTML = authHTML(); return; }
   main.innerHTML = state.view === 'archive' ? archiveHTML() : state.view === 'history' ? historyPageHTML() : homeHTML();
+  if (state.view === 'history') renderPerf();
 }
 
 function authHTML() {
@@ -2934,12 +2961,242 @@ function sessionRowHTML(r) {
     <span>${esc(parts.join(' · ') || 'Under a minute')}</span>${r.note ? `<span>${esc(r.note)}</span>` : ''}</button></li>`;
 }
 
+/* ----- your performance: focus time and pace, a day or a week at a time ----- */
+// Every session's events, the one still going included, each tagged with its session and when that began.
+function perfEvents() {
+  const runs = [...state.records.values()];
+  if (state.meta.run?.events.length) runs.push({ id: state.meta.run.id, startedAt: state.meta.run.startedAt, events: state.meta.run.events });
+  return runs.flatMap(r => r.events.map(e => ({ ...e, rec: r.id, recAt: r.startedAt })));
+}
+const weekStart = k => addDays(k, -((keyDate(k).getDay() + 6) % 7)); // weeks start on Monday, as in History
+const perfNow = () => state.perf || (state.perf = { span: 'day', at: dateKey() });
+function periodRange(p) {
+  const start = p.span === 'week' ? weekStart(p.at) : p.at;
+  return { start, s: +keyDate(start), e: +keyDate(addDays(start, p.span === 'week' ? 7 : 1)) };
+}
+const prevPeriod = p => ({ span: p.span, at: addDays(p.at, p.span === 'week' ? -7 : -1) });
+function periodName(p) {
+  const today = dateKey(), r = periodRange(p);
+  if (p.span === 'day') return p.at === today ? 'Today' : p.at === addDays(today, -1) ? 'Yesterday' : fmtFullDay(p.at);
+  if (r.start === weekStart(today)) return 'This week';
+  if (r.start === weekStart(addDays(today, -7))) return 'Last week';
+  const end = addDays(r.start, 6), md = k => keyDate(k).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return `${md(r.start)} – ${md(end)}`;
+}
+// Hours of the day, or days of the week. Built from dates, so a clock change still gives the right hours.
+function bucketEdges(r, span) {
+  const d = keyDate(r.start);
+  return span === 'week' ? Array.from({ length: 8 }, (_, i) => +keyDate(addDays(r.start, i)))
+    : Array.from({ length: 25 }, (_, h) => +new Date(d.getFullYear(), d.getMonth(), d.getDate(), h));
+}
+// Time worked in each bucket. A step's worked time is the stretch before it ended, so one that crosses 3 PM counts in both hours.
+function focusBuckets(r, span, events) {
+  const edges = bucketEdges(r, span), sec = edges.slice(1).map(() => 0);
+  for (const e of events) {
+    if ((e.type !== 'done' && e.type !== 'aside') || !e.took) continue;
+    const to = e.end || e.at, from = to - e.took * 1000;
+    sec.forEach((_, i) => { sec[i] += Math.max(0, Math.min(to, edges[i + 1]) - Math.max(from, edges[i])) / 1000; });
+  }
+  return sec.map((v, i) => ({ s: edges[i], e: edges[i + 1], sec: v }));
+}
+// Each timed step that ended in the period, with its pace (100% = as planned) and how long you'd worked since a break.
+function paceDots(r, events) {
+  const breaks = events.filter(e => e.type === 'break');
+  return events.filter(e => e.type === 'done' && e.est && !e.noSpeed && e.took >= 30 && (e.end || e.at) >= r.s && (e.end || e.at) < r.e)
+    .map(e => {
+      const at = e.end || e.at, rested = Math.max(e.recAt || 0, ...breaks.filter(b => b.rec === e.rec && b.end <= at).map(b => b.end));
+      return { at, pace: Math.round(samplePace(e) * 100), title: e.title, est: e.est, took: e.took, rec: e.rec, sinceBreak: (at - e.took * 1000 - rested) / 60e3 };
+    })
+    .sort((a, b) => a.at - b.at);
+}
+// "until" cuts the period short, so a day or week still going is compared with the same stretch of the one before.
+function perfStats(p, events, until) {
+  const r = periodRange(p), dots = paceDots(r, events);
+  if (until) { r.e = Math.min(r.e, until); dots.splice(0, dots.length, ...dots.filter(d => d.at < until)); events = events.filter(e => (e.end || e.at) < until); }
+  return {
+    sec: focusBuckets(r, p.span, events).reduce((a, b) => a + b.sec, 0),
+    steps: events.filter(e => e.type === 'done' && (e.end || e.at) >= r.s && (e.end || e.at) < r.e).length,
+    pace: dots.length ? Math.round(median(dots.map(d => d.pace))) : null,
+    onTime: dots.length ? Math.round(dots.filter(d => d.took <= d.est * 60).length / dots.length * 100) : null,
+    dots
+  };
+}
+const PERF_MIN_DOTS = 4; // fewer timed steps than this is too little to say anything about pace
+
+// A few plain sentences, each one backed by the numbers on screen.
+function perfSummary(p, cur, prev, buckets, going) {
+  const out = [], min = cur.sec / 60, was = prev.sec / 60, day = p.span === 'day';
+  const when = day ? (p.at === dateKey() ? 'today' : p.at === addDays(dateKey(), -1) ? 'yesterday' : `on ${fmtFullDay(p.at)}`) : periodName(p) === 'This week' ? 'this week' : periodName(p) === 'Last week' ? 'last week' : `the week of ${periodName(p)}`;
+  if (min < 1) return [`No focused time ${when}.`];
+  const than = going ? (day ? 'by this time yesterday' : 'by this point last week') : day ? 'the day before' : 'the week before', diff = min - was;
+  out.push(`You focused ${fmtMin(min)} ${when}${was < 1 ? '.' : Math.abs(diff) < (day ? 10 : 30) ? `, about the same as ${than}.` : `, ${fmtMin(Math.abs(diff))} ${diff > 0 ? 'more' : 'less'} than ${than}.`}`);
+  if (!day) {
+    const best = buckets.reduce((a, b) => (b.sec > a.sec ? b : a));
+    const dDots = cur.dots.filter(d => d.at >= best.s && d.at < best.e);
+    out.push(`${keyDate(dateKey(new Date(best.s))).toLocaleDateString(undefined, { weekday: 'long' })} was your best day: ${fmtMin(best.sec / 60)} focused${dDots.length >= 2 ? `, at ${Math.round(median(dDots.map(d => d.pace)))}% of your planned pace` : ''}.`);
+  }
+  if (cur.dots.length < PERF_MIN_DOTS) { out.push('A few more timed steps and Paced can tell you more about your pace.'); return out; }
+  // Quickest part of the day, when the difference is clear.
+  const parts = ['in the morning', 'in the afternoon', 'in the evening', 'at night'];
+  const groups = parts.map((_, i) => cur.dots.filter(d => dayPart(d) === i)).map((g, i) => ({ i, n: g.length, pace: g.length ? median(g.map(d => d.pace)) : 0 })).filter(g => g.n >= 2);
+  if (groups.length >= 2) {
+    const [top, next] = [...groups].sort((a, b) => b.pace - a.pace);
+    if (top.pace - next.pace >= 10) out.push(`You were quickest ${parts[top.i]}, at ${Math.round(top.pace)}% of your planned pace.`);
+  }
+  // Slowing down after a long stretch without a break.
+  const fresh = cur.dots.filter(d => d.sinceBreak < 60), tired = cur.dots.filter(d => d.sinceBreak >= 60);
+  if (fresh.length >= 2 && tired.length >= 2) {
+    const a = Math.round(median(fresh.map(d => d.pace))), b = Math.round(median(tired.map(d => d.pace)));
+    if (a - b >= 10) out.push(`Your pace dropped from ${a}% to ${b}% once you’d gone an hour without a break.`);
+    else if (b - a >= 10) out.push(`You held your pace well on long stretches, ${b}% after an hour without a break.`);
+  } else if (cur.pace != null && out.length < 3) out.push(`Your usual pace was ${cur.pace}% of what you planned${cur.pace >= 95 && cur.pace <= 105 ? ', right on your guesses' : ''}.`);
+  return out;
+}
+
+// The hours a day's charts cover: the ones you worked, with an hour either side, and at least 9 to 5.
+function dayHours(buckets, dots) {
+  const used = buckets.map((b, i) => (b.sec >= 30 ? i : -1)).filter(i => i >= 0).concat(dots.map(d => new Date(d.at).getHours()));
+  if (!used.length) return [9, 17];
+  return [Math.max(0, Math.min(9, Math.min(...used) - 1)), Math.min(24, Math.max(17, Math.max(...used) + 2))];
+}
+const svgText = (x, y, txt, anchor = 'middle', cls = 'ax') => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" class="${cls}">${esc(txt)}</text>`;
+// A column with a rounded top, sitting on the baseline.
+function columnPath(x, y, w, base) {
+  const r = Math.min(4, w / 2, base - y);
+  return `M${x.toFixed(1)},${base}V${(y + r).toFixed(1)}Q${x.toFixed(1)},${y.toFixed(1)} ${(x + r).toFixed(1)},${y.toFixed(1)}H${(x + w - r).toFixed(1)}Q${(x + w).toFixed(1)},${y.toFixed(1)} ${(x + w).toFixed(1)},${(y + r).toFixed(1)}V${base}Z`;
+}
+const H_CHART = 170, PAD = { l: 40, r: 12, t: 18, b: 26 };
+// A value over a column, kept clear of the axis labels on the left and the edge on the right.
+function valueLabel(x, y, txt, W) {
+  const w = txt.length * 6.5;
+  return x - w / 2 < PAD.l ? svgText(Math.max(x - 14, PAD.l), y, txt, 'start', 'val') : x + w / 2 > W - PAD.r ? svgText(x + 14, y, txt, 'end', 'val') : svgText(x, y, txt, 'middle', 'val');
+}
+
+function focusChartHTML(p, buckets, W, hours) {
+  const day = p.span === 'day', items = day ? buckets.slice(hours[0], hours[1]) : buckets;
+  const min = items.map(b => b.sec / 60), top = Math.max(60, ...min), step = day ? 30 : top > 360 ? 120 : 60;
+  const yMax = Math.ceil(top / step) * step, pw = W - PAD.l - PAD.r, ph = H_CHART - PAD.t - PAD.b, base = PAD.t + ph;
+  const slot = pw / items.length, bw = Math.max(4, Math.min(28, slot - 2)), y = v => base - v / yMax * ph;
+  // A day's hours are labeled where each hour starts, on the same scale as the pace chart below, so the two line up.
+  const label = (b, i) => day ? hourName(new Date(b.s).getHours()) : WEEK_DAYS[i];
+  const every = Math.max(1, Math.ceil(items.length * 34 / pw));
+  const best = min.indexOf(Math.max(...min));
+  let g = '';
+  for (let v = 0; v <= yMax; v += step) g += `<line x1="${PAD.l}" x2="${W - PAD.r}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="grid"/>${svgText(PAD.l - 6, y(v) + 4, v ? fmtMin(v).replace(' min', 'm').replace(' hr', 'h').replace(' ', '') : '0', 'end')}`;
+  const bars = items.map((b, i) => {
+    const x = PAD.l + i * slot + (slot - bw) / 2, v = min[i], tip = `${day ? label(b, i) : fmtFullDay(dateKey(new Date(b.s)))} · ${b.s > Date.now() ? 'still to come' : v >= 1 ? `${fmtMin(v)} focused` : 'no focus time'}`;
+    return `${v >= 0.5 ? `<path d="${columnPath(x, y(v), bw, base)}" class="col"/>` : ''}
+      <rect x="${(PAD.l + i * slot).toFixed(1)}" y="${PAD.t}" width="${slot.toFixed(1)}" height="${ph}" class="hit" tabindex="0" data-tip="${esc(tip)}" aria-label="${esc(tip)}"/>
+      ${i % every === 0 ? svgText(PAD.l + i * slot + (day ? 0 : slot / 2), H_CHART - 8, label(b, i)) : ''}
+      ${i === best && v >= 1 ? valueLabel(PAD.l + i * slot + slot / 2, y(v) - 5, fmtMin(v), W) : ''}`;
+  }).join('') + (day && items.length % every === 0 ? svgText(W - PAD.r, H_CHART - 8, hourName(hours[1] % 24)) : '');
+  const rows = items.filter(b => b.sec >= 30).map((b, i) => `<tr><td>${esc(day ? hourName(new Date(b.s).getHours()) : fmtFullDay(dateKey(new Date(b.s))))}</td><td>${fmtMin(b.sec / 60)}</td></tr>`).join('');
+  return `<section class="panel chart-card">
+    <h3>Focus time</h3>
+    <svg class="chart" viewBox="0 0 ${W} ${H_CHART}" width="${W}" height="${H_CHART}" role="img" aria-label="Focus time ${day ? 'by hour' : 'by day'}">${g}${bars}</svg>
+    <details class="chart-table"><summary>Show as a table</summary><table><thead><tr><th>${day ? 'Hour' : 'Day'}</th><th>Focused</th></tr></thead><tbody>${rows || '<tr><td colspan="2">Nothing yet</td></tr>'}</tbody></table></details>
+  </section>`;
+}
+
+function paceChartHTML(p, cur, events, W, hours) {
+  const day = p.span === 'day', r = periodRange(p), pw = W - PAD.l - PAD.r, ph = H_CHART - PAD.t - PAD.b;
+  if (cur.dots.length < 2) return `<section class="panel chart-card"><h3>Pace</h3><p class="help">${cur.dots.length ? 'One timed step so far. Finish another to see how your pace moves.' : 'No timed steps here yet. Pace shows once you finish steps that had minutes planned.'}</p></section>`;
+  // Day: each step where it ended. Week: the middle pace of each day.
+  const pts = day ? cur.dots.map(d => ({ ...d, tip: `“${d.title}” · planned ${fmtMin(d.est)}, took ${fmtDur(d.took)} · ${d.pace}%` }))
+    : bucketEdges(r, 'week').slice(0, 7).map((s, i) => {
+      const ds = cur.dots.filter(d => dateKey(new Date(d.at)) === addDays(r.start, i));
+      return ds.length ? { i, at: s, pace: Math.round(median(ds.map(d => d.pace))), n: ds.length, rec: 'week', tip: `${fmtFullDay(addDays(r.start, i))} · ${Math.round(median(ds.map(d => d.pace)))}% from ${ds.length} ${ds.length === 1 ? 'step' : 'steps'}` } : null;
+    }).filter(Boolean);
+  const vals = pts.map(d => d.pace), lo = Math.min(60, Math.floor((Math.min(...vals) - 10) / 20) * 20), hi = Math.max(140, Math.ceil((Math.max(...vals) + 10) / 20) * 20);
+  const y = v => PAD.t + (hi - v) / (hi - lo) * ph;
+  const t0 = day ? +new Date(r.s).setHours(hours[0]) : 0, t1 = day ? +new Date(r.s).setHours(hours[1]) : 0;
+  const x = d => day ? PAD.l + (d.at - t0) / (t1 - t0) * pw : PAD.l + (d.i + 0.5) * pw / 7;
+  let g = '';
+  [lo, 100, hi].forEach(v => { g += `<line x1="${PAD.l}" x2="${W - PAD.r}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="${v === 100 ? 'plan' : 'grid'}"/>${svgText(PAD.l - 6, y(v) + 4, v + '%', 'end')}`; });
+  // Breaks taken that day, as light bands behind the line.
+  const bands = day ? events.filter(e => e.type === 'break' && e.end > t0 && e.at < t1).map(e => {
+    const a = Math.max(PAD.l, PAD.l + (e.at - t0) / (t1 - t0) * pw), b = Math.min(W - PAD.r, PAD.l + (e.end - t0) / (t1 - t0) * pw);
+    return `<rect x="${a.toFixed(1)}" y="${PAD.t}" width="${Math.max(2, b - a).toFixed(1)}" height="${ph}" class="brk-band"><title>Break, ${fmtDur((e.end - e.at) / 1000)}</title></rect>`;
+  }).join('') : '';
+  // A line within each session (or through the week's days in a row), broken between them.
+  const runs = [];
+  pts.forEach((d, i) => { const prev = pts[i - 1]; if (prev && (day ? prev.rec === d.rec : prev.i === d.i - 1)) runs[runs.length - 1].push(d); else runs.push([d]); });
+  const lines = runs.filter(rn => rn.length > 1).map(rn => `<polyline points="${rn.map(d => `${x(d).toFixed(1)},${y(d.pace).toFixed(1)}`).join(' ')}" class="pace-line"/>`).join('');
+  const dots = pts.map(d => `<circle cx="${x(d).toFixed(1)}" cy="${y(d.pace).toFixed(1)}" r="4" class="dot"/>
+    <circle cx="${x(d).toFixed(1)}" cy="${y(d.pace).toFixed(1)}" r="12" class="hit" tabindex="0" data-tip="${esc(d.tip)}" aria-label="${esc(d.tip)}"/>`).join('');
+  const last = pts[pts.length - 1], lx = x(last);
+  const axis = day ? Array.from({ length: hours[1] - hours[0] + 1 }, (_, i) => hours[0] + i).filter((h, i, all) => i % Math.max(1, Math.ceil(all.length * 34 / pw)) === 0)
+    .map(h => svgText(PAD.l + (h - hours[0]) / (hours[1] - hours[0]) * pw, H_CHART - 8, hourName(h % 24))).join('')
+    : WEEK_DAYS.map((w, i) => svgText(PAD.l + (i + 0.5) * pw / 7, H_CHART - 8, w)).join('');
+  const rows = pts.map(d => `<tr><td>${esc(day ? `${fmtTime(d.at)} · ${d.title}` : fmtFullDay(addDays(r.start, d.i)))}</td><td>${d.pace}%</td></tr>`).join('');
+  return `<section class="panel chart-card">
+    <h3>Pace <span class="muted">100% means as planned, higher is faster</span></h3>
+    <svg class="chart" viewBox="0 0 ${W} ${H_CHART}" width="${W}" height="${H_CHART}" role="img" aria-label="Pace ${day ? 'through the day' : 'by day'}">${bands}${g}${lines}${dots}${axis}
+      ${svgText(Math.min(lx + 8, W - PAD.r), y(last.pace) - 8, last.pace + '%', lx > W - 60 ? 'end' : 'start', 'val')}</svg>
+    <details class="chart-table"><summary>Show as a table</summary><table><thead><tr><th>${day ? 'Step' : 'Day'}</th><th>Pace</th></tr></thead><tbody>${rows}</tbody></table></details>
+  </section>`;
+}
+
+function perfHTML(W) {
+  const p = perfNow(), events = perfEvents(), r = periodRange(p), cur = perfStats(p, events), going = Date.now() < r.e;
+  const pr = periodRange(prevPeriod(p)), prev = perfStats(prevPeriod(p), events, going ? pr.s + (Date.now() - r.s) : null);
+  const buckets = focusBuckets(r, p.span, events), hours = dayHours(buckets, cur.dots), day = p.span === 'day';
+  const latest = periodRange({ span: p.span, at: dateKey() }).s, oldest = Math.min(...events.map(e => e.at));
+  const vs = going ? (day ? 'this time yesterday' : 'this point last week') : day ? 'the day before' : 'the week before';
+  const delta = (a, b, fmt) => a == null || b == null ? '' : `<small class="delta">${a === b ? `Same as ${vs}` : `${a > b ? '+' : '−'}${fmt(Math.abs(a - b))} vs ${vs}`}</small>`;
+  const tiles = [
+    [fmtMin(cur.sec / 60), 'focused', delta(Math.round(cur.sec / 60), prev.sec >= 60 ? Math.round(prev.sec / 60) : null, fmtMin)],
+    [String(cur.steps), cur.steps === 1 ? 'step done' : 'steps done', delta(cur.steps, prev.steps || null, n => String(n))],
+    [cur.pace != null ? cur.pace + '%' : '–', 'usual pace, 100% is as planned', delta(cur.pace, prev.pace, n => n + ' pts')],
+    [cur.onTime != null ? cur.onTime + '%' : '–', 'of timed steps on time', delta(cur.onTime, prev.onTime, n => n + ' pts')]
+  ];
+  return `<div class="perf-head">
+      <div class="seg two perf-span">${['day', 'week'].map(s => `<button class="seg-btn${p.span === s ? ' on' : ''}" data-act="perf-span" data-v="${s}" aria-pressed="${p.span === s}">${s === 'day' ? 'Day' : 'Week'}</button>`).join('')}</div>
+      <div class="perf-nav">
+        <button class="icon-btn" data-act="perf-prev" aria-label="Previous ${p.span}"${r.s <= oldest ? ' disabled' : ''}>${ICON.back}</button>
+        <b aria-live="polite">${esc(periodName(p))}</b>
+        <button class="icon-btn cal-next" data-act="perf-next" aria-label="Next ${p.span}"${r.s >= latest ? ' disabled' : ''}>${ICON.back}</button>
+      </div>
+    </div>
+    <div class="perf-say">${perfSummary(p, cur, prev, buckets, going).map(t => `<p>${esc(t)}</p>`).join('')}</div>
+    ${cur.sec >= 30 || cur.dots.length ? `<div class="stat-grid">${tiles.map(([v, l, d]) => `<div class="stat"><b>${esc(v)}</b><span>${esc(l)}</span>${d}</div>`).join('')}</div>
+    ${focusChartHTML(p, buckets, W, hours)}
+    ${paceChartHTML(p, cur, events, W, hours)}` : `<p class="help">No sessions ${day ? 'on this day' : 'this week'}. Use the arrows to look at another ${p.span}.</p>`}
+    <div class="chart-tip" role="tooltip" hidden></div>`;
+}
+// Only this part redraws when you change the day or week, so the page keeps its place. Charts fit the width there is.
+function renderPerf() {
+  const el = $('#perf'); if (!el) return;
+  const W = Math.max(260, Math.round(el.clientWidth - 40));
+  el.innerHTML = perfHTML(W);
+}
+let perfResize = null;
+window.addEventListener('resize', () => { clearTimeout(perfResize); perfResize = setTimeout(() => { if (state.view === 'history') renderPerf(); }, 150); });
+// One tooltip for every column and dot, by pointer or keyboard. The same words are in each mark's label and the tables.
+function perfTip(e, show) {
+  const box = $('#perf'), tip = box?.querySelector('.chart-tip'), hit = show && e.target.closest?.('#perf [data-tip]');
+  if (!tip) return;
+  if (!hit) { tip.hidden = true; return; }
+  tip.textContent = hit.dataset.tip;
+  tip.hidden = false;
+  // By pointer it sits just above where you're pointing; by keyboard, above the mark.
+  const b = hit.getBoundingClientRect(), o = box.getBoundingClientRect(), w = tip.offsetWidth, mouse = e.type.startsWith('pointer');
+  const x = mouse ? e.clientX : b.left + b.width / 2, y = mouse ? e.clientY : b.top + (hit.tagName === 'rect' ? b.height / 2 : 0);
+  tip.style.left = Math.max(4, Math.min(o.width - w - 4, x - o.left - w / 2)) + 'px';
+  tip.style.top = Math.max(0, y - o.top - tip.offsetHeight - 10) + 'px';
+}
+document.addEventListener('pointermove', e => { if (e.target.closest?.('#perf [data-tip]')) perfTip(e, true); });
+document.addEventListener('pointerout', e => { if (e.target.closest?.('#perf [data-tip]') && !e.relatedTarget?.closest?.('#perf [data-tip]')) perfTip(e, false); });
+document.addEventListener('focusin', e => { if (e.target.closest?.('#perf')) perfTip(e, true); });
+document.addEventListener('focusout', e => { if (e.target.closest?.('#perf [data-tip]')) perfTip(e, false); });
+
 function historyPageHTML() {
   const list = [...state.records.values()].sort((a, b) => b.startedAt - a.startedAt);
   const head = `<div class="brand-row"><button class="btn ghost small" data-act="show-home">${ICON.back}My tasks</button></div><h1>History</h1>`;
   const days = new Map();
   for (const r of list) { const k = dateKey(new Date(r.startedAt)); days.set(k, [...(days.get(k) || []), r]); }
   return `${head}<p class="sub">${list.length ? 'When you work best, and what you’ve done' : 'Nothing here yet'}</p>
+    ${list.length || state.meta.run ? '<h2 class="section-head perf-title">Your performance</h2><section class="perf" id="perf"></section><h2 class="section-head">Over the last 60 days</h2>' : ''}
     ${insightsHTML()}
     <h2 class="section-head">Past sessions</h2>
     ${list.length ? [...days].map(([k, rs]) => `<h3 class="session-day">${esc(fmtDayShort(k))}</h3><ul class="sessions">${rs.map(sessionRowHTML).join('')}</ul>`).join('') : '<p class="help" style="margin-top:8px">Each session you finish will show up here.</p>'}
@@ -4827,7 +5084,15 @@ document.addEventListener('click', e => {
     case 'draft-remove': state.draft.steps.splice(+b.dataset.i, 1); renderDraftSteps(); break;
     case 'show-archive': state.view = 'archive'; render(); window.scrollTo(0, 0); break;
     case 'show-home': state.view = 'home'; render(); window.scrollTo(0, 0); break;
-    case 'show-history': state.view = 'history'; render(); window.scrollTo(0, 0); break;
+    case 'show-history': state.view = 'history'; state.perf = null; render(); window.scrollTo(0, 0); break;
+    case 'perf-span': case 'perf-prev': case 'perf-next': {
+      const p = perfNow(), n = p.span === 'week' ? 7 : 1;
+      state.perf = act === 'perf-span' ? { span: v, at: p.at } : { span: p.span, at: act === 'perf-prev' ? addDays(p.at, -n) : addDays(p.at, n) < dateKey() ? addDays(p.at, n) : dateKey() };
+      renderPerf();
+      const again = $(`#perf [data-act="${act}"]${act === 'perf-span' ? `[data-v="${v}"]` : ''}`);
+      if (again && !again.disabled) again.focus(); else $('#perf .perf-nav b')?.focus?.();
+      break;
+    }
     case 'open-record': state.layer = { type: 'record', id }; renderLayer(true); break;
     case 'open-task': openDetail(id); break;
     case 'add-steps': openDetail(id, true); break;
