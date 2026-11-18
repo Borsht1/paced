@@ -3448,7 +3448,7 @@ function perfHTML(W) {
     <div class="perf-say">${perfSummary(p, cur, prev, buckets, going).map(t => `<p>${esc(t)}</p>`).join('')}</div>
     ${cur.sec >= 30 || cur.dots.length ? `<div class="stat-grid">${tiles.map(([v, l, d]) => `<div class="stat"><b>${esc(v)}</b><span>${esc(l)}</span>${d}</div>`).join('')}</div>
     ${focusChartHTML(p, buckets, W, hours)}
-    ${paceChartHTML(p, cur, events, W, hours)}` : `<p class="help">No sessions ${day ? 'on this day' : 'this week'}. Use the arrows to look at another ${p.span}.</p>`}
+    ${paceChartHTML(p, cur, events, W, hours)}` : `<p class="help">${events.length ? `No sessions ${day ? 'on this day' : 'this week'}. Use the arrows to look at another ${p.span}.` : 'Your graphs show up here after your first session. Start a task, and stop when you’re done.'}</p>`}
     <div class="chart-tip" role="tooltip" hidden></div>`;
 }
 // Only this part redraws when you change the day or week, so the page keeps its place. Charts fit the width there is.
@@ -3483,7 +3483,7 @@ function historyPageHTML() {
   const days = new Map();
   for (const r of list) { const k = dateKey(new Date(r.startedAt)); days.set(k, [...(days.get(k) || []), r]); }
   return `${head}<p class="sub">${list.length ? 'When you work best, and what you’ve done' : 'Nothing here yet'}</p>
-    ${list.length || state.meta.run ? '<h2 class="section-head perf-title">Your performance</h2><section class="perf" id="perf"></section><h2 class="section-head">Over the last 60 days</h2>' : ''}
+    <h2 class="section-head perf-title">Your performance</h2><section class="perf" id="perf"></section><h2 class="section-head">Over the last 60 days</h2>
     ${insightsHTML()}
     <h2 class="section-head">Past sessions</h2>
     ${list.length ? [...days].map(([k, rs]) => `<h3 class="session-day">${esc(fmtDayShort(k))}</h3><ul class="sessions">${rs.map(sessionRowHTML).join('')}</ul>`).join('') : '<p class="help" style="margin-top:8px">Each session you finish will show up here.</p>'}
