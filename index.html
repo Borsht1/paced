@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}body{margin:0;font:14px system-ui}img{max-width:100%}[hidden]{display:none!important}</style></head><body><script src="firebase-config.js"></script>
-<script>window.PACED_BUILT = '2026-11-16 20:53 UTC';</script>
+<script>window.PACED_BUILT = '2026-11-18 18:16 UTC';</script>
 <meta charset="utf-8">
 <title>Paced</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -268,6 +268,18 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .quick-foot .link { font-size: 14px; padding: 0; }
 .quick-hint { margin: 0; min-height: 19px; font-size: 13px; color: var(--muted); }
 .quick-hint b { color: var(--ink); font-weight: 600; }
+.tpl-chips { margin-bottom: 6px; }
+.tpl-chips .chip { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+.chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.templates .task { grid-template-columns: minmax(0, 1fr) auto; padding-left: 12px; }
+.done-head { margin-bottom: 10px; }
+/* A finished task's buttons sit under its name on narrow screens, so the name keeps its room. */
+.done-list .task { grid-template-columns: auto minmax(0, 1fr); }
+.done-list .row-actions { grid-column: 2; flex-wrap: wrap; justify-content: flex-start; padding: 0 0 6px 6px; }
+@media (min-width: 640px) {
+  .done-list .task { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .done-list .row-actions { grid-column: auto; padding: 0; }
+}
 /* A task past its due date gets one calm line with what to do about it */
 .task-ask { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: -6px 0 6px; padding-left: 70px; font-size: 14px; color: var(--warn); }
 .task-ask .link { font-size: 14px; }
@@ -778,7 +790,9 @@ const findStep = (tid, sid) => state.tasks.get(tid)?.steps.find(s => s.id === si
 const elapsedSec = (a, now = Date.now()) => (a.carry || 0) + ((a.pausedAt || now) - a.startedAt - (a.pausedMs || 0)) / 1000;
 // When the running step is meant to end, in seconds of work: your guess at the speed you really work (a.f, from
 // when it started). Asking for more time, or a block you sized on the timeline, sets its own.
-const targetSec = (a, st) => a.target ?? (!a.list && st && st.est ? (planOf(st) ?? st.est * (a.f || 1)) * 60 : null);
+const targetSec = (a, st) => a.target ?? (!a.list && st && st.est ? (planOf(st) ?? st.est * realF(st, a.f || 1)) * 60 : null);
+// Your usual extra time goes on guesses only. Minutes from a template are what the step really took.
+const realF = (st, f) => st.real ? 1 : f;
 // The time you said yes to at a break, in minutes. Changing the guess afterwards goes back to the guess.
 const planOf = st => st?.plan && st.plan.est === st.est ? st.plan.min : null;
 // Past the end the clock turns amber, and red only well past it: a quarter of the plan, at least 5 minutes.
@@ -792,7 +806,7 @@ function stepMinLeft(st) {
   if (!st.est) return 0;
   const a = state.meta.session?.active, live = a && a.stepId === st.id && !a.list;
   // Once begun, what's left goes by the time the timer will give it, so the list and the timer agree.
-  const sec = live ? targetSec(a, st) - elapsedSec(a) : (planOf(st) ?? st.est * timeFactor()) * 60 - (st.spent || 0);
+  const sec = live ? targetSec(a, st) - elapsedSec(a) : (planOf(st) ?? st.est * realF(st, timeFactor())) * 60 - (st.spent || 0);
   return stepBegun(st) ? Math.max(1, Math.ceil(sec / 60)) : st.est;
 }
 const stepMinWords = st => fmtMin(stepMinLeft(st)) + (stepBegun(st) ? ' left' : '');
@@ -834,7 +848,7 @@ function timeFactor() {
   const since = Date.now() - 60 * 864e5, samples = [];
   for (const t of state.tasks.values())
     for (const s of t.steps)
-      if (s.done && s.est && s.actual && !s.rough && (s.doneAt || 0) >= since) samples.push([s.doneAt, clamp(s.actual / 60 / s.est, 0.5, 3)]);
+      if (s.done && s.est && s.actual && !s.rough && !s.real && (s.doneAt || 0) >= since) samples.push([s.doneAt, clamp(s.actual / 60 / s.est, 0.5, 3)]);
   samples.sort((a, b) => a[0] - b[0]);
   const recent = samples.slice(-30).map(x => x[1]);
   const f = recent.length >= 5 ? Math.round(median(recent) * 20) / 20 : 1;
@@ -1362,7 +1376,7 @@ function taskRoom(t, steps = stepsLeft(t)) {
   let min = 0, guess = false;
   for (const st of steps) {
     if (a && a.stepId === st.id) { const el = elapsedSec(a); min += Math.max(0, (targetSec(a, st) ?? el) - el) / 60; }
-    else if (st.est) min += Math.max(1, (planOf(st) ?? st.est * f) - (st.spent || 0) / 60);
+    else if (st.est) min += Math.max(1, (planOf(st) ?? st.est * realF(st, f)) - (st.spent || 0) / 60);
     else { min += isList(t) ? LIST_STEP_MIN * f : NO_EST_MIN; guess = true; } // a checklist plans a little for each
   }
   return { min: Math.max(1, Math.ceil(min)), guess };
@@ -2069,13 +2083,16 @@ function parseQuick(text) {
 }
 function quickHint(text) {
   if (!text.trim()) return '';
-  const q = parseQuick(text);
+  const q = parseQuick(text), x = findTemplate(q.title);
   if (!q.title) return 'Type a name for the task';
+  if (x) return `Uses your template <b>${esc(x.name)}</b>: ${esc(templateWords({ ...x, uses: 0 }))}${q.due ? ` · due ${esc(fmtFullDay(q.due))}` : ''}`;
   return `Adds <b>${esc(q.title)}</b>${q.min ? ` · ${fmtMin(q.min)}` : ' · add minutes like 40m'}${q.due ? ` · due ${esc(fmtFullDay(q.due))}` : ''}`;
 }
 function quickAdd() {
   const el = $('#quick-input'), q = parseQuick(el.value);
   if (!q.title) { el.focus(); return; }
+  const x = findTemplate(q.title);
+  if (x) { quickFromTemplate(x, q.due); return; }
   const t = { id: newId('t'), title: q.title, due: q.due, createdAt: Date.now(), archived: false, completedAt: null,
     steps: [{ id: newId('s'), title: q.title, est: q.min, done: false, actual: null, doneAt: null }] };
   saveTask(t);
@@ -2083,6 +2100,18 @@ function quickAdd() {
   render();
   $('#quick-input')?.focus();
   toast(`Added “${t.title}”`, 'Undo', () => { removeTask(t.id); render(); });
+}
+// The same as the New task sheet would make from the template, without opening it.
+function quickFromTemplate(x, due) {
+  const d = templateDraft(x);
+  const t = { id: newId('t'), title: x.name, due: due || null, createdAt: Date.now(), archived: false, completedAt: null, template: x.id, list: x.list,
+    steps: d.steps.map(st => ({ id: newId('s'), title: st.title, est: st.est || null, ...(st.real && st.est ? { real: true } : {}), done: false, actual: null, doneAt: null })) };
+  state.meta.templates = templates().map(y => y === x ? { ...y, uses: (y.uses || 0) + 1 } : y);
+  saveMeta(); saveTask(t);
+  state.quick = '';
+  render();
+  $('#quick-input')?.focus();
+  toast(`Added “${t.title}” from your template`, 'Undo', () => { removeTask(t.id); state.meta.templates = templates().map(y => y.id === x.id ? { ...y, uses: Math.max(0, (y.uses || 1) - 1) } : y); saveMeta(); render(); });
 }
 const quickHTML = () => `<form class="quick-add" id="quick-add">
     <input id="quick-input" class="text-input" autocomplete="off" enterkeyhint="done" value="${esc(state.quick || '')}" placeholder="Quick add, like “lab 40m fri”" aria-label="Quick add a task. End with minutes like 40m and a day like fri or tomorrow." aria-describedby="quick-hint">
@@ -2612,12 +2641,97 @@ function methodCardHTML() {
   </details></section>`;
 }
 
+/* ----- templates: a finished task kept to do again, with the time each step really took ----- */
+const templates = () => state.meta.templates || [];
+const TPL_RUNS = 5; // each step keeps its last few real times, and plans the middle one
+// A step's minutes: the middle of its real times, so one odd day doesn't throw it off. Never timed: your guess.
+function templateMin(step) {
+  const runs = step.runs || [];
+  if (!runs.length) return step.guess || null;
+  const m = median(runs);
+  return Math.max(1, m >= 30 ? Math.round(m / 5) * 5 : Math.round(m));
+}
+const templateTotal = x => x.steps.reduce((a, st) => a + (templateMin(st) || 0), 0);
+const templateWords = x => [`${x.steps.length} ${x.steps.length === 1 ? 'step' : 'steps'}`, templateTotal(x) ? `about ${fmtMin(templateTotal(x))}` : '', x.uses ? `used ${x.uses} ${x.uses === 1 ? 'time' : 'times'}` : ''].filter(Boolean).join(' · ');
+const findTemplate = name => templates().find(x => x.name.trim().toLowerCase() === String(name).trim().toLowerCase());
+// What a finished step teaches: the minutes it really took, or nothing if it was only ticked off.
+const realMin = st => st.done && st.actual >= 30 ? Math.max(1, Math.round(st.actual / 60)) : null;
+// Adds a finished task's times to a template, matching steps by name. New steps join; ones you dropped stay.
+function mergeTemplate(x, t) {
+  const steps = clone(x.steps);
+  for (const st of t.steps) {
+    const key = st.title.trim().toLowerCase(), min = realMin(st);
+    let row = steps.find(y => y.title.trim().toLowerCase() === key);
+    if (!row) { row = { title: st.title.trim(), guess: st.real ? null : st.est || null, runs: [] }; steps.push(row); }
+    if (min) row.runs = [...row.runs, min].slice(-TPL_RUNS);
+  }
+  // The task's own order comes first, then any steps it didn't have.
+  const order = t.steps.map(st => st.title.trim().toLowerCase());
+  steps.sort((a, b) => (order.indexOf(a.title.toLowerCase()) + 1 || 999) - (order.indexOf(b.title.toLowerCase()) + 1 || 999));
+  return { ...x, steps, list: !!t.list || (t.list == null && x.list) };
+}
+function saveTemplate(id) {
+  const t = state.tasks.get(id); if (!t) return;
+  const before = templates(), old = before.find(x => x.id === t.template) || findTemplate(t.title);
+  const base = old || { id: newId('tp'), name: t.title.trim(), uses: 0, list: isList(t), steps: [] };
+  // A task made from this template has already been learned from when it was finished.
+  const x = old && t.template === old.id && t.learned ? old : mergeTemplate(base, t);
+  state.meta.templates = [...before.filter(y => y !== old), x];
+  t.template = x.id; t.learned = true; saveTask(t);
+  saveMeta(); render();
+  toast(old ? `Updated your “${x.name}” template.` : `Saved “${x.name}” as a template. Next time its steps start at the time they really took.`, 'Undo', () => { state.meta.templates = before; saveMeta(); render(); });
+}
+// Finishing a task made from a template teaches the template, without asking.
+function learnTemplate(t) {
+  const x = t.template && templates().find(y => y.id === t.template);
+  if (!x || t.learned) return false;
+  state.meta.templates = templates().map(y => y === x ? mergeTemplate(x, t) : y);
+  t.learned = true;
+  saveMeta();
+  return true;
+}
+// A new task's steps from a template: the real minutes, marked so they aren't stretched again.
+function templateDraft(x, extra = {}) {
+  return { title: x.name, due: null, plan: null, min: null, split: true, template: x.id, list: x.list,
+    steps: x.steps.map(st => { const est = templateMin(st); return { title: st.title, est, real: !!(st.runs || []).length }; }), ...extra };
+}
+function useTemplate(id, extra) {
+  const x = templates().find(y => y.id === id); if (!x) return;
+  state.draft = templateDraft(x, extra);
+  state.duePick = null;
+  state.layer = { type: 'add' };
+  renderLayer(true);
+  $('#new-title').focus();
+}
+function deleteTemplate(id) {
+  const before = templates(), x = before.find(y => y.id === id); if (!x) return;
+  state.meta.templates = before.filter(y => y !== x);
+  saveMeta(); render();
+  toast(`Deleted the “${x.name}” template.`, 'Undo', () => { state.meta.templates = before; saveMeta(); render(); });
+}
+const templateRunsWords = x => { const n = Math.max(0, ...x.steps.map(st => (st.runs || []).length)); return n ? `Times come from the last ${n === 1 ? 'time' : `${n} times`} you did this.` : 'No timed steps yet, so these are your guesses.'; };
+function templatesHTML() {
+  const list = [...templates()].sort((a, b) => a.name.localeCompare(b.name));
+  if (!list.length) return '';
+  return `<h2 class="section-head">Templates</h2>
+  <p class="help" style="margin:4px 0 10px">Use one to add the task again, with each step’s minutes set to what it really took.</p>
+  <ul class="tasks templates">${list.map(x => `<li class="task">
+      <div class="task-body"><span class="task-title">${esc(x.name)}</span><span class="task-meta">${esc(templateWords(x))}</span></div>
+      <div class="row-actions">
+        <button class="btn ghost small" data-act="tpl-use" data-id="${x.id}">Use</button>
+        <button class="icon-btn" data-act="tpl-del" data-id="${x.id}" title="Delete" aria-label="Delete the “${esc(x.name)}” template">${ICON.trash}</button>
+      </div>
+    </li>`).join('')}</ul>
+  <h2 class="section-head done-head">Finished</h2>`;
+}
+
 function archiveHTML() {
   const list = archivedTasks();
   return `<div class="brand-row"><button class="btn ghost small" data-act="show-home">${ICON.back}My tasks</button></div>
   <h1>Completed tasks</h1>
   <p class="sub">${list.length ? 'Tasks you’ve finished' : 'Nothing here yet'}</p>
-  ${list.length ? `<ul class="tasks">${list.map(t => {
+  ${templatesHTML()}
+  ${list.length ? `<ul class="tasks done-list">${list.map(t => {
     const took = t.steps.reduce((a, s) => a + (s.actual || 0), 0);
     const meta = [t.completedAt ? `Finished ${fmtMonthDay(dateKey(new Date(t.completedAt)))}` : 'Finished'];
     if (t.steps.length) meta.push(`${t.steps.length} ${t.steps.length === 1 ? 'step' : 'steps'}`);
@@ -2626,6 +2740,7 @@ function archiveHTML() {
       <span class="check on" aria-hidden="true"><span>${ICON.check}</span></span>
       <div class="task-body"><span class="task-title">${esc(t.title)}</span><span class="task-meta">${meta.join(' · ')}</span></div>
       <div class="row-actions">
+        <button class="btn ghost small" data-act="tpl-save" data-id="${t.id}" title="Keep this task, with its real times, to add again">${t.template && templates().some(x => x.id === t.template) ? 'Update template' : 'Save as template'}</button>
         <button class="btn ghost small" data-act="restore" data-id="${t.id}" title="Put this task back on your list">Put back</button>
         <button class="icon-btn" data-act="purge" data-id="${t.id}" title="Delete" aria-label="Delete “${esc(t.title)}” for good">${ICON.trash}</button>
       </div>
@@ -3291,7 +3406,11 @@ function renderDraftSteps() {
 }
 
 function addHTML(enter) {
+  const tpls = [...templates()].sort((a, b) => (b.uses || 0) - (a.uses || 0) || a.name.localeCompare(b.name)), from = tpls.find(x => x.id === state.draft.template);
   return `${sheetOpen(enter, 'New task')}${sheetHead('New task')}
+    ${tpls.length ? `<h3 class="label" style="margin-top:4px">Start from a template</h3>
+    <div class="chips tpl-chips">${tpls.map(x => `<button type="button" class="chip${x === from ? ' on' : ''}" data-act="tpl-pick" data-id="${x.id}" aria-pressed="${x === from}">${esc(x.name)}</button>`).join('')}</div>
+    ${from ? `<p class="help">${esc(templateRunsWords(from))}</p>` : ''}` : ''}
     <label class="label" for="new-title">What do you need to do?</label>
     <input id="new-title" class="text-input big" placeholder="Task name" autocomplete="off" value="${esc(state.draft.title)}">
     <p class="err" id="new-err" hidden>Type a name for the task first.</p>
@@ -3303,7 +3422,7 @@ function addHTML(enter) {
     </div>
     <div id="date-cal">${dateCalHTML()}</div>
     ${state.draft.split || state.draft.steps.length ? `<h3 class="label">Steps</h3>
-    <p class="help">Split the task into small pieces. For each one, guess how many minutes it will take.</p>
+    <p class="help">${from ? 'The minutes come from your template. Change any you like.' : 'Split the task into small pieces. For each one, guess how many minutes it will take.'}</p>
     <div id="draft-steps">${draftStepsHTML()}</div>
     <form class="step-add" id="draft-add">
       <input id="draft-step" class="text-input" placeholder="Step name" autocomplete="off" aria-label="Step name">
@@ -3476,7 +3595,7 @@ function planLine(a, st, el = elapsedSec(a)) {
     const past = el - target, share = Math.max(1, Math.round(past / target * 100));
     return `${fmtMin(Math.max(1, Math.floor(past / 60)))} past the ${fmtMin(target / 60)} plan${target >= 3600 && past <= calmSec(target) ? `, about ${share}%. That’s normal` : ''}`;
   }
-  const real = planOf(st) ? `. You planned this at your break` : a.target == null && (a.f || 1) > 1 ? `. You guessed ${fmtMin(st.est)}, and your steps usually take ${Math.round((a.f - 1) * 100)}% longer` : '';
+  const real = planOf(st) ? `. You planned this at your break` : st.real && a.target == null ? '. From your template: what it really took' : a.target == null && (a.f || 1) > 1 ? `. You guessed ${fmtMin(st.est)}, and your steps usually take ${Math.round((a.f - 1) * 100)}% longer` : '';
   return `Planned: ${fmtMin(target / 60)}${what}${a.pausedAt ? '' : ` · done by ${fmtTime(Date.now() + (target - el) * 1000)}`}${real}`;
 }
 
@@ -4393,11 +4512,18 @@ function saveNew() {
   const title = state.draft.title.trim();
   if (!title) { $('#new-err').hidden = false; $('#new-title').focus(); return; }
   // With no steps, the task is one step of its own, so Start works straight away.
-  const steps = state.draft.steps.filter(s => s.title.trim()).map(s => ({ title: s.title.trim(), est: s.est || null }));
+  const steps = state.draft.steps.filter(s => s.title.trim()).map(s => ({ title: s.title.trim(), est: s.est || null, ...(s.real && s.est ? { real: true } : {}) }));
   const t = {
     id: newId('t'), title, due: isKey(state.draft.due) ? state.draft.due : null, createdAt: Date.now(), archived: false, completedAt: null,
     steps: (steps.length ? steps : [{ title, est: state.draft.min || null }]).map(s => ({ id: newId('s'), ...s, done: false, actual: null, doneAt: null }))
   };
+  const tpl = state.draft.template && templates().find(x => x.id === state.draft.template);
+  if (tpl) {
+    t.template = tpl.id;
+    if (state.draft.list != null) t.list = state.draft.list;
+    state.meta.templates = templates().map(x => x === tpl ? { ...x, uses: (x.uses || 0) + 1 } : x);
+    saveMeta();
+  }
   saveTask(t);
   // A draft can wait a while, so the day or time picked for it may have gone by. The message says where it really went.
   const ask = state.draft.plan, plan = ask && ask.date >= dateKey() ? ask : null;
@@ -4412,13 +4538,13 @@ function saveNew() {
   toast(msg);
 }
 
-function archiveToast(t, before) {
-  toast(`Nice! “${t.title}” is done and moved to Completed tasks.`, 'Undo', () => { saveTask(before); render(); if (state.layer) renderLayer(); });
+function archiveToast(t, before, learned) {
+  toast(`Nice! “${t.title}” is done and moved to Completed tasks.${learned ? ' Template updated.' : ''}`, 'Undo', () => { saveTask(before); render(); if (state.layer) renderLayer(); });
 }
 function maybeArchive(t, before) {
   if (t.archived || !t.steps.length || !t.steps.every(s => s.done)) return false;
   t.archived = true; t.completedAt = Date.now();
-  archiveToast(t, before);
+  archiveToast(t, before, learnTemplate(t));
   return true;
 }
 
@@ -4629,7 +4755,7 @@ function startStep(taskId, stepId) {
   if (!st.est) { state.ask = { type: 'estimate', taskId, stepId }; closeGap(s); s.lastAt = Date.now(); saveMeta(); render(); return; }
   state.ask = null;
   closeGap(s);
-  const carry = st.spent || 0, set = blockTarget(state.tasks.get(taskId), st, carry), f = timeFactor(), plan = (planOf(st) ?? st.est * f) * 60;
+  const carry = st.spent || 0, set = blockTarget(state.tasks.get(taskId), st, carry), f = timeFactor(), plan = (planOf(st) ?? st.est * realF(st, f)) * 60;
   // Time already spent comes off the plan. A step that's already past its plan gets 10 more minutes.
   // A block you made longer or shorter on the timeline runs for the time you gave it, and stays out of your speed.
   s.active = { taskId, stepId, startedAt: Date.now(), pausedMs: 0, pausedAt: null, carry, f, target: set ?? (carry >= plan ? carry + 600 : null), alerts: 0, estLow: set != null };
@@ -4640,10 +4766,10 @@ function startStep(taskId, stepId) {
 // One timer for the steps left. Time already spent on them carries in, and "mark" is where the last tick was.
 function startList(t, st) {
   const s = state.meta.session, left = stepsLeft(t), f = timeFactor();
-  const carry = left.reduce((x, y) => x + (y.spent || 0), 0), min = left.reduce((x, y) => x + (y.est || LIST_STEP_MIN), 0);
+  const carry = left.reduce((x, y) => x + (y.spent || 0), 0), min = left.reduce((x, y) => x + (y.est ? y.est * realF(y, f) : LIST_STEP_MIN * f), 0);
   state.ask = null;
   closeGap(s);
-  s.active = { taskId: t.id, stepId: st.id, list: true, mark: carry, startedAt: Date.now(), pausedMs: 0, pausedAt: null, carry, f, target: carry + min * 60 * f, alerts: 0, estLow: true };
+  s.active = { taskId: t.id, stepId: st.id, list: true, mark: carry, startedAt: Date.now(), pausedMs: 0, pausedAt: null, carry, f, target: carry + min * 60, alerts: 0, estLow: true };
   s.lastAt = Date.now();
   saveMeta(); render();
 }
@@ -4937,7 +5063,7 @@ function setEstimateAndStart(n) {
   const { taskId, stepId } = state.ask;
   const t = state.tasks.get(taskId), st = findStep(taskId, stepId);
   if (!st) return;
-  st.est = clamp(n, 1, 600); saveTask(t);
+  st.est = clamp(n, 1, 600); delete st.real; saveTask(t);
   state.ask = null;
   if (document.activeElement) document.activeElement.blur();
   startStep(taskId, stepId);
@@ -5373,6 +5499,16 @@ document.addEventListener('click', e => {
     case 'open-notes': openNotes(); break;
     case 'note-task': noteToTask(id); break;
     case 'note-del': deleteNote(id); break;
+    case 'tpl-save': saveTemplate(id); break;
+    case 'tpl-use': useTemplate(id); break;
+    case 'tpl-del': deleteTemplate(id); break;
+    case 'tpl-pick': {
+      const keep = state.draft && { due: state.draft.due, plan: state.draft.plan };
+      if (state.draft?.template === id) { state.draft = { ...state.draft, template: null, list: null, real: null }; renderLayer(); break; } // pressed again: keep what's typed, drop the template
+      useTemplate(id, keep || {});
+      $(`#layer [data-act="tpl-pick"][data-id="${id}"]`)?.focus();
+      break;
+    }
     case 'debug-tab': state.debugTab = v; renderDebugList(); break;
     case 'debug-del': deleteDebugNote(id); break;
     case 'open-schedules': state.layer = { type: 'schedules' }; state.duePick = null; state.schedLoad = null; state.schedAsk = null; renderLayer(true); break;
@@ -5515,7 +5651,7 @@ document.addEventListener('input', e => {
   else if ((el.id === 'split-min' || el.id === 'forgot-min') && state.ask) state.ask.min = parseMin(el.value);
   else if (el.dataset.draft) {
     const d = state.draft.steps[+el.dataset.i]; if (!d) return;
-    if (el.dataset.draft === 'title') d.title = el.value; else d.est = parseMin(el.value);
+    if (el.dataset.draft === 'title') d.title = el.value; else { d.est = parseMin(el.value); delete d.real; }
     $('#draft-total').textContent = draftTotal();
   }
 });
@@ -5550,6 +5686,7 @@ document.addEventListener('change', e => {
     else {
       const n = parseMin(el.value), a = state.meta.session && state.meta.session.active;
       if (n !== st.est && a && a.stepId === st.id) { a.estLow = true; saveMeta(); } // the plan changed mid-step
+      if (n !== st.est) delete st.real;
       st.est = n; el.value = n ?? '';
     }
     saveTask(t);
@@ -5572,7 +5709,9 @@ document.addEventListener('change', e => {
     if (n) st.actual = n * 60;
     el.value = Math.max(1, Math.round(st.actual / 60));
   } else {
-    st.est = parseMin(el.value);
+    const n = parseMin(el.value);
+    if (n !== st.est) delete st.real;
+    st.est = n;
     el.value = st.est ?? '';
   }
   saveTask(t);
