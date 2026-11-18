@@ -114,6 +114,23 @@ button.check:hover > span { border-color: var(--zone); color: var(--zone); }
 .grip { width: 22px; align-self: stretch; display: grid; place-items: center; color: var(--muted); opacity: .55; touch-action: none; }
 .task.can-plan .task-body { cursor: inherit; }
 .task-acts { display: flex; align-items: center; gap: 2px; }
+.play { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border: none; border-radius: 50%; background: var(--accent-soft); color: var(--accent); padding: 0; }
+.play svg { width: 14px; height: 14px; margin-left: 2px; }
+.play:hover { background: var(--accent); color: var(--accent-ink, var(--surface)); }
+.play.live .dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; animation: pulse 1.6s ease-in-out infinite; }
+.live-word { color: var(--accent); font-weight: 600; }
+.task.can-plan { grid-template-columns: auto minmax(0, 1fr) auto; padding-left: 6px; }
+.done-row { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: 12px; padding: 14px 16px; border: none; border-radius: var(--r); background: transparent; color: var(--muted); font-weight: 600; font-size: 15px; text-align: left; }
+.done-row:hover { background: var(--surface); color: var(--ink); }
+.done-row svg { transform: rotate(180deg); }
+#day.folded { padding: 0; }
+.day-fold { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; width: 100%; padding: 14px 16px; border: none; border-radius: var(--r); background: transparent; color: var(--ink); text-align: left; }
+.day-fold-name { font: 700 18px/1.2 var(--font-display); }
+.day-fold-sum { min-width: 0; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.day-fold-sum b { color: var(--stop); font-weight: 600; }
+.day-fold-chev { color: var(--muted); display: grid; }
+.day-fold-btn { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: none; background: none; color: inherit; font: inherit; cursor: pointer; }
+.day-fold-btn svg { color: var(--muted); transform: rotate(180deg); }
 .task-toggle { width: 32px; height: 32px; }
 .task-toggle svg { transition: transform .15s; }
 .task-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
@@ -263,13 +280,23 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .quick-add { display: flex; gap: 8px; margin: 0 0 6px; }
 .quick-add .text-input { flex: 1; min-width: 0; }
 .quick-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; margin: 0 0 12px 4px; }
+.quick-hint:empty { min-height: 0; }
 .quick-foot .link { font-size: 14px; padding: 0; }
 .quick-hint { margin: 0; min-height: 19px; font-size: 13px; color: var(--muted); }
 .quick-hint b { color: var(--ink); font-weight: 600; }
 .tpl-chips { margin-bottom: 6px; }
 .tpl-chips .chip { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
 .chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
-.templates .task { grid-template-columns: minmax(0, 1fr) auto; padding-left: 12px; }
+.templates .task { grid-template-columns: minmax(0, 1fr); padding-left: 12px; }
+.templates .row-actions { flex-wrap: wrap; justify-content: flex-start; padding-bottom: 6px; }
+@media (min-width: 640px) {
+  .templates .task { grid-template-columns: minmax(0, 1fr) auto; }
+  .templates .row-actions { padding-bottom: 0; }
+}
+.tpl-repeat { grid-column: 1 / -1; display: grid; gap: 8px; padding: 4px 0 8px; }
+.tpl-repeat p { margin: 0; font-size: 14px; }
+.tpl-repeat .chips { gap: 6px; }
+.tpl-repeat .chip { padding: 8px 12px; font-size: 14px; }
 .done-head { margin-bottom: 10px; }
 /* A finished task's buttons sit under its name on narrow screens, so the name keeps its room. */
 .done-list .task { grid-template-columns: auto minmax(0, 1fr); }
@@ -279,7 +306,7 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
   .done-list .row-actions { grid-column: auto; padding: 0; }
 }
 /* A task past its due date gets one calm line with what to do about it */
-.task-ask { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: -6px 0 6px; padding-left: 70px; font-size: 14px; color: var(--warn); }
+.task-ask { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: -6px 0 6px; padding-left: 52px; font-size: 14px; color: var(--warn); }
 .task-ask .link { font-size: 14px; }
 @media (max-width: 400px) {
   .task-ask { padding-left: 16px; }
@@ -2100,10 +2127,13 @@ function quickAdd() {
   toast(`Added “${t.title}”`, 'Undo', () => { removeTask(t.id); render(); });
 }
 // The same as the New task sheet would make from the template, without opening it.
-function quickFromTemplate(x, due) {
+function taskFromTemplate(x, due, id = newId('t')) {
   const d = templateDraft(x);
-  const t = { id: newId('t'), title: x.name, due: due || null, createdAt: Date.now(), archived: false, completedAt: null, template: x.id, list: x.list,
+  return { id, title: x.name, due: due || null, createdAt: Date.now(), archived: false, completedAt: null, template: x.id, list: x.list,
     steps: d.steps.map(st => ({ id: newId('s'), title: st.title, est: st.est || null, ...(st.real && st.est ? { real: true } : {}), done: false, actual: null, doneAt: null })) };
+}
+function quickFromTemplate(x, due) {
+  const t = taskFromTemplate(x, due);
   state.meta.templates = templates().map(y => y === x ? { ...y, uses: (y.uses || 0) + 1 } : y);
   saveMeta(); saveTask(t);
   state.quick = '';
@@ -2112,25 +2142,23 @@ function quickFromTemplate(x, due) {
   toast(`Added “${t.title}” from your template`, 'Undo', () => { removeTask(t.id); state.meta.templates = templates().map(y => y.id === x.id ? { ...y, uses: Math.max(0, (y.uses || 1) - 1) } : y); saveMeta(); render(); });
 }
 const quickHTML = () => `<form class="quick-add" id="quick-add">
-    <input id="quick-input" class="text-input" autocomplete="off" enterkeyhint="done" value="${esc(state.quick || '')}" placeholder="Quick add, like “lab 40m fri”" aria-label="Quick add a task. End with minutes like 40m and a day like fri or tomorrow." aria-describedby="quick-hint">
+    <input id="quick-input" class="text-input" autocomplete="off" enterkeyhint="done" value="${esc(state.quick || '')}" placeholder="Add a task" aria-label="Add a task. You can end it with minutes like 40m and a day like fri." aria-describedby="quick-hint">
     <button type="submit" class="btn primary">${ICON.plus}Add</button>
   </form>
   <div class="quick-foot"><p class="quick-hint" id="quick-hint" aria-live="polite">${quickHint(state.quick || '')}</p>
-    <button type="button" class="link" data-act="open-add">${draftHas(state.draft) ? 'Finish your draft' : 'More details'}</button></div>`;
+    ${draftHas(state.draft) ? '<button type="button" class="link" data-act="open-add">Finish your draft</button>' : ''}</div>`;
 
 function homeSub(list) {
   const left = list.reduce((a, t) => a + minLeft(t), 0);
   return `${list.length} ${list.length === 1 ? 'task' : 'tasks'}${left ? ` · about ${fmtMin(left)} of work` : ''}`;
 }
 function homeHTML() {
-  const list = activeTasks(), done = archivedTasks().length;
-  const doneLink = done ? `<button class="link done-link" data-act="show-archive">${ICON.check}Completed tasks<span class="count">${done}</span></button>` : '';
-  return `<div class="title-row"><h1>My tasks</h1>${list.length ? `<div class="row-actions"><button class="btn ghost small" data-act="open-import">Import</button></div>` : ''}</div>
-  ${list.length ? `<p class="sub" data-left="all">${homeSub(list)}</p>
-  ${quickHTML()}
-  <ul class="tasks">${list.map(taskHTML).join('')}</ul>
-  ${doneLink}
-  ${methodCardHTML()}` : `
+  const list = activeTasks(), done = archivedTasks().length, lay = list.length ? layoutDay() : null;
+  const doneLink = done ? `<button class="done-row" data-act="show-archive"><span>Completed (${done})</span>${ICON.back}</button>` : '';
+  return `<div class="title-row"><h1>My tasks</h1></div>
+  ${list.length ? `${quickHTML()}
+  <ul class="tasks">${list.map(t => taskHTML(t, lay)).join('')}</ul>
+  ${doneLink}` : `
   <p class="sub">Nothing to do yet</p>
   ${quickHTML()}
   <section class="empty">
@@ -2273,7 +2301,7 @@ function dayWords(lay) {
 
 function dayHeadHTML(lay, gaps) {
   return `<div class="day-head">
-      <h2>Today</h2>
+      <h2><button class="day-fold-btn" data-act="day-fold" aria-expanded="true" title="Fold the timeline to one line">Today${ICON.down}</button></h2>
       <p class="day-sum">${dayWords(lay)}</p>
       <div class="day-tools">
         ${gaps ? '<button class="link small" data-act="plan-tidy" title="Everything fits if tasks start sooner">Move tasks earlier</button>' : ''}
@@ -2443,10 +2471,34 @@ function renderSlots(lay, quiet) {
   });
 }
 
+// Folded, the day is one line: what's planned and what's next. Open, it's the full timeline. Each device remembers which.
+const DAY_OPEN_KEY = 'paced:dayopen';
+let dayOpen = false;
+try { dayOpen = localStorage.getItem(DAY_OPEN_KEY) === '1'; } catch (e) {}
+function setDayOpen(open) {
+  dayOpen = open;
+  try { localStorage.setItem(DAY_OPEN_KEY, open ? '1' : '0'); } catch (e) {}
+  daySel = null;
+  renderDay();
+  $(open ? '#day [data-act="day-fold"]' : '#day [data-act="day-unfold"]')?.focus();
+}
+function dayFoldHTML() {
+  const lay = layoutDay(), next = lay.blocks.find(b => !b.item.front && stepsLeft(b.task).length), now = minuteNow();
+  const nextWords = next ? `Next: ${esc(blockName(next))}${next.start > now + 1 ? ` at ${clockAt(next.start)}` : ''}` : 'Nothing planned yet';
+  // Folded, it says what's planned (or over), not every number the open timeline shows.
+  const planned = lay.lateMin >= 1 ? `${fmtMin(lay.planMin)} planned, <b>${fmtMin(lay.lateMin)} over</b>` : lay.planMin >= 1 ? `${fmtMin(lay.planMin)} planned` : `${fmtMin(Math.max(0, lay.freeMin))} free`;
+  return `<button class="day-fold" data-act="day-unfold" aria-expanded="false" aria-label="Today: show the timeline">
+      <span class="day-fold-name">Today</span>
+      <span class="day-fold-sum">${planned} · ${nextWords}</span>
+      <span class="day-fold-chev" aria-hidden="true">${ICON.down}</span>
+    </button>`;
+}
 function renderDay(how) {
   const el = $('#day'), show = state.ready && Store.mode !== 'signin' && state.view === 'home' && !state.focusOpen && activeTasks().length > 0, wasHidden = el.hidden;
   el.hidden = !show;
   if (!show) { daySel = null; return; }
+  el.classList.toggle('folded', !dayOpen);
+  if (!dayOpen) { daySel = null; el.innerHTML = dayFoldHTML(); return; }
   const scroller = $('.rail-scroll');
   if (scroller && !wasHidden) railScrolled(scroller); // the browser may not have told us about the latest scroll yet
   el.style.setProperty('--rail-h', `${railH}px`);
@@ -2583,39 +2635,38 @@ function taskMeta(t) {
 function showMinLeft() {
   const a = state.meta.session?.active, t = a && state.tasks.get(a.taskId), row = t && $(`#main [data-left="${t.id}"]`);
   if (!row) return;
-  row.textContent = taskMeta(t);
+  row.textContent = minWords(t);
   const sub = $('#main [data-left="all"]');
   if (sub) sub.textContent = homeSub(activeTasks());
 }
-function taskHTML(t) {
-  const total = t.steps.length, done = total - stepsLeft(t).length, left = minLeft(t), meta = taskMeta(t);
-  const live = state.meta.session?.active?.taskId === t.id, due = dueInfo(t), when = plannedOf(t.id), later = when && when.date > dateKey() ? when : null;
+// The one grey line under a task: time left, steps, and when. Its minutes count down while the task runs.
+const minWords = t => { const a = state.meta.session?.active, left = minLeft(t); return left ? fmtMin(left) + (stepsLeft(t).some(stepBegun) || (a?.list && a.taskId === t.id) ? ' left' : '') : ''; };
+function taskLine(t, lay) {
+  const total = t.steps.length, todo = stepsLeft(t).length, when = plannedOf(t.id), due = dueInfo(t), parts = [], min = minWords(t);
+  if (min) parts.push(`<span data-left="${t.id}">${esc(min)}</span>`);
+  if (total > 1) parts.push(todo < total ? `${total - todo} of ${total} steps` : `${total} steps`);
+  else if (!total) parts.push('No steps yet');
+  const b = lay && when?.date === dateKey() ? lay.blocks.find(x => x.task.id === t.id && !x.step) : null;
+  if (b) parts.push(b.start > minuteNow() + 1 ? `Today at ${clockAt(b.start)}` : 'Today');
+  else if (when && when.date > dateKey()) parts.push(esc(planWords(when)));
+  if (t.due && !due?.past) parts.push(dueHTML(t));
+  return parts.join(' · ');
+}
+function taskHTML(t, lay) {
+  const total = t.steps.length, left = minLeft(t), live = state.meta.session?.active?.taskId === t.id, due = dueInfo(t);
   // With nothing left to do there's nothing to start, so the button is for adding more.
   const action = !total || (!left && !stepsLeft(t).length && !live)
     ? `<button class="btn ghost small" data-act="add-steps" data-id="${t.id}">${total ? 'Add a step' : 'Add steps'}</button>`
-    : `<button class="btn soft small start" data-act="focus-task" data-id="${t.id}" aria-label="${live ? 'Open the timer for' : 'Start working on'} “${esc(t.title)}”">${live ? 'Open timer' : ICON.play + '<span class="start-word">Start</span>'}</button>`;
-  const todo = stepsLeft(t), open = openSteps.has(t.id) && todo.length;
-  const toggle = todo.length ? `<button class="icon-btn task-toggle" data-act="toggle-steps" data-id="${t.id}" title="${open ? 'Hide steps' : 'Show steps to drag onto the timeline'}" aria-label="${open ? 'Hide' : 'Show'} the steps of “${esc(t.title)}”" aria-expanded="${!!open}">${ICON.chev}</button>` : '';
-  const lay = open ? layoutDay() : null;
-  const steps = open ? `<ul class="task-steps">${todo.map(st => {
-    const on = lay.blocks.find(b => b.step?.id === st.id);
-    return `<li class="tstep" data-drag="step" data-id="${t.id}" data-step="${st.id}" title="Drag onto the timeline">
-      <span class="grip">${ICON.grip}</span><span>${esc(st.title)}</span><small>${on ? clockAt(on.start) : st.est ? stepMinWords(st) : ''}</small>
-    </li>`;
-  }).join('')}</ul>` : '';
-  return `<li class="task can-plan" data-drag="task" data-id="${t.id}">
-    <span class="grip" title="Drag onto the timeline">${ICON.grip}</span>
+    : `<button class="play${live ? ' live' : ''} start" data-act="focus-task" data-id="${t.id}" title="${live ? 'Open the timer' : 'Start'}" aria-label="${live ? 'Open the timer for' : 'Start'} “${esc(t.title)}”">${live ? '<span class="dot"></span>' : ICON.play}</button>`;
+  // Like a to-do list: a circle, the name, one grey line, and Start. Steps are inside, when you open it.
+  return `<li class="task can-plan" data-drag="task" data-id="${t.id}" title="Drag onto Today to plan it">
     <button class="check" data-act="complete-task" data-id="${t.id}" title="Mark the whole task as done" aria-label="Mark “${esc(t.title)}” as done"><span>${ICON.check}</span></button>
     <button class="task-body" data-act="open-task" data-id="${t.id}">
       <span class="task-title">${esc(t.title)}</span>
-      <span class="task-meta"><span data-left="${t.id}">${meta}</span>${t.due && !due?.past ? ' · ' + dueHTML(t) : ''}${later ? ` · Planned ${esc(planWords(later))}` : ''}</span>
-      ${live ? '<span class="badge"><span class="dot"></span>Working on this now</span>' : ''}
-      ${done ? `<span class="bar" aria-hidden="true"><i style="width:${Math.round(done / total * 100)}%"></i></span>` : ''}
+      <span class="task-meta">${live ? '<span class="live-word">Working on this now</span> · ' : ''}${taskLine(t, lay)}</span>
     </button>
-    <div class="task-acts">${toggle}${action}</div>
+    <div class="task-acts">${action}</div>
     ${due?.past ? `<div class="task-ask"><span>${esc(due.text)}</span><button class="link" data-act="due-today" data-id="${t.id}">Move to today</button></div>` : ''}
-    ${steps}
-    <div class="task-slot" data-slot="${t.id}" hidden></div>
   </li>`;
 }
 
@@ -2708,17 +2759,77 @@ function deleteTemplate(id) {
   toast(`Deleted the “${x.name}” template.`, 'Undo', () => { state.meta.templates = before; saveMeta(); render(); });
 }
 const templateRunsWords = x => { const n = Math.max(0, ...x.steps.map(st => (st.runs || []).length)); return n ? `Times come from the last ${n === 1 ? 'time' : `${n} times`} you did this.` : 'No timed steps yet, so these are your guesses.'; };
+/* ----- repeating templates: Paced adds the task by itself on the days you pick ----- */
+const jsDay = i => (i + 1) % 7; // WEEK_DAYS starts on Monday; Date.getDay() starts on Sunday
+const repeatWords = r => r?.days?.length ? (r.days.length === 7 ? 'Repeats every day' : `Repeats ${[0, 1, 2, 3, 4, 5, 6].filter(i => r.days.includes(jsDay(i))).map(i => WEEK_DAYS[i]).join(', ')}`) : '';
+// The latest repeat day up to today that hasn't had its task yet, or null. A day missed while Paced was closed still gets
+// its task, due that day, but only the latest one, so a week away doesn't come back as a pile.
+function repeatDue(x, today = dateKey()) {
+  const r = x.repeat; if (!r?.days?.length) return null;
+  for (let i = 0; i < 7; i++) {
+    const k = addDays(today, -i);
+    if (k < r.since || (r.last && k <= r.last)) return null;
+    if (r.days.includes(keyDate(k).getDay())) return k;
+  }
+  return null;
+}
+function checkRepeats() {
+  if (!state.ready || Store.mode === 'signin') return;
+  const today = dateKey(), made = [];
+  let changed = false;
+  for (const x of templates()) {
+    const k = repeatDue(x, today); if (!k) continue;
+    // The same id on every device, so two computers open on a Monday make one task, not two.
+    const id = `t_rep_${x.id}_${k}`, fresh = !state.tasks.has(id);
+    if (fresh) {
+      saveTask(taskFromTemplate(x, k, id));
+      if (k === today) setPlan(id, today, null);
+      made.push(x.name);
+    }
+    state.meta.templates = templates().map(y => y.id === x.id ? { ...y, uses: (y.uses || 0) + (fresh ? 1 : 0), repeat: { ...y.repeat, last: k } } : y);
+    changed = true;
+  }
+  if (!changed) return;
+  saveMeta();
+  if (made.length) { render(); toast(made.length === 1 ? `Added “${made[0]}” from your repeating template.` : `Added ${made.length} tasks from your repeating templates.`); }
+}
+// Picking days starts tomorrow, so a task you already have for today isn't added twice.
+function toggleRepeatDay(id, day) {
+  const x = templates().find(y => y.id === id); if (!x) return;
+  const days = x.repeat?.days || [], next = days.includes(day) ? days.filter(d => d !== day) : [...days, day].sort();
+  const repeat = next.length ? { days: next, since: x.repeat?.since || addDays(dateKey(), 1), last: x.repeat?.last || null } : null;
+  state.meta.templates = templates().map(y => y === x ? { ...y, repeat } : y);
+  saveMeta(); render();
+  $(`#main [data-act="tpl-day"][data-id="${id}"][data-v="${day}"]`)?.focus();
+}
+// The next day a repeating template adds its task.
+function nextRepeat(x) {
+  const r = x.repeat, from = [r.since, r.last ? addDays(r.last, 1) : '', dateKey()].sort().pop();
+  for (let i = 0; i < 7; i++) { const k = addDays(from, i); if (r.days.includes(keyDate(k).getDay())) return k; }
+  return from;
+}
+function repeatHTML(x) {
+  return `<div class="tpl-repeat">
+    <p>Add it by itself on these days, put on that day’s timeline:</p>
+    <div class="chips">${[0, 1, 2, 3, 4, 5, 6].map(i => { const d = jsDay(i), on = !!x.repeat?.days?.includes(d); return `<button class="chip${on ? ' on' : ''}" data-act="tpl-day" data-id="${x.id}" data-v="${d}" aria-pressed="${on}">${WEEK_DAYS[i]}</button>`; }).join('')}</div>
+    <p class="muted">${x.repeat?.days?.length ? `Next one: ${dayName(nextRepeat(x)).replace(/^T/, 't')}. Tap a day again to stop.` : 'Pick one or more days.'}</p>
+    <div class="row"><button class="btn small" data-act="tpl-repeat" data-id="${x.id}">Done</button></div>
+  </div>`;
+}
+
 function templatesHTML() {
   const list = [...templates()].sort((a, b) => a.name.localeCompare(b.name));
   if (!list.length) return '';
   return `<h2 class="section-head">Templates</h2>
   <p class="help" style="margin:4px 0 10px">Use one to add the task again, with each step’s minutes set to what it really took.</p>
   <ul class="tasks templates">${list.map(x => `<li class="task">
-      <div class="task-body"><span class="task-title">${esc(x.name)}</span><span class="task-meta">${esc(templateWords(x))}</span></div>
+      <div class="task-body"><span class="task-title">${esc(x.name)}</span><span class="task-meta">${esc([templateWords(x), repeatWords(x.repeat)].filter(Boolean).join(' · '))}</span></div>
       <div class="row-actions">
+        <button class="btn ghost small" data-act="tpl-repeat" data-id="${x.id}" aria-expanded="${state.tplRepeat === x.id}">${x.repeat?.days?.length ? 'Repeating' : 'Repeat'}</button>
         <button class="btn ghost small" data-act="tpl-use" data-id="${x.id}">Use</button>
         <button class="icon-btn" data-act="tpl-del" data-id="${x.id}" title="Delete" aria-label="Delete the “${esc(x.name)}” template">${ICON.trash}</button>
       </div>
+      ${state.tplRepeat === x.id ? repeatHTML(x) : ''}
     </li>`).join('')}</ul>
   <h2 class="section-head done-head">Finished</h2>`;
 }
@@ -3005,6 +3116,9 @@ function lookHTML(enter) {
     <p class="help" style="margin-top:8px">Auto matches your device.</p>
     <h3 class="label">Color</h3>
     <div class="swatches">${Object.entries(COLORS).map(([id, c]) => `<button class="swatch${color === id ? ' on' : ''}" data-act="look-color" data-v="${id}" aria-pressed="${color === id}"><i style="background:${c.light[0]}">${color === id ? ICON.check : ''}</i>${c.name}</button>`).join('')}</div>
+    <h3 class="label">Import</h3>
+    <p class="help">Bring in tasks from Google Tasks, or paste a list.</p>
+    <button class="btn ghost" data-act="open-import">Import tasks</button>
     ${connectedHTML()}
     ${Account.fb ? `<h3 class="label">Account</h3>
     ${Account.user
@@ -3563,7 +3677,7 @@ function methodPickHTML(s) {
   return `<section class="ask-card">
     <h2>How do you want to work?</h2>
     <p>Try each one a few times. Paced compares how fast you work with each, so you can see what suits you.</p>
-    <div class="methods">${METHODS.map(x => `<button class="method-opt${x.id === cur ? ' on' : ''}" data-act="method-pick" data-v="${x.id}" aria-pressed="${x.id === cur}"><b>${esc(x.name)}</b><span>${esc(x.short)}</span></button>`).join('')}</div>
+    <div class="methods">${methodStats().map(x => `<button class="method-opt${x.id === cur ? ' on' : ''}" data-act="method-pick" data-v="${x.id}" aria-pressed="${x.id === cur}"><b>${esc(x.name)}</b><span>${esc(x.short)}</span><span class="method-tally">${x.sessions >= 3 && x.speed != null ? `You finish ${vsGuess(x.speed)}` : x.sessions ? `Used ${x.sessions} of 3 times` : 'Not tried yet'}</span></button>`).join('')}</div>
     <div class="row"><button class="btn ghost" data-act="method-cancel">Keep the one I’m using</button></div>
   </section>`;
 }
@@ -5207,6 +5321,7 @@ function lift(p, x, y) {
   clearTimeout(p.timer);
   daySel = null;
   const d = p.src.dataset;
+  if (!dayOpen && d.drag) { dayOpen = true; renderDay('quiet'); } // stays open after, until you fold it
   const started = d.grow ? liftGrow(d.grow, p.x) : d.size ? liftSize(p.y) : d.edge ? liftEdge(+d.i, d.edge) : d.drag ? liftItem(p.src) : liftSelect(p.x);
   if (!started) return;
   const { home, end, pxPerMin } = railView;
@@ -5497,9 +5612,19 @@ document.addEventListener('click', e => {
     case 'open-notes': openNotes(); break;
     case 'note-task': noteToTask(id); break;
     case 'note-del': deleteNote(id); break;
+    case 'day-unfold': setDayOpen(true); break;
+    case 'day-fold': setDayOpen(false); break;
     case 'tpl-save': saveTemplate(id); break;
     case 'tpl-use': useTemplate(id); break;
     case 'tpl-del': deleteTemplate(id); break;
+    case 'tpl-repeat': {
+      const open = state.tplRepeat === id;
+      state.tplRepeat = open ? null : id;
+      render();
+      $(`#main [data-act="${open ? 'tpl-repeat' : 'tpl-day'}"][data-id="${id}"]`)?.focus();
+      break;
+    }
+    case 'tpl-day': toggleRepeatDay(id, +v); break;
     case 'tpl-pick': {
       const keep = state.draft && { due: state.draft.due, plan: state.draft.plan };
       if (state.draft?.template === id) { state.draft = { ...state.draft, template: null, list: null, real: null }; renderLayer(); break; } // pressed again: keep what's typed, drop the template
@@ -5981,6 +6106,7 @@ function tick() {
   const minute = Math.floor(Date.now() / 60000);
   if (minute !== lastMinute) {
     lastMinute = minute;
+    checkRepeats(); // a repeat day can begin while Paced is open
     if (expireIdleSession()) { render(); return; }
     if (m.session?.active && !m.session.active.pausedAt) checkBreakDue(m.session);
     tickPlan(m);
@@ -5997,6 +6123,7 @@ Store.init().then(() => {
   clearStale();
   state.ready = true;
   render();
+  checkRepeats();
   if (new URLSearchParams(location.search).has('debug')) openDebug(); // waits for the tester check if it's still going
 });
 </script>
