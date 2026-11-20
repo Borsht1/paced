@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}body{margin:0;font:14px system-ui}img{max-width:100%}[hidden]{display:none!important}</style></head><body><script src="firebase-config.js"></script>
-<script>window.PACED_BUILT = '2026-11-18 21:32 UTC';</script>
+<script>window.PACED_BUILT = '2026-11-20 18:52 UTC';</script>
 <meta charset="utf-8">
 <title>Paced</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -3258,7 +3258,12 @@ function perfEvents() {
   return runs.flatMap(r => r.events.map(e => ({ ...e, rec: r.id, recAt: r.startedAt })));
 }
 const weekStart = k => addDays(k, -((keyDate(k).getDay() + 6) % 7)); // weeks start on Monday, as in History
-const perfNow = () => state.perf || (state.perf = { span: 'day', at: dateKey() });
+// History opens on today if you've worked today, and otherwise on the last day you did, so the graphs have something to show.
+function lastWorkedDay() {
+  const ends = perfEvents().filter(e => (e.type === 'done' || e.type === 'aside') && e.took).map(e => e.end || e.at);
+  return ends.length ? dateKey(new Date(Math.max(...ends))) : dateKey();
+}
+const perfNow = () => state.perf || (state.perf = { span: 'day', at: lastWorkedDay() });
 function periodRange(p) {
   const start = p.span === 'week' ? weekStart(p.at) : p.at;
   return { start, s: +keyDate(start), e: +keyDate(addDays(start, p.span === 'week' ? 7 : 1)) };

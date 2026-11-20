@@ -3256,7 +3256,12 @@ function perfEvents() {
   return runs.flatMap(r => r.events.map(e => ({ ...e, rec: r.id, recAt: r.startedAt })));
 }
 const weekStart = k => addDays(k, -((keyDate(k).getDay() + 6) % 7)); // weeks start on Monday, as in History
-const perfNow = () => state.perf || (state.perf = { span: 'day', at: dateKey() });
+// History opens on today if you've worked today, and otherwise on the last day you did, so the graphs have something to show.
+function lastWorkedDay() {
+  const ends = perfEvents().filter(e => (e.type === 'done' || e.type === 'aside') && e.took).map(e => e.end || e.at);
+  return ends.length ? dateKey(new Date(Math.max(...ends))) : dateKey();
+}
+const perfNow = () => state.perf || (state.perf = { span: 'day', at: lastWorkedDay() });
 function periodRange(p) {
   const start = p.span === 'week' ? weekStart(p.at) : p.at;
   return { start, s: +keyDate(start), e: +keyDate(addDays(start, p.span === 'week' ? 7 : 1)) };
