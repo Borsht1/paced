@@ -617,6 +617,8 @@ body.dragging .tblock, body.dragging .task, body.dragging .rail { cursor: grabbi
 .now-tag { font-weight: 600; color: var(--accent); }
 .fstep.editing { grid-template-columns: 26px minmax(0, 1fr); align-items: start; }
 .fstep.check-row { grid-template-columns: 38px minmax(0, 1fr); gap: 6px; padding-block: 4px; }
+.fstep.check-row.batch-row { grid-template-columns: 38px minmax(0, 1fr) auto; }
+.batch-row .link { white-space: nowrap; min-height: 38px; padding-inline: 8px; }
 .panel-head h3 { min-width: 0; overflow-wrap: anywhere; }
 .list-switch { display: flex; align-items: flex-start; gap: 10px; margin: 4px 0 10px; font-size: 14px; cursor: pointer; }
 .list-switch input { width: 18px; height: 18px; margin: 2px 0 0; flex: none; accent-color: var(--accent); }
@@ -811,6 +813,22 @@ const stepsLeft = t => t.steps.filter(s => !s.done);
 // stop after each one. Steps under 10 minutes, or with none set, make one. The switch in its details decides otherwise.
 const isList = t => !!t && (t.list ?? (t.steps.length >= 2 && t.steps.every(st => !st.est || st.est < 10)));
 const LIST_STEP_MIN = 5; // the time a checklist plans for a step with no minutes
+// A quick task: all of it has minutes adding up to 15 or less, and it isn't planned for a later day. So what's left
+// of a longer task is never quick. Starting one from the list runs it with other quick tasks on one timer, up to 30 minutes.
+const QUICK_MIN = 15, BATCH_MAX_MIN = 30;
+const quickLeft = t => stepsLeft(t).reduce((x, s) => x + s.est, 0);
+function quickTask(t) {
+  const left = t && !t.archived ? stepsLeft(t) : [];
+  if (!left.length || !t.steps.every(s => s.est) || t.steps.reduce((x, s) => x + s.est, 0) > QUICK_MIN) return false;
+  const p = plannedOf(t.id);
+  return !(p && p.date > dateKey());
+}
+// The tasks a running checklist covers: one task's steps, or a batch of quick tasks.
+const listTasks = a => !a?.list ? [] : (a.batch || [a.taskId]).map(id => state.tasks.get(id)).filter(Boolean);
+const inList = (a, id) => !!a?.list && (a.batch ? a.batch.includes(id) : a.taskId === id);
+const listStepsLeft = a => listTasks(a).flatMap(stepsLeft);
+const listOwner = (a, sid) => listTasks(a).find(t => t.steps.some(s => s.id === sid));
+const UNTIMED_STOP_MIN = 120; // a step with no minutes counts up, and pauses itself after this long so it can't be forgotten
 const findStep = (tid, sid) => state.tasks.get(tid)?.steps.find(s => s.id === sid);
 const elapsedSec = (a, now = Date.now()) => (a.carry || 0) + ((a.pausedAt || now) - a.startedAt - (a.pausedMs || 0)) / 1000;
 // When the running step is meant to end, in seconds of work: your guess at the speed you really work (a.f, from
@@ -836,7 +854,7 @@ function stepMinLeft(st) {
 }
 const stepMinWords = st => fmtMin(stepMinLeft(st)) + (stepBegun(st) ? ' left' : '');
 // A running checklist counts down as a whole.
-const listLeft = (a, t) => a?.list && a.taskId === t.id && a.target != null ? Math.max(1, Math.ceil((a.target - elapsedSec(a)) / 60)) : null;
+const listLeft = (a, t) => a?.list && !a.batch && a.taskId === t.id && a.target != null ? Math.max(1, Math.ceil((a.target - elapsedSec(a)) / 60)) : null;
 const minLeft = t => listLeft(state.meta.session?.active, t) ?? stepsLeft(t).reduce((a, s) => a + (s.est || !isList(t) ? stepMinLeft(s) : LIST_STEP_MIN), 0);
 
 const GAP_SEC = 60; // the pause between steps before the next one starts by itself
@@ -1245,6 +1263,7 @@ function dropFinishedStep() {
   if (!a) return;
   const t = state.tasks.get(a.taskId), st = findStep(a.taskId, a.stepId);
   if (st && !st.done && !t.archived) return;
+  if (listMoveOn(a, a.stepId)) { saveMeta(); render(); return; } // a checklist carries on with what's left
   s.active = null; state.ask = null;
   saveMeta(); render();
 }
@@ -1400,7 +1419,11 @@ function taskRoom(t, steps = stepsLeft(t)) {
   if (list) return { min: list, guess: false };
   let min = 0, guess = false;
   for (const st of steps) {
-    if (a && a.stepId === st.id) { const el = elapsedSec(a); min += Math.max(0, (targetSec(a, st) ?? el) - el) / 60; }
+    if (a && !a.batch && a.stepId === st.id) {
+      const el = elapsedSec(a), target = targetSec(a, st);
+      if (target != null) min += Math.max(0, target - el) / 60;
+      else { min += Math.max(5, NO_EST_MIN - el / 60); guess = true; } // counting up: a little room, a guess
+    }
     else if (st.est) min += Math.max(1, (planOf(st) ?? st.est * realF(st, f)) - (st.spent || 0) / 60);
     else { min += isList(t) ? LIST_STEP_MIN * f : NO_EST_MIN; guess = true; } // a checklist plans a little for each
   }
@@ -2035,8 +2058,8 @@ function nextHTML() {
   if (!x || !x.st) return '';
   const step = x.t.steps.length > 1 ? `${x.st.title} · ` : '';
   return `<div class="next-card"><div class="next-text"><span class="next-kicker">Next up</span><b>${esc(x.t.title)}</b>
-      <span>${esc(step)}${x.st.est ? stepMinWords(x.st) : 'No minutes yet'} · ${esc(x.why)}</span></div>
-    <button class="btn primary" data-act="sel-start" data-id="${x.t.id}" data-step="${x.st.id}">${ICON.play}Start</button></div>`;
+      <span>${esc(step)}${x.st.est ? stepMinWords(x.st) : 'Counts up'} · ${esc(x.why)}</span></div>
+    <button class="btn primary" data-act="next-start" data-id="${x.t.id}" data-step="${x.st.id}">${ICON.play}Start</button></div>`;
 }
 function renderNext() {
   const el = $('#next'), html = state.ready && Store.mode !== 'signin' && state.view === 'home' ? nextHTML() : '';
@@ -2106,20 +2129,45 @@ function parseQuick(text) {
   }
   return { title: words.join(' ').slice(0, 200), min, due };
 }
+// Steps in the same line: "essay 45m: outline, draft, edit fri". Each step can have its own minutes, and minutes on
+// the name are shared among the steps without any. A day at the end is the task's. It needs a comma after the colon.
+function parseQuickSteps(text) {
+  // "3:30" and "https://" aren't steps: the colon needs a space after it.
+  const m = text.match(/^(.*?[^\s:]):\s+(.*)$/), rest = m ? m[2] : '';
+  if (!rest.includes(',')) return null;
+  const head = parseQuick(m[1]), parts = rest.split(',').map(x => x.trim()).filter(Boolean).slice(0, 30);
+  if (!head.title || !parts.length) return null;
+  const steps = parts.map(x => parseQuick(x)).filter(x => x.title);
+  const due = [...steps].reverse().find(x => x.due)?.due || head.due;
+  const known = steps.reduce((x, y) => x + (y.min || 0), 0), blank = steps.filter(x => !x.min).length;
+  // The shares add up to the minutes given: 25 over two steps is 13 and 12.
+  const spare = head.min && blank && head.min - known >= blank ? head.min - known : 0; // at least a minute each, or they count up
+  let n = 0;
+  const share = () => spare ? Math.max(1, Math.floor(spare / blank) + (n++ < spare % blank ? 1 : 0)) : null;
+  return { title: head.title, due, headMin: head.min, steps: steps.map(x => ({ title: x.title, min: x.min || share() })) };
+}
 function quickHint(text) {
   if (!text.trim()) return '';
+  const p = parseQuickSteps(text);
+  if (p) {
+    const min = p.steps.reduce((x, y) => x + (y.min || 0), 0), up = p.steps.filter(y => !y.min).length;
+    const sum = min && p.headMin && min !== p.headMin ? `the steps add up to ${fmtMin(min)}, not ${fmtMin(p.headMin)}` : min ? fmtMin(min) : '';
+    const count = up && min ? `${up} without minutes` : '';
+    return `Adds <b>${esc(p.title)}</b> with ${p.steps.length} steps${[sum, count].filter(Boolean).map(x => ` · ${x}`).join('')}${p.due ? ` · due ${esc(fmtFullDay(p.due))}` : ''}`;
+  }
   const q = parseQuick(text), x = findTemplate(q.title);
   if (!q.title) return 'Type a name for the task';
   if (x) return `Uses your template <b>${esc(x.name)}</b>: ${esc(templateWords({ ...x, uses: 0 }))}${q.due ? ` · due ${esc(fmtFullDay(q.due))}` : ''}`;
-  return `Adds <b>${esc(q.title)}</b>${q.min ? ` · ${fmtMin(q.min)}` : ' · add minutes like 40m'}${q.due ? ` · due ${esc(fmtFullDay(q.due))}` : ''}`;
+  return `Adds <b>${esc(q.title)}</b>${q.min ? ` · ${fmtMin(q.min)}` : ' · no minutes needed, it counts up'}${q.due ? ` · due ${esc(fmtFullDay(q.due))}` : ''}`;
 }
 function quickAdd() {
-  const el = $('#quick-input'), q = parseQuick(el.value);
+  const el = $('#quick-input'), p = parseQuickSteps(el.value), q = p ? { title: p.title, due: p.due } : parseQuick(el.value);
   if (!q.title) { el.focus(); return; }
-  const x = findTemplate(q.title);
+  const x = !p && findTemplate(q.title);
   if (x) { quickFromTemplate(x, q.due); return; }
+  const step = (title, est) => ({ id: newId('s'), title, est: est || null, done: false, actual: null, doneAt: null });
   const t = { id: newId('t'), title: q.title, due: q.due, createdAt: Date.now(), archived: false, completedAt: null,
-    steps: [{ id: newId('s'), title: q.title, est: q.min, done: false, actual: null, doneAt: null }] };
+    steps: p ? p.steps.map(y => step(y.title, y.min)) : [step(q.title, q.min)] };
   saveTask(t);
   state.quick = '';
   render();
@@ -2142,7 +2190,7 @@ function quickFromTemplate(x, due) {
   toast(`Added “${t.title}” from your template`, 'Undo', () => { removeTask(t.id); state.meta.templates = templates().map(y => y.id === x.id ? { ...y, uses: Math.max(0, (y.uses || 1) - 1) } : y); saveMeta(); render(); });
 }
 const quickHTML = () => `<form class="quick-add" id="quick-add">
-    <input id="quick-input" class="text-input" autocomplete="off" enterkeyhint="done" value="${esc(state.quick || '')}" placeholder="Add a task" aria-label="Add a task. You can end it with minutes like 40m and a day like fri." aria-describedby="quick-hint">
+    <input id="quick-input" class="text-input" autocomplete="off" enterkeyhint="done" value="${esc(state.quick || '')}" placeholder="Add a task" aria-label="Add a task. You can end it with minutes like 40m and a day like fri, and add steps after a colon." aria-describedby="quick-hint">
     <button type="submit" class="btn primary">${ICON.plus}Add</button>
   </form>
   <div class="quick-foot"><p class="quick-hint" id="quick-hint" aria-live="polite">${quickHint(state.quick || '')}</p>
@@ -2164,9 +2212,9 @@ function homeHTML() {
   <section class="empty">
     <h2>Here’s how Paced works</h2>
     <ol class="how-list">
-      <li>Type a task in the box above, with how long it will take, like “essay 40m”.</li>
-      <li>Press <b>Start</b>. Paced times it and tells you when it’s time for a break.</li>
-      <li>If you like, use <b>More details</b> to split a big task into steps. Quick steps run as one checklist with a single timer.</li>
+      <li>Type a task in the box above. Minutes are optional, like “essay 40m”.</li>
+      <li>Press <b>Start</b>. Paced times it and tells you when it’s time for a break. Tasks of 15 minutes or less run together on one timer.</li>
+      <li>Add steps in the same line after a colon, like “essay 45m: outline, draft, edit”.</li>
     </ol>
     <div class="row"><button class="btn ghost" data-act="open-import">Import tasks from elsewhere</button></div>
   </section>
@@ -2653,7 +2701,7 @@ function taskLine(t, lay) {
   return parts.join(' · ');
 }
 function taskHTML(t, lay) {
-  const total = t.steps.length, left = minLeft(t), live = state.meta.session?.active?.taskId === t.id, due = dueInfo(t);
+  const total = t.steps.length, left = minLeft(t), live = state.meta.session?.active?.taskId === t.id || inList(state.meta.session?.active, t.id), due = dueInfo(t);
   // With nothing left to do there's nothing to start, so the button is for adding more.
   const action = !total || (!left && !stepsLeft(t).length && !live)
     ? `<button class="btn ghost small" data-act="add-steps" data-id="${t.id}">${total ? 'Add a step' : 'Add steps'}</button>`
@@ -2889,7 +2937,7 @@ function liveClock(now = Date.now()) {
   if (!s) return null;
   if (s.active) {
     const a = s.active, st = findStep(a.taskId, a.stepId), el = elapsedSec(a, now), target = targetSec(a, st);
-    return { label: a.list ? state.tasks.get(a.taskId)?.title || 'Working' : st ? st.title : 'Working', left: target == null ? el : target - el, over: target != null && el > target, late: target != null && el > target + calmSec(target), paused: !!a.pausedAt && !a.autoStopped };
+    return { label: a.batch ? 'Quick tasks' : a.list ? state.tasks.get(a.taskId)?.title || 'Working' : st ? st.title : 'Working', left: target == null ? el : target - el, over: target != null && el > target, late: target != null && el > target + calmSec(target), paused: !!a.pausedAt && !a.autoStopped };
   }
   if (!s.gap) return null;
   const plan = gapPlan(s), left = (s.gap.until - now) / 1000;
@@ -3670,7 +3718,7 @@ function focusBody() {
   const m = state.meta, s = m.session;
   if (m.brk) return fbar('', false) + breakHTML();
   if (!s) return fbar('', false) + pickHTML(null, true);
-  const title = state.tasks.get(focusTaskId())?.title;
+  const title = s.active?.batch ? 'Quick tasks' : state.tasks.get(focusTaskId())?.title;
   if (state.ask?.type === 'estimate') return fbar(title, true) + estimateHTML();
   const pick = state.ask?.type === 'method' ? methodPickHTML(s) : '';
   if (s.active) return fbar(title, true) + pick + runningHTML();
@@ -3706,7 +3754,7 @@ function estimateHTML() {
 // Past the end of a long step it says how small the difference is, since a few minutes over hours of work is normal.
 function planLine(a, st, el = elapsedSec(a)) {
   const target = targetSec(a, st);
-  if (target == null) return 'No time planned for this step';
+  if (target == null) return 'No minutes planned, so it counts up';
   const what = a.list ? ' for the whole list' : '';
   if (el > target) {
     const past = el - target, share = Math.max(1, Math.round(past / target * 100));
@@ -3886,7 +3934,7 @@ function timeUpHTML(s, st, canSkip, target) {
   // Paced doesn't check in while you work in other apps, so this is where a forgotten timer gets put right.
   const unseen = unseenMuch(a) ? `<p>Paced couldn’t see you for ${fmtDur(a.unseen)} of this, while you were in other apps. If you stopped working before now, say how long you really worked.</p>
       <div class="chips"><button class="chip" data-act="timeup-forgot">I stopped earlier</button></div>` : '';
-  const t = state.tasks.get(a.taskId), left = a.list && t ? stepsLeft(t).length : 0;
+  const left = a.list ? listStepsLeft(a).length : 0;
   return `<section class="ask-card warn">
       <div class="eyebrow">Time’s up</div>
       <h2>${a.autoStopped ? 'Paced stopped your timer' : a.list ? 'Did you finish the list?' : 'Did you finish?'}</h2>
@@ -3958,7 +4006,9 @@ function runningHTML() {
   const pct = target ? Math.min(100, el / target * 100) : 0;
   const over = target != null && el > target, late = over && el > target + calmSec(target);
   const canSkip = !a.list && !!nextStep(t, s, st.id);
-  const where = a.list ? `Checklist · ${t.steps.filter(x => x.done).length} of ${t.steps.length} done` : `Step ${idx} of ${t.steps.length}`;
+  const bt = listTasks(a);
+  const where = a.batch ? `Quick tasks · ${bt.filter(x => !stepsLeft(x).length).length} of ${bt.length} done`
+    : a.list ? `Checklist · ${t.steps.filter(x => x.done).length} of ${t.steps.length} done` : `Step ${idx} of ${t.steps.length}`;
   const hero = `<div class="eyebrow">${where}${paused ? (a.idlePaused ? ' · Paused while you’re idle' : ' · Paused') : ''}</div>
     <h2 class="step-name">${esc(st.title)}</h2>
     <div class="timer${paused ? ' paused' : ''}${over ? ' over' : ''}${late ? ' late' : ''}" data-tick="timer" role="timer" aria-label="Time left on this step">${clockHTML(target == null ? el : target - el)}</div>
@@ -3988,6 +4038,7 @@ function runningHTML() {
 
 // A checklist's steps, each ticked off with one press, in any order.
 function listPanelHTML(t, a) {
+  if (a.batch) return batchPanelHTML(a);
   if (state.fEdit) return stepsPanelHTML(t, state.meta.session);
   const rows = t.steps.map(st => {
     const now = !st.done && st.id === a.stepId, label = st.done ? 'Mark as not done' : 'Tick off';
@@ -3998,6 +4049,24 @@ function listPanelHTML(t, a) {
   }).join('');
   return `<section class="panel steps-panel">
     <div class="panel-head"><h3>${esc(t.title)}</h3><button class="link small" data-act="fedit-toggle">${ICON.edit}Edit steps</button></div>
+    <ol class="fsteps">${rows}</ol>
+  </section>`;
+}
+
+// A batch of quick tasks: one row per step, named by its task, each ticked off with one press. Not now leaves one out.
+function batchPanelHTML(a) {
+  const tasks = listTasks(a), more = tasks.filter(t => stepsLeft(t).length).length > 1;
+  const rows = tasks.flatMap(t => t.steps.filter(st => !st.done || st.doneAt >= a.startedAt).map(st => {
+    const now = !st.done && st.id === a.stepId, label = st.done ? 'Mark as not done' : 'Tick off';
+    const name = t.steps.length > 1 ? `${t.title} · ${st.title}` : t.title;
+    const sub = st.done ? (st.actual ? `Took ${fmtDur(st.actual)}` : 'Done') : now ? '<span class="now-tag">Up now</span>' : st.est ? fmtMin(st.est) : '';
+    return `<li class="fstep check-row batch-row${st.done ? ' done' : ''}${now ? ' now' : ''}">
+      <button class="check sm${st.done ? ' on' : ''}" data-act="toggle-step" data-id="${t.id}" data-step="${st.id}" aria-pressed="${st.done}" aria-label="${label}: ${esc(name)}"><span>${ICON.check}</span></button>
+      <div class="fstep-main"><b>${esc(name)}</b>${sub ? `<span class="muted">${sub}</span>` : ''}</div>
+      ${!st.done && more ? `<button class="link small" data-act="batch-drop" data-id="${t.id}" aria-label="Not now: ${esc(t.title)}">Not now</button>` : ''}</li>`;
+  })).join('');
+  return `<section class="panel steps-panel">
+    <div class="panel-head"><h3>Quick tasks</h3></div>
     <ol class="fsteps">${rows}</ol>
   </section>`;
 }
@@ -4023,7 +4092,7 @@ function betweenHTML() {
   const as = assess(m);
   const bp = breakPlan(as, s);
   let html = '';
-  if (last) html += `<div class="result"><span class="check on" aria-hidden="true"><span>${ICON.check}</span></span><div><b>You finished “${esc(last.title)}”</b><span class="muted">Took ${fmtDur(last.actual)}${last.est ? ` (planned ${fmtMin(last.est)})` : ''}</span></div></div>`;
+  if (last) html += `<div class="result"><span class="check on" aria-hidden="true"><span>${ICON.check}</span></span><div><b>${last.batch ? `You finished ${last.batch === 1 ? 'your quick task' : `your ${last.batch} quick tasks`}` : `You finished “${esc(last.title)}”`}</b><span class="muted">Took ${fmtDur(last.actual)}${last.est ? ` (planned ${fmtMin(last.est)})` : ''}</span></div></div>`;
   if (state.ask?.type === 'feel') html += `<section class="ask-card">
       <h2>How did that step go?</h2>
       <p>This helps Paced judge your speed until it has timed a couple of steps.</p>
@@ -4041,7 +4110,7 @@ function betweenHTML() {
     html += `<section class="panel">
       <div class="eyebrow">Next step · ${t.steps.indexOf(next) + 1} of ${t.steps.length}</div>
       <h2 class="step-name">${esc(next.title)}</h2>
-      <p class="muted" style="margin:0">${next.est ? `Planned: ${fmtMin(next.est)}` : 'No time planned yet. You’ll pick one when you start.'}</p>
+      <p class="muted" style="margin:0">${next.est ? `Planned: ${fmtMin(next.est)}` : 'No minutes planned, so it counts up.'}</p>
       ${next.spent ? `<p class="muted" style="margin:0">You already spent ${fmtDur(next.spent)} on this earlier.</p>` : ''}
       <div class="row" style="margin-top:6px"><button class="btn ${bp ? 'ghost' : 'primary'} big" data-act="start-step" data-id="${t.id}" data-step="${next.id}">${ICON.play}${last ? 'Start next step' : 'Start'}</button></div>
     </section>`;
@@ -4050,7 +4119,7 @@ function betweenHTML() {
     if (plan.type === 'step') html += `<section class="panel">
       <div class="eyebrow">Up next on your timeline</div>
       <h2 class="step-name">${esc(plan.t.title)}</h2>
-      <p class="muted" style="margin:0">First step: ${esc(plan.next.title)} · ${fmtMin(plan.next.est)}</p>
+      <p class="muted" style="margin:0">First step: ${esc(plan.next.title)}${plan.next.est ? ` · ${fmtMin(plan.next.est)}` : ''}</p>
       <div class="row" style="margin-top:6px"><button class="btn ${bp ? 'ghost' : 'primary'} big" data-act="start-step" data-id="${plan.t.id}" data-step="${plan.next.id}">${ICON.play}Start</button></div>
     </section>`;
     const later = plan.type === 'none' && layoutDay().blocks.find(b => stepsLeft(b.task).length);
@@ -4066,8 +4135,9 @@ function betweenHTML() {
 function pickHTML(t, noSession) {
   const planned = [...new Set(layoutDay().blocks.map(b => b.task))];
   const others = [...planned, ...activeTasks().filter(x => !planned.includes(x))].filter(x => x.steps.some(s => !s.done));
+  const last = state.meta.session?.log.at(-1), batch = last?.batch && last.taskId === t?.id ? last.batch : 0;
   const head = t && t.archived
-    ? `<h2 class="step-name">You finished “${esc(t.title)}”!</h2><p class="muted" style="margin:0">It’s been moved to Completed tasks.</p>`
+    ? `${batch ? '' : `<h2 class="step-name">You finished “${esc(t.title)}”!</h2>`}<p class="muted" style="margin:0">${batch ? 'They’ve' : 'It’s'} been moved to Completed tasks.</p>`
     : '';
   const body = others.length
     ? `<h3 class="pick-q">What do you want to work on next?</h3><ul class="picklist">${others.map(x => {
@@ -4669,7 +4739,7 @@ function toggleStep(id, sid) {
   const t = state.tasks.get(id), st = t && t.steps.find(s => s.id === sid);
   if (!st) return;
   const a = state.meta.session?.active;
-  if (a?.list && a.taskId === id && !st.done) { listTick(sid); if (t.archived) state.layer = null; renderLayer(); return; }
+  if (inList(a, id) && !st.done) { listTick(sid); if (t.archived) state.layer = null; renderLayer(); return; }
   // Checking off the step you're timing is the same as pressing Done, so its time counts.
   if (state.meta.session?.active?.stepId === sid) {
     finishStep();
@@ -4679,11 +4749,12 @@ function toggleStep(id, sid) {
   }
   const before = clone(t);
   // Unticking a step on the running checklist hands its time back, so the next tick gets it.
-  const ticked = a?.list && a.taskId === id && st.done && state.meta.run?.events.find(e => e.type === 'done' && e.stepId === sid);
+  const ticked = inList(a, id) && st.done && state.meta.run?.events.find(e => e.type === 'done' && e.stepId === sid);
   if (ticked) a.mark = Math.max(a.carry || 0, (a.mark || 0) - ticked.took);
   st.done = !st.done;
   st.doneAt = st.done ? Date.now() : null;
   if (!st.done) st.actual = null;
+  if (ticked && !st.done && t.archived) { t.archived = false; t.completedAt = null; } // unticked in a batch: back on your list
   clearActiveIf(a => a.stepId === sid);
   if (st.done) logEvent('ticked', { task: t.title, title: st.title, stepId: sid });
   else if (state.meta.run) state.meta.run.events = state.meta.run.events.filter(e => e.stepId !== sid);
@@ -4698,7 +4769,7 @@ function deleteStep(id, sid) {
   const before = clone(t);
   t.steps = t.steps.filter(s => s.id !== sid);
   const a = state.meta.session?.active;
-  if (a?.list && a.taskId === t.id && a.stepId === sid && stepsLeft(t).length) a.stepId = stepsLeft(t)[0].id; // the checklist carries on
+  listMoveOn(a, sid); // the checklist carries on
   clearActiveIf(a => a.stepId === sid);
   // Deleting the only step left to do finishes the task, and that toast's Undo brings the step back too.
   const finished = maybeArchive(t, before);
@@ -4711,7 +4782,7 @@ function deleteStep(id, sid) {
 function deleteTask(id) {
   const t = state.tasks.get(id); if (!t) return;
   const before = clone(t);
-  clearActiveIf(a => a.taskId === id);
+  if (!leaveBatch(id)) clearActiveIf(a => a.taskId === id); // a batch carries on without it
   removeTask(id);
   state.layer = null; renderLayer(); render();
   toast('Task deleted', 'Undo', () => { saveTask(before); render(); });
@@ -4720,7 +4791,12 @@ function deleteTask(id) {
 function completeTask(id) {
   const t = state.tasks.get(id); if (!t) return;
   const before = clone(t);
-  if (state.meta.session?.active?.taskId === id) finishStep(); // the running step keeps its time
+  const a = state.meta.session?.active;
+  if (a?.batch?.includes(id)) { // its steps share the time since the last tick
+    const left = stepsLeft(t), el = elapsedSec(a), share = Math.max(0, el - (a.mark || 0)) / Math.max(1, left.length);
+    left.forEach(st => { a.mark = el - share; listTick(st.id); });
+  }
+  else if (a?.taskId === id) finishStep(); // the running step keeps its time
   if (t.archived) return;
   t.steps.forEach(s => { if (!s.done) { s.done = true; s.doneAt = Date.now(); logEvent('ticked', { task: t.title, title: s.title, stepId: s.id }); } });
   saveMeta();
@@ -4803,17 +4879,18 @@ function gapPlan(s) {
   if (bp) return { type: 'hold' };
   // Done with this task: the timeline says what's next. Time before something you placed later is yours.
   if (after?.waits) return { type: 'none' };
-  if (after) { const n = after.step || nextStep(after.task, s); return n && n.est ? { type: 'step', t: after.task, next: n } : { type: 'hold' }; }
-  if (!next || !next.est) return { type: 'hold' };
+  if (after) { const n = after.step || nextStep(after.task, s); return n ? { type: 'step', t: after.task, next: n } : { type: 'hold' }; }
+  if (!next) return { type: 'hold' };
   return { type: 'step', t, next };
 }
 
-function startFocus(taskId, stepId) {
+// From the list or Next up (batch), a quick task brings your other quick tasks along on one timer.
+function startFocus(taskId, stepId, batch) {
   const t = state.tasks.get(taskId); if (!t) return;
   addTypedStep();
   expireIdleSession(true);
   const m = state.meta, s = m.session;
-  if (s && s.active && s.active.taskId === taskId) {
+  if (s && s.active && (s.active.taskId === taskId || inList(s.active, taskId))) {
     state.layer = null; renderLayer();
     state.focusOpen = true; render();
     return;
@@ -4822,6 +4899,11 @@ function startFocus(taskId, stepId) {
   if (!next) { openDetail(taskId, true); toast(t.steps.length ? 'All steps are done. Add another step, or mark the task as done.' : 'Add a step first.'); return; }
   state.layer = null; renderLayer();
   state.focusOpen = true;
+  // Other quick tasks join in list order while the whole batch stays within 30 minutes.
+  let room = quickTask(t) ? BATCH_MAX_MIN - quickLeft(t) : 0;
+  const others = batch && !m.brk && quickTask(t) && next.id === stepsLeft(t)[0].id
+    ? activeTasks().filter(x => x.id !== taskId && quickTask(x) && !inList(s?.active, x.id) && quickLeft(x) <= room && (room -= quickLeft(x), true)) : [];
+  const go = () => others.length ? startBatch([t, ...others], next) : startStep(taskId, next.id);
   if (m.brk) {
     // Your break stays on, but what you picked is what starts when you're ready.
     const other = m.brk.taskId !== taskId;
@@ -4836,12 +4918,12 @@ function startFocus(taskId, stepId) {
     const sameDay = ts => !!ts && dateKey(new Date(ts)) === today;
     const stop = m.lastStop && sameDay(m.lastStop.at) ? m.lastStop : null;
     const brokeAt = sameDay(m.lastBreakEnd) ? m.lastBreakEnd : 0;
-    if (stop && now - stop.at < 15 * 60e3 && brokeAt < stop.at) { beginSession(taskId, stop.workMin || 0); startStep(taskId, next.id); }
-    else if (stop || brokeAt) { beginSession(taskId, 0); startStep(taskId, next.id); }
-    else { beginSession(taskId, 0); m.session.firstToday = true; startStep(taskId, next.id); }
+    if (stop && now - stop.at < 15 * 60e3 && brokeAt < stop.at) { beginSession(taskId, stop.workMin || 0); go(); }
+    else if (stop || brokeAt) { beginSession(taskId, 0); go(); }
+    else { beginSession(taskId, 0); m.session.firstToday = true; go(); }
     return;
   }
-  startStep(taskId, next.id);
+  go();
 }
 
 // The time you gave this step's block on the timeline, if you changed its length there, as seconds of work
@@ -4858,7 +4940,7 @@ function blockTarget(t, st, carry) {
 function startStep(taskId, stepId) {
   const s = state.meta.session, st = findStep(taskId, stepId), t = state.tasks.get(taskId);
   if (!s || !st) return;
-  if (s.active?.list && s.active.taskId === taskId) return; // the checklist is already running
+  if (inList(s.active, taskId)) return; // the checklist is already running
   // Starting something else sets the running step aside, keeping its time, so it's still there in the list.
   const a = s.active;
   if (a && (a.taskId !== taskId || a.stepId !== stepId)) {
@@ -4869,42 +4951,91 @@ function startStep(taskId, stepId) {
   s.taskId = taskId;
   s.skipped = (s.skipped || []).filter(x => x !== stepId);
   if (isList(t)) { startList(t, st); return; }
-  if (!st.est) { state.ask = { type: 'estimate', taskId, stepId }; closeGap(s); s.lastAt = Date.now(); saveMeta(); render(); return; }
   state.ask = null;
   closeGap(s);
-  const carry = st.spent || 0, set = blockTarget(state.tasks.get(taskId), st, carry), f = timeFactor(), plan = (planOf(st) ?? st.est * realF(st, f)) * 60;
+  // A step with no minutes starts anyway and counts up, so starting never waits on a guess.
+  const carry = st.spent || 0, set = blockTarget(state.tasks.get(taskId), st, carry), f = timeFactor(), plan = st.est ? (planOf(st) ?? st.est * realF(st, f)) * 60 : null;
   // Time already spent comes off the plan. A step that's already past its plan gets 10 more minutes.
   // A block you made longer or shorter on the timeline runs for the time you gave it, and stays out of your speed.
-  s.active = { taskId, stepId, startedAt: Date.now(), pausedMs: 0, pausedAt: null, carry, f, target: set ?? (carry >= plan ? carry + 600 : null), alerts: 0, estLow: set != null };
+  s.active = { taskId, stepId, startedAt: Date.now(), pausedMs: 0, pausedAt: null, carry, f, target: set ?? (plan != null && carry >= plan ? carry + 600 : null), alerts: 0, estLow: set != null };
   s.lastAt = Date.now();
   saveMeta(); render();
 }
 
 // One timer for the steps left. Time already spent on them carries in, and "mark" is where the last tick was.
-function startList(t, st) {
-  const s = state.meta.session, left = stepsLeft(t), f = timeFactor();
+// A batch is several quick tasks on that one timer, with st (from the first of them) up first.
+function startList(t, st, batch) {
+  const s = state.meta.session, left = (batch || [t]).flatMap(stepsLeft), f = timeFactor();
   const carry = left.reduce((x, y) => x + (y.spent || 0), 0), min = left.reduce((x, y) => x + (y.est ? y.est * realF(y, f) : LIST_STEP_MIN * f), 0);
   state.ask = null;
   closeGap(s);
-  s.active = { taskId: t.id, stepId: st.id, list: true, mark: carry, startedAt: Date.now(), pausedMs: 0, pausedAt: null, carry, f, target: carry + min * 60, alerts: 0, estLow: true };
+  s.active = { taskId: t.id, stepId: st.id, list: true, ...(batch ? { batch: batch.map(x => x.id) } : {}), mark: carry, startedAt: Date.now(), pausedMs: 0, pausedAt: null, carry, f, target: carry + min * 60, alerts: 0, estLow: true };
   s.lastAt = Date.now();
   saveMeta(); render();
 }
+// Starting a quick task from the list brings your other quick tasks along on one timer. With none, it runs alone.
+function startBatch(tasks, st) {
+  const s = state.meta.session, a = s.active, t = tasks[0];
+  if (a) {
+    const was = findStep(a.taskId, a.stepId);
+    setAside(s, 'switch');
+    if (was) toast(`“${was.title}” is saved for later.`);
+  }
+  s.taskId = t.id;
+  s.skipped = (s.skipped || []).filter(x => x !== st.id);
+  startList(t, st, tasks);
+  toast(`${tasks.length} quick tasks on one timer. Tick each off as you go.`, 'Just this one', () => justOne(t.id));
+}
+// Undo the batch: only the task you pressed keeps running.
+function justOne(taskId) {
+  const s = state.meta.session, a = s?.active, t = state.tasks.get(taskId), st = t && stepsLeft(t)[0];
+  if (!a?.batch?.includes(taskId) || !st) return; // a toast from an earlier batch, or a task already left out
+  const el = elapsedSec(a);
+  logPause(a);
+  st.spent = Math.round((st.spent || 0) + el - (a.mark || 0)); saveTask(t); // it keeps the time since the last tick
+  s.active = null;
+  startStep(t.id, st.id);
+}
+// Take a task out of the running batch, and its minutes off the timer. The time since the last tick stays with
+// the tasks still to do. False when nothing else is left in the batch, so the caller decides.
+function leaveBatch(taskId) {
+  const a = state.meta.session?.active;
+  if (!a?.batch?.includes(taskId)) return false;
+  const t = state.tasks.get(taskId), f = a.f || 1, rest = { ...a, batch: a.batch.filter(id => id !== taskId) };
+  const left = listStepsLeft(rest);
+  if (!left.length) return false;
+  a.batch = rest.batch;
+  if (t) a.target = Math.max(elapsedSec(a) + 60, a.target - stepsLeft(t).reduce((x, y) => x + (y.est ? y.est * realF(y, f) : LIST_STEP_MIN * f), 0) * 60);
+  if (a.taskId === taskId) { a.stepId = left[0].id; a.taskId = listOwner(a, left[0].id).id; }
+  return true;
+}
+// Not now: the last one left stays, and Stop ends it.
+function batchDrop(taskId) { if (leaveBatch(taskId)) { saveMeta(); render(); } }
+// When the checklist's current step goes (deleted, or finished elsewhere), it moves on to the next one left.
+function listMoveOn(a, sid) {
+  if (!a?.list || a.stepId !== sid) return false;
+  const left = listStepsLeft(a).filter(x => x.id !== sid);
+  if (!left.length) return false;
+  a.stepId = left[0].id; a.taskId = listOwner(a, left[0].id).id;
+  return true;
+}
 // Ticking a step off a running checklist: it takes the time since the last tick, and the timer carries on.
 function listTick(sid) {
-  const a = state.meta.session?.active, t = a && state.tasks.get(a.taskId), st = t?.steps.find(x => x.id === sid);
+  const a = state.meta.session?.active, t = a && (a.batch ? listOwner(a, sid) : state.tasks.get(a.taskId)), st = t?.steps.find(x => x.id === sid);
   if (!a?.list || !st || st.done) return;
   const before = clone(t), el = elapsedSec(a), took = Math.max(1, Math.round(el - (a.mark || 0)));
   a.mark = el;
   st.done = true; st.actual = took + (st.spent || 0); st.doneAt = Date.now(); st.rough = true; delete st.spent; // a tick is only roughly when it was done
   logEvent('done', { at: Date.now() - took * 1000, end: Date.now(), task: t.title, title: st.title, stepId: st.id, est: st.est, took, noSpeed: true });
-  const next = stepsLeft(t).find(x => x.id === a.stepId) || stepsLeft(t)[0];
-  if (next) { a.stepId = next.id; saveTask(t); saveMeta(); render(); return; }
+  // In a batch, each task moves to Completed as soon as it's ticked off, and the timer carries on with the rest.
+  if (a.batch && !stepsLeft(t).length && listStepsLeft(a).length) maybeArchive(t, before);
+  const left = listStepsLeft(a), next = left.find(x => x.id === a.stepId) || stepsLeft(t)[0] || left[0];
+  if (next) { a.stepId = next.id; a.taskId = listOwner(a, next.id).id; saveTask(t); saveMeta(); render(); return; }
   endList(t, before);
 }
 // "All done" ticks off the rest, sharing out the time since the last tick.
 function listAll() {
-  const a = state.meta.session?.active, t = a && state.tasks.get(a.taskId), left = t ? stepsLeft(t) : [];
+  const a = state.meta.session?.active, left = listStepsLeft(a);
   if (!a?.list || !left.length) return;
   const el = elapsedSec(a), share = Math.max(0, el - (a.mark || 0)) / left.length;
   state.ask = null;
@@ -4912,7 +5043,7 @@ function listAll() {
 }
 function endList(t, before) {
   const s = state.meta.session, a = s.active, sec = Math.max(1, Math.round(elapsedSec(a)));
-  s.log.push({ taskId: t.id, stepId: a.stepId, title: t.title, est: null, actual: sec, worked: Math.max(0, sec - (a.carry || 0)), pace: null, excluded: true, feel: null });
+  s.log.push({ taskId: t.id, stepId: a.stepId, title: a.batch ? 'Quick tasks' : t.title, ...(a.batch ? { batch: listTasks(a).filter(x => !stepsLeft(x).length).length || 1 } : {}), est: null, actual: sec, worked: Math.max(0, sec - (a.carry || 0)), pace: null, excluded: true, feel: null });
   logPause(a);
   s.active = null; s.taskId = t.id; s.lastAt = Date.now();
   openGap(s);
@@ -5107,13 +5238,14 @@ function progressAsk(a) {
   return st && st.est && target >= PROGRESS_MIN * 60 && el - (a.carry || 0) >= 600 ? { stepId: st.id, el, target } : null;
 }
 function takeBreak(min) {
-  const m = state.meta, s = m.session, progress = progressAsk(s?.active);
+  const m = state.meta, s = m.session, progress = progressAsk(s?.active), batch = s?.active?.batch, cur = s?.active?.taskId;
   if (s && s.method === 'pomodoro') { const p = m.pomo && m.pomo.date === dateKey() ? m.pomo : { date: dateKey(), n: 0 }; m.pomo = { date: p.date, n: p.n + 1 }; }
   if (s) recordSession(s);
   if (s) { closeGap(s); stashActive(s, 'break'); }
   min = usePlannedBreak(min);
-  m.brk = { startedAt: Date.now(), until: Date.now() + min * 60e3, min, taskId: s ? s.taskId : null, alerts: 0 };
+  m.brk = { startedAt: Date.now(), until: Date.now() + min * 60e3, min, taskId: s ? cur || s.taskId : null, alerts: 0 }; // what was running, if anything
   if (progress) { m.brk.stepId = progress.stepId; m.brk.progress = progress; }
+  if (batch) m.brk.batch = batch; // the quick tasks carry on together after the break
   m.session = null; state.ask = null; state.focusOpen = true;
   saveMeta(); render();
 }
@@ -5129,7 +5261,9 @@ function endBreak() {
   beginSession(task ? task.id : null, 0);
   state.focusOpen = true;
   const next = task ? stepsLeft(task).find(x => x.id === b.stepId) || nextStep(task, m.session) : null;
-  if (next) startStep(task.id, next.id);
+  const batch = next && b.batch?.includes(task.id) ? [task, ...b.batch.map(id => state.tasks.get(id)).filter(x => x && x !== task && !x.archived && stepsLeft(x).length)] : null;
+  if (batch?.length > 1) { m.session.taskId = task.id; startList(task, next, batch); }
+  else if (next) startStep(task.id, next.id);
   else { openGap(m.session); saveMeta(); render(); }
 }
 
@@ -5200,7 +5334,7 @@ function deleteFocusStep(sid) {
   const before = clone(t), st = t.steps.find(s => s.id === sid);
   t.steps = t.steps.filter(s => s.id !== sid);
   const a = state.meta.session?.active;
-  if (a?.list && a.taskId === t.id && a.stepId === sid && stepsLeft(t).length) a.stepId = stepsLeft(t)[0].id; // the checklist carries on
+  listMoveOn(a, sid); // the checklist carries on
   clearActiveIf(a => a.stepId === sid);
   saveTask(t); render();
   toast(`Deleted “${st ? st.title : 'step'}”`, 'Undo', () => { saveTask(before); render(); });
@@ -5515,7 +5649,9 @@ document.addEventListener('click', e => {
     case 'open-task': openDetail(id); break;
     case 'add-steps': openDetail(id, true); break;
     case 'complete-task': completeTask(id); break;
-    case 'focus-task': startFocus(id); break;
+    case 'focus-task': startFocus(id, undefined, true); break;
+    case 'next-start': startFocus(id, step, true); break;
+    case 'batch-drop': batchDrop(id); break;
     case 'toggle-steps': if (openSteps.has(id)) openSteps.delete(id); else openSteps.add(id); render(); break;
     case 'toggle-step': toggleStep(id, step); break;
     case 'delete-step': deleteStep(id, step); break;
@@ -5944,7 +6080,19 @@ function checkAway(now = Date.now()) {
 
 function tickStep(s) {
   const a = s.active, st = findStep(a.taskId, a.stepId), target = targetSec(a, st);
-  if (target == null) return;
+  if (target == null) {
+    // No minutes: the clock counts up. After a long while with no answer it pauses, once per stretch, so it can't run all day.
+    const el = elapsedSec(a), stop = (a.untimedMark ?? (a.carry || 0)) + UNTIMED_STOP_MIN * 60;
+    if (st && !a.pausedAt && el > stop) {
+      a.pausedAt = Date.now() - (el - stop) * 1000;
+      a.untimedMark = stop;
+      saveMeta(); render();
+      const msg = `“${st.title}” ran ${fmtMin(UNTIMED_STOP_MIN)} with no minutes planned, so Paced paused it. Press Resume if you’re still on it.`;
+      toast(msg);
+      Alert.send('Paced paused your timer', msg);
+    }
+    return;
+  }
   let el = elapsedSec(a);
   // Nobody answered: stop the timer so a forgotten step can't run for hours.
   const stopAt = Math.max(target, a.okSec || 0) + stopAfterMin(target) * 60, alerts = overAlerts(target);
@@ -5963,7 +6111,7 @@ function tickStep(s) {
   }
   if (dueAlert(a, (el - target) / 60, alerts)) {
     saveAlerts();
-    const name = a.list ? state.tasks.get(a.taskId)?.title : st.title;
+    const name = a.batch ? 'Quick tasks' : a.list ? state.tasks.get(a.taskId)?.title : st.title;
     Alert.send(a.alerts > 1 ? `Still on “${name}”?` : a.extended ? 'Your extra time is up' : 'Time’s up', a.alerts > 1 ? `If you’ve stopped, Paced stops the timer in ${fmtMin(stopAfterMin(target) - alerts[1])}.` : `Did you finish “${name}”?`);
   }
   if (!state.ask) {
